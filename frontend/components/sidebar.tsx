@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -23,13 +24,17 @@ const navItems = [
   { href: '/settings', label: 'Settings',  icon: Settings },
 ] as const;
 
+type StoredUser = { displayName?: string; emailAddress?: string } | null;
+
 export function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const user     = getStoredUser() as {
-    displayName?: string;
-    emailAddress?: string;
-  } | null;
+  const [user, setUser] = useState<StoredUser>(null);
+
+  // Read localStorage only on client — avoids SSR/client hydration mismatch
+  useEffect(() => {
+    setUser(getStoredUser() as StoredUser);
+  }, []);
 
   const initials = user?.displayName
     ? user.displayName
