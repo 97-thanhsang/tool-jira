@@ -35,18 +35,18 @@
 
 ---
 
-## 🔜 Phase 3 — Power Features
+## ✅ Phase 3 — Power Features (DONE)
 
 | # | Feature | Mô tả | Status |
 |---|---------|-------|--------|
-| 3.1 | Projects browser `/projects` | Danh sách projects → Board của project | ⬜ Todo |
-| 3.2 | Advanced Search / JQL builder | Visual builder → JQL → results | ⬜ Todo |
-| 3.3 | Keyboard shortcuts full | G B, G I, L, C, ?, Ctrl+K | ⬜ Todo |
-| 3.4 | Bulk Actions | Select nhiều issues → transition / assign / priority | ⬜ Todo |
-| 3.5 | Worklog history | Tab "My Worklogs" — hôm nay / tuần này | ⬜ Todo |
-| 3.6 | Settings page `/settings` | Jira URL, credentials, theme, shortcuts ref | ⬜ Todo |
-| 3.7 | Dark mode | Toggle trong Settings, lưu localStorage | ⬜ Todo |
-| 3.8 | Notifications | Poll `/notification` 60s, badge số trên sidebar | ⬜ Todo |
+| 3.1 | Projects browser `/projects` | Danh sách projects → Board của project | ✅ Done |
+| 3.2 | Advanced Search / JQL builder | JQL textarea + preset chips → results table | ✅ Done |
+| 3.3 | Keyboard shortcuts full | G B, G I, G S, C, L, ?, Ctrl+K — global listener in layout | ✅ Done |
+| 3.4 | Bulk Actions | Select nhiều issues → transition dropdown (sequential) | ✅ Done |
+| 3.5 | Worklog history | Tab "Worklog History" trên /issues — localStorage based | ✅ Done |
+| 3.6 | Settings page `/settings` | Account, Connection, Shortcuts ref, Dark mode toggle | ✅ Done |
+| 3.7 | Dark mode | Inline script tránh flash, toggle trong Settings, dark: variants | ✅ Done |
+| 3.8 | Notifications | Poll /search?jql=updated>=-15m 60s, badge + dropdown sidebar | ✅ Done |
 
 ---
 
@@ -99,3 +99,4 @@
 |------|---------|
 | 2026-05-10 | Phase 1 hoàn thành, docs khởi tạo, hydration bug fix |
 | 2026-05-10 | Phase 2 hoàn thành: My Issues page, Log Work, Comments, Transition UX, Create Issue modal, Ctrl+K global search |
+| 2026-05-10 | Phase 3 hoàn thành: Settings, Keyboard Shortcuts, Dark Mode, Projects Browser, JQL Search, Worklog History, Bulk Actions, Notifications Badge |

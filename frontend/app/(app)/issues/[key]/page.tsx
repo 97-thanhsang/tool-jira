@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, ExternalLink, Clock } from 'lucide-react';
@@ -54,6 +54,15 @@ export default function IssueDetailPage() {
     : (params.key ?? '');
   const { issue, isLoading, error, mutate } = useIssue(issueKey);
   const [logWorkOpen, setLogWorkOpen] = useState(false);
+
+  // Listen for the 'L' keyboard shortcut dispatched by the layout
+  useEffect(() => {
+    function handleOpenLogWork() {
+      setLogWorkOpen(true);
+    }
+    window.addEventListener('open-log-work', handleOpenLogWork);
+    return () => window.removeEventListener('open-log-work', handleOpenLogWork);
+  }, []);
 
   if (isLoading) return <DetailSkeleton />;
 

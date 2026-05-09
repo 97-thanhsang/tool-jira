@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { saveWorklog } from '@/lib/worklogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -39,6 +40,14 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
         timeSpent: timeSpent.trim(),
         started,
         ...(comment.trim() ? { comment: comment.trim() } : {}),
+      });
+      // Persist to localStorage for worklog history
+      saveWorklog({
+        issueKey,
+        summary: issueKey, // only key available here; summary shown separately
+        timeSpent: timeSpent.trim(),
+        date: dateStarted,
+        comment: comment.trim(),
       });
       onSuccess();
       onClose();

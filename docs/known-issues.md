@@ -236,3 +236,30 @@ Call site phải truyền object đầy đủ, không chỉ `.name`.
 `CommandPalette` đọc `recent_issues` từ localStorage chỉ trong `useEffect(() => { setRecent(getRecent()); }, [open])`. Không được đọc trong render body (SSR sẽ crash).
 
 Khi user chọn một issue: gọi `saveRecent(issue)` → ghi vào localStorage TRƯỚC khi navigate.
+
+---
+
+## [GOTCHA] Keyboard shortcut C — state sống ở layout, không phải Sidebar
+
+**ID:** `GOTCHA-008`
+**Ngày:** 2026-05-10
+
+Phase 3.3 chuyển `createOpen` state lên `app/(app)/layout.tsx`. Sidebar nhận `onCreateClick` prop thay vì tự quản lý state. Nếu cần trigger Create Issue từ nơi khác → dispatch `CustomEvent` hoặc thêm prop tương tự.
+
+---
+
+## [GOTCHA] Dark mode — Tailwind v4 không dùng darkMode: 'class' trong config
+
+**ID:** `GOTCHA-009`
+**Ngày:** 2026-05-10
+
+Tailwind v4 dùng `@custom-variant dark (&:is(.dark *))` trong `globals.css` — đây là cách cấu hình dark mode, không cần `tailwind.config.ts`. Inline script trong `app/layout.tsx` apply class `dark` lên `<html>` trước khi React hydrate để tránh flash.
+
+---
+
+## [GOTCHA] Sidebar onCreateClick prop (breaking change từ Phase 3.3)
+
+**ID:** `GOTCHA-010`
+**Ngày:** 2026-05-10
+
+Sidebar trước đây tự quản lý state + modal. Từ Phase 3.3, Sidebar yêu cầu prop `onCreateClick: () => void`. Nếu render Sidebar trực tiếp (không qua app layout), phải truyền prop này.
