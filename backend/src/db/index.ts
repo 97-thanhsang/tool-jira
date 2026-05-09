@@ -1,30 +1,60 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import * as schema from './schema';
+import dotenv from 'dotenv';
+dotenv.config();
+
 import path from 'path';
 import fs from 'fs';
+import Database from 'better-sqlite3';
+import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import { Pool } from 'pg';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
+import * as schemaSqlite from './schema';
+import * as schemaPg from './schema-pg';
+import { runMigrations } from './migrate';
 
-const DB_PATH = path.join(__dirname, '../../data/jira-power.db');
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const isPostgres =
+  DATABASE_URL.startsWith('postgresql://') || DATABASE_URL.startsWith('postgres://');
 
-// Ensure data dir exists
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+// ── PostgreSQL mode ────────────────────────────────────────────────────────────
+if (isPostgres) {
+  const pool = new Pool({ connectionString: DATABASE_URL });
 
-const sqlite = new Database(DB_PATH);
-export const db = drizzle(sqlite, { schema });
+  const initPg = runMigrations(pool)
+    .then(() => {
+      const pgDb = drizzlePg(pool, { schema: schemaPg });
+      exports.db = pgDb;
+      console.log('PostgreSQL connected and migrations applied.');
+    })
+    .catch((err: unknown) => {
+      console.error('PostgreSQL connection failed:', err);
+      process.exit(1);
+    });
 
-// Create tables if not exist
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS user_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    key TEXT NOT NULL UNIQUE,
-    value TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS bookmarks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    issue_key TEXT NOT NULL UNIQUE,
-    summary TEXT NOT NULL,
-    project_key TEXT NOT NULL,
-    created_at INTEGER NOT NULL
-  );
-`);
+  exports.dbReady = initPg;
+} else {
+  // ── SQLite mode (default) ──────────────────────────────────────────────────
+  const DB_PATH = path.join(__dirname, '../../data/jira-power.db');
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+  const sqlite = new Database(DB_PATH);
+  const sqliteDb = drizzleSqlite(sqlite, { schema: schemaSqlite });
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      issue_key TEXT NOT NULL UNIQUE,
+      summary TEXT NOT NULL,
+      project_key TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  exports.db = sqliteDb;
+  exports.dbReady = Promise.resolve();
+}
