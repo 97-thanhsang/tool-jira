@@ -16,9 +16,14 @@ router.get('/attachment-content/:id', async (req: Request, res: Response) => {
   }
 
   const id = req.params.id;
-  // Jira Server: /secure/attachment/{id}/{filename} OR /rest/api/2/attachment/content/{id}
-  // Both redirect to the actual file. Use the direct secure URL which redirects less.
-  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/content/${id}`;
+  // Jira Server does NOT have /rest/api/2/attachment/content/{id} (Cloud only → 404).
+  // The correct Jira Server URL comes from attachment metadata: /secure/attachment/{id}/{filename}
+  // Frontend passes the full `content` URL (from attachment object) as query param `url`,
+  // OR we fall back to fetching metadata first to get the real URL.
+  const contentUrl = req.query.url as string | undefined;
+  const jiraUrl = contentUrl || `${config.jiraBaseUrl}/secure/attachment/${id}/attachment`;
+
+  console.log(`[attachment] fetching id=${id} url=${jiraUrl}`);
 
   try {
     const response = await axios({
@@ -26,24 +31,35 @@ router.get('/attachment-content/:id', async (req: Request, res: Response) => {
       url: jiraUrl,
       headers: {
         Authorization: `Basic ${authHeader}`,
-        // Keep auth on redirect (Jira Server redirects to /secure/attachment/...)
         'X-Atlassian-Token': 'no-check',
       },
       responseType: 'stream',
       maxRedirects: 5,
-      // axios strips Authorization on redirect by default — override with beforeRedirect
-      beforeRedirect: (options: Record<string, unknown>) => {
-        (options.headers as Record<string, string>)['Authorization'] = `Basic ${authHeader}`;
+      beforeRedirect: (options: Record<string, unknown>, { headers }: { headers: Record<string, string> }) => {
+        console.log(`[attachment] redirect → ${String(options.href ?? options.path)}`);
+        headers['Authorization'] = `Basic ${authHeader}`;
       },
     });
 
-    const contentType =
-      (response.headers['content-type'] as string) || 'application/octet-stream';
+    console.log(`[attachment] success status=${response.status} content-type=${response.headers['content-type']}`);
+    const contentType = (response.headers['content-type'] as string) || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600');
     response.data.pipe(res);
   } catch (err) {
     const error = err as AxiosError;
+    console.error(`[attachment] ERROR status=${error.response?.status}`, error.message);
+    if (error.response?.data) {
+      // drain stream if error body is a stream
+      const d = error.response.data as { pipe?: unknown };
+      if (typeof d.pipe === 'function') {
+        const chunks: Buffer[] = [];
+        (d as NodeJS.ReadableStream).on('data', (c: Buffer) => chunks.push(c));
+        (d as NodeJS.ReadableStream).on('end', () => {
+          console.error(`[attachment] error body: ${Buffer.concat(chunks).toString('utf8').slice(0, 300)}`);
+        });
+      }
+    }
     return res.status(error.response?.status || 500).json({ error: 'Attachment fetch failed' });
   }
 });

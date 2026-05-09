@@ -16,7 +16,7 @@ interface UseBlobResult {
   loading: boolean;
 }
 
-function useAttachmentBlob(attachmentId: string, isImage: boolean): UseBlobResult {
+function useAttachmentBlob(attachmentId: string, isImage: boolean, contentUrl: string): UseBlobResult {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const currentUrl = useRef<string | null>(null);
@@ -28,7 +28,10 @@ function useAttachmentBlob(attachmentId: string, isImage: boolean): UseBlobResul
     setLoading(true);
 
     api
-      .get(`/attachment-content/${attachmentId}`, { responseType: 'blob' })
+      .get(`/attachment-content/${attachmentId}`, {
+        responseType: 'blob',
+        params: { url: contentUrl },
+      })
       .then((r) => {
         if (cancelled) return;
         const url = URL.createObjectURL(r.data as Blob);
@@ -50,7 +53,7 @@ function useAttachmentBlob(attachmentId: string, isImage: boolean): UseBlobResul
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attachmentId, isImage]);
+  }, [attachmentId, isImage, contentUrl]);
 
   return { blobUrl, loading };
 }
@@ -64,7 +67,7 @@ interface AttachmentCardProps {
 
 function AttachmentCard({ attachment, onClick }: AttachmentCardProps) {
   const isImage = attachment.mimeType.startsWith('image/');
-  const { blobUrl, loading } = useAttachmentBlob(attachment.id, isImage);
+  const { blobUrl, loading } = useAttachmentBlob(attachment.id, isImage, attachment.content);
 
   return (
     <div
@@ -115,7 +118,7 @@ function Lightbox({ attachments, initialIndex, onClose }: LightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const current = attachments[index];
   const isImage = current.mimeType.startsWith('image/');
-  const { blobUrl, loading } = useAttachmentBlob(current.id, isImage);
+  const { blobUrl, loading } = useAttachmentBlob(current.id, isImage, current.content);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
