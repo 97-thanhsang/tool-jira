@@ -45,7 +45,7 @@ function DetailSkeleton() {
 
 export default function IssueDetailPage() {
   const params = useParams();
-  const issueKey = params.key as string;
+  const issueKey = Array.isArray(params.key) ? params.key[0] : (params.key ?? '');
   const { issue, isLoading, error, mutate } = useIssue(issueKey);
 
   if (isLoading) return <DetailSkeleton />;

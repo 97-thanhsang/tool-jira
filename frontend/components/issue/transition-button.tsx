@@ -25,6 +25,7 @@ export function TransitionButton({
   const [loading, setLoading] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [open, setOpen] = useState(false);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
 
   async function loadTransitions() {
     if (transitions.length > 0) return;
@@ -41,19 +42,23 @@ export function TransitionButton({
 
   async function doTransition(transition: JiraTransition) {
     setTransitioning(true);
+    setTransitionError(null);
     setOpen(false);
     try {
       await api.post(`/issue/${issueKey}/transitions`, {
         transition: { id: transition.id },
       });
       onTransitioned();
+    } catch {
+      setTransitionError('Failed to transition. Please try again.');
     } finally {
       setTransitioning(false);
     }
   }
 
   return (
-    <DropdownMenu
+    <>
+      <DropdownMenu
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
@@ -89,5 +94,9 @@ export function TransitionButton({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    {transitionError && (
+      <p className="text-xs text-red-600 mt-1">{transitionError}</p>
+    )}
+    </>
   );
 }
