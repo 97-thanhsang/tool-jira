@@ -10,7 +10,7 @@ export function useIssue(key: string) {
         .get<JiraIssue>(url, {
           params: {
             fields:
-              'summary,description,status,priority,issuetype,project,assignee,reporter,created,updated,subtasks,parent,labels,comment',
+              'summary,description,status,priority,issuetype,project,assignee,reporter,created,updated,subtasks,parent,labels,comment,attachment,timetracking,fixVersions,components,duedate',
           },
         })
         .then((r) => r.data),

@@ -1,10 +1,19 @@
+import type { JiraAttachment } from '@/types/jira';
+
 /**
  * Convert Jira wiki markup to HTML.
  * Handles patterns seen in ASC Jira: bold, italic, headings, code blocks,
- * inline code, images (placeholder), links, numbered/bullet lists.
+ * inline code, images (linked to attachment gallery), links, numbered/bullet lists.
+ *
+ * @param text    - Raw Jira wiki markup string
+ * @param attachments - Optional list of attachments to resolve image filenames → IDs
  */
-export function jiraWikiToHtml(text: string): string {
+export function jiraWikiToHtml(text: string, attachments?: JiraAttachment[]): string {
   if (!text) return '';
+
+  // Build filename → attachment ID map for resolving !filename.png! references
+  const attachMap = new Map<string, string>();
+  attachments?.forEach((a) => attachMap.set(a.filename.toLowerCase(), a.id));
 
   let html = text
     // Escape HTML entities first
@@ -45,12 +54,6 @@ export function jiraWikiToHtml(text: string): string {
       '<code class="bg-[#F4F5F7] px-1 py-0.5 rounded text-sm font-mono text-[#DE350B]">$1</code>'
     )
 
-    // Images: !filename.png! or !filename.png|width=500!  → placeholder
-    .replace(
-      /!([^|!\n]+?)(?:\|[^!]*)?\!/g,
-      '<span class="inline-block bg-[#DFE1E6] text-[#5E6C84] text-xs px-2 py-1 rounded my-1">[Image: $1]</span>'
-    )
-
     // Links: [text|url]
     .replace(
       /\[([^\]|]+)\|([^\]]+)\]/g,
@@ -81,6 +84,26 @@ export function jiraWikiToHtml(text: string): string {
     .replace(/\r\n/g, '\n')
     .replace(/\n{2,}/g, '</p><p class="my-2">')
     .replace(/\n/g, '<br />');
+
+  // Images: !filename.png! or !filename.png|width=300! — resolved via attachment map
+  // NOTE: Must be applied AFTER HTML entity escaping & other replacements so the
+  // raw filename is still intact. We re-apply it here as a second pass on html.
+  html = html.replace(/!([^|!\n]+?)(?:\|([^!]*))?\!/g, (_match, filename: string, _opts: string | undefined) => {
+    const id = attachMap.get(filename.toLowerCase());
+    if (id) {
+      // Render as a clickable chip that triggers the attachment gallery lightbox
+      return (
+        `<span data-attachment-id="${id}" data-filename="${filename}" ` +
+        `class="inline-block border border-[#DFE1E6] rounded p-1 my-1 cursor-pointer ` +
+        `text-xs text-[#0052CC] hover:bg-[#DEEBFF] transition-colors select-none">🖼 ${filename}</span>`
+      );
+    }
+    // No matching attachment — show styled placeholder
+    return (
+      `<span class="inline-block bg-[#F4F5F7] text-[#5E6C84] text-xs px-2 py-1 rounded my-1 ` +
+      `border border-[#DFE1E6]">📎 ${filename}</span>`
+    );
+  });
 
   return `<div><p class="my-2">${html}</p></div>`;
 }

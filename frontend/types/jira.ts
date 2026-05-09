@@ -24,6 +24,26 @@ export interface JiraIssueType {
   iconUrl: string;
 }
 
+export interface JiraAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  created: string;
+  content: string;    // full download URL (from Jira, not our proxy)
+  thumbnail?: string; // thumbnail URL (only for images)
+  author: JiraUser;
+}
+
+export interface JiraTimeTracking {
+  originalEstimate?: string;
+  remainingEstimate?: string;
+  timeSpent?: string;
+  originalEstimateSeconds?: number;
+  remainingEstimateSeconds?: number;
+  timeSpentSeconds?: number;
+}
+
 export interface JiraIssue {
   id: string;
   key: string;
@@ -43,6 +63,10 @@ export interface JiraIssue {
     parent?: { key: string; fields: { summary: string; status: JiraStatus } };
     labels: string[];
     comment?: { comments: JiraComment[] };
+    attachment?: JiraAttachment[];
+    timetracking?: JiraTimeTracking;
+    fixVersions?: Array<{ id: string; name: string; released: boolean }>;
+    components?: Array<{ id: string; name: string }>;
   };
 }
 

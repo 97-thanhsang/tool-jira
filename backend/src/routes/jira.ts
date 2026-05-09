@@ -4,6 +4,69 @@ import { config } from '../config';
 
 const router = Router();
 
+// ─── Attachment proxy: stream binary content with auth ───────────────────────
+// GET /api/jira/attachment-content/:id → streams image/file from Jira
+router.get('/attachment-content/:id', async (req: Request, res: Response) => {
+  const rawAuth = req.headers['x-jira-auth'];
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Missing auth' });
+  }
+
+  const id = req.params.id;
+  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/content/${id}?redirect=false`;
+
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: jiraUrl,
+      headers: { Authorization: `Basic ${authHeader}` },
+      responseType: 'stream',
+    });
+
+    const contentType =
+      (response.headers['content-type'] as string) || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    response.data.pipe(res);
+  } catch (err) {
+    const error = err as AxiosError;
+    return res.status(error.response?.status || 500).json({ error: 'Attachment fetch failed' });
+  }
+});
+
+// ─── Thumbnail proxy ─────────────────────────────────────────────────────────
+// GET /api/jira/attachment-thumbnail/:id → thumbnail (smaller)
+router.get('/attachment-thumbnail/:id', async (req: Request, res: Response) => {
+  const rawAuth = req.headers['x-jira-auth'];
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Missing auth' });
+  }
+
+  const id = req.params.id;
+  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/thumbnail/${id}?redirect=false&width=200&height=150`;
+
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: jiraUrl,
+      headers: { Authorization: `Basic ${authHeader}` },
+      responseType: 'stream',
+    });
+
+    const contentType =
+      (response.headers['content-type'] as string) || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    response.data.pipe(res);
+  } catch (err) {
+    const error = err as AxiosError;
+    return res.status(error.response?.status || 500).json({ error: 'Thumbnail fetch failed' });
+  }
+});
+
+// ─── Generic proxy: all other /api/jira/* requests ──────────────────────────
 // Proxy all requests: GET/POST /api/jira/* → Jira REST API v2
 // Express v5 uses path-to-regexp v8: wildcards must be named (/*path not /*)
 router.all('/*path', async (req: Request, res: Response) => {
