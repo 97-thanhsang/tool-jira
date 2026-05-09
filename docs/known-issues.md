@@ -5,6 +5,30 @@
 
 ---
 
+## [FIXED] Hydration Warning — Browser Extension injects className vào `<html>`
+
+**ID:** `BUG-003`
+**Ngày fix:** 2026-05-10
+**Severity:** Low — chỉ là warning, không ảnh hưởng chức năng
+
+### Triệu chứng
+```
+A tree hydrated but some attributes of the server rendered HTML didn't match the client.
+<html className="mdl-js"  ← extension inject trước React hydrate
+```
+
+### Root Cause
+Browser extension (Material Design Lite hoặc tương tự) inject `class="mdl-js"` vào `<html>` tag trước khi React hydrate. Code hoàn toàn sạch — đây là false positive.
+
+### Fix Applied
+File: `app/layout.tsx`
+```tsx
+<html lang="en" suppressHydrationWarning>
+```
+`suppressHydrationWarning` chỉ suppress warning ở chính node đó (không affect children) — an toàn để dùng ở `<html>` root vì đây là nơi duy nhất extension có thể inject.
+
+---
+
 ## [FIXED] Express v5 Wildcard Breaking Change
 
 **ID:** `BUG-001`

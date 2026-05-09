@@ -11,7 +11,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: browser extensions (e.g. Material Design Lite) inject
+    // attributes like className="mdl-js" into <html> before React hydrates — this is
+    // harmless but triggers a false-positive hydration warning. Suppressing at root only.
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>{children}</body>
     </html>
   );
