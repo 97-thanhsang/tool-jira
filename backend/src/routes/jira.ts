@@ -6,6 +6,8 @@ const router = Router();
 
 // ─── Attachment proxy: stream binary content with auth ───────────────────────
 // GET /api/jira/attachment-content/:id → streams image/file from Jira
+// NOTE: Jira Server does NOT support ?redirect=false (Cloud only).
+// We use maxRedirects + keep Authorization on redirect via httpAgent workaround.
 router.get('/attachment-content/:id', async (req: Request, res: Response) => {
   const rawAuth = req.headers['x-jira-auth'];
   const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
@@ -14,14 +16,25 @@ router.get('/attachment-content/:id', async (req: Request, res: Response) => {
   }
 
   const id = req.params.id;
-  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/content/${id}?redirect=false`;
+  // Jira Server: /secure/attachment/{id}/{filename} OR /rest/api/2/attachment/content/{id}
+  // Both redirect to the actual file. Use the direct secure URL which redirects less.
+  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/content/${id}`;
 
   try {
     const response = await axios({
       method: 'GET',
       url: jiraUrl,
-      headers: { Authorization: `Basic ${authHeader}` },
+      headers: {
+        Authorization: `Basic ${authHeader}`,
+        // Keep auth on redirect (Jira Server redirects to /secure/attachment/...)
+        'X-Atlassian-Token': 'no-check',
+      },
       responseType: 'stream',
+      maxRedirects: 5,
+      // axios strips Authorization on redirect by default — override with beforeRedirect
+      beforeRedirect: (options: Record<string, unknown>) => {
+        (options.headers as Record<string, string>)['Authorization'] = `Basic ${authHeader}`;
+      },
     });
 
     const contentType =
@@ -45,24 +58,52 @@ router.get('/attachment-thumbnail/:id', async (req: Request, res: Response) => {
   }
 
   const id = req.params.id;
-  const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/thumbnail/${id}?redirect=false&width=200&height=150`;
+  // Jira Server thumbnail: /secure/thumbnail/{id}/_thumb_{id}.png
+  // REST thumbnail endpoint may not exist on Server — fall back to content
+  const jiraUrl = `${config.jiraBaseUrl}/secure/thumbnail/${id}/_thumb_${id}.png`;
 
   try {
     const response = await axios({
       method: 'GET',
       url: jiraUrl,
-      headers: { Authorization: `Basic ${authHeader}` },
+      headers: {
+        Authorization: `Basic ${authHeader}`,
+        'X-Atlassian-Token': 'no-check',
+      },
       responseType: 'stream',
+      maxRedirects: 5,
+      beforeRedirect: (options: Record<string, unknown>) => {
+        (options.headers as Record<string, string>)['Authorization'] = `Basic ${authHeader}`;
+      },
     });
 
     const contentType =
-      (response.headers['content-type'] as string) || 'application/octet-stream';
+      (response.headers['content-type'] as string) || 'image/png';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=3600');
     response.data.pipe(res);
-  } catch (err) {
-    const error = err as AxiosError;
-    return res.status(error.response?.status || 500).json({ error: 'Thumbnail fetch failed' });
+  } catch {
+    // Thumbnail not available — fall back to full content
+    const fallbackUrl = `${config.jiraBaseUrl}/rest/api/2/attachment/content/${id}`;
+    try {
+      const response = await axios({
+        method: 'GET',
+        url: fallbackUrl,
+        headers: { Authorization: `Basic ${authHeader}` },
+        responseType: 'stream',
+        maxRedirects: 5,
+        beforeRedirect: (options: Record<string, unknown>) => {
+          (options.headers as Record<string, string>)['Authorization'] = `Basic ${authHeader}`;
+        },
+      });
+      const contentType = (response.headers['content-type'] as string) || 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      response.data.pipe(res);
+    } catch (err2) {
+      const error = err2 as AxiosError;
+      return res.status(error.response?.status || 500).json({ error: 'Thumbnail fetch failed' });
+    }
   }
 });
 
