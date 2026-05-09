@@ -8,7 +8,7 @@ const fetcher = (url: string) =>
       params: {
         jql: 'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC',
         maxResults: 100,
-        fields: 'summary,status,priority,issuetype,project,updated,assignee',
+        fields: 'summary,status,priority,issuetype,project,updated,assignee,duedate',
       },
     })
     .then((r) => r.data);

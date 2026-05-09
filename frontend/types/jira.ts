@@ -38,6 +38,7 @@ export interface JiraIssue {
     project: { key: string; name: string };
     created: string;
     updated: string;
+    duedate?: string;
     subtasks?: JiraIssue[];
     parent?: { key: string; fields: { summary: string; status: JiraStatus } };
     labels: string[];
