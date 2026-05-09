@@ -71,37 +71,44 @@ function AttachmentCard({ attachment, onClick }: AttachmentCardProps) {
 
   return (
     <div
-      className="relative border border-[#DFE1E6] rounded-sm overflow-hidden cursor-pointer hover:border-[#0052CC] transition-colors group dark:border-gray-600 dark:hover:border-[#0052CC]"
-      style={{ width: 96, height: 96 }}
+      className="flex flex-col items-center cursor-pointer group"
+      style={{ width: 96 }}
       onClick={onClick}
       title={attachment.filename}
     >
-      {isImage ? (
-        loading ? (
-          <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex items-center justify-center">
-            <div className="w-4 h-4 border-2 border-[#0052CC] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : blobUrl ? (
-          <img
-            src={blobUrl}
-            alt={attachment.filename}
-            className="w-full h-full object-cover"
-          />
+      {/* Thumbnail box */}
+      <div
+        className="relative border border-[#DFE1E6] rounded-sm overflow-hidden w-full group-hover:border-[#0052CC] transition-colors dark:border-gray-600 dark:hover:border-[#0052CC]"
+        style={{ height: 96 }}
+      >
+        {isImage ? (
+          loading ? (
+            <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex items-center justify-center">
+              <div className="w-4 h-4 border-2 border-[#0052CC] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : blobUrl ? (
+            <img
+              src={blobUrl}
+              alt={attachment.filename}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex items-center justify-center">
+              <ImageIcon size={24} className="text-[#5E6C84]" />
+            </div>
+          )
         ) : (
-          <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex items-center justify-center">
-            <ImageIcon size={24} className="text-[#5E6C84]" />
+          <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex flex-col items-center justify-center p-2">
+            <Paperclip size={20} className="text-[#5E6C84] mb-1" />
           </div>
-        )
-      ) : (
-        <div className="w-full h-full bg-[#F4F5F7] dark:bg-gray-800 flex flex-col items-center justify-center p-2">
-          <Paperclip size={20} className="text-[#5E6C84] mb-1" />
-          <span className="text-[10px] text-[#5E6C84] text-center line-clamp-2 break-all">
-            {attachment.filename}
-          </span>
-        </div>
-      )}
-      {/* Hover overlay */}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+        )}
+        {/* Hover overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+      </div>
+      {/* Filename label */}
+      <span className="mt-1 text-[10px] text-[#5E6C84] text-center line-clamp-2 break-all w-full leading-tight group-hover:text-[#0052CC] transition-colors">
+        {attachment.filename}
+      </span>
     </div>
   );
 }
