@@ -62,3 +62,10 @@ export interface JiraSearchResult {
   total: number;
   issues: JiraIssue[];
 }
+
+export interface JiraProject {
+  id: string;
+  key: string;
+  name: string;
+  projectTypeKey?: string;
+}

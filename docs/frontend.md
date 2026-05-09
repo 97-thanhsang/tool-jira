@@ -21,10 +21,11 @@ app/
 │   └── login/
 │       └── page.tsx        # Login form — Basic Auth
 └── (app)/                  # Route group: protected
-    ├── layout.tsx           # Auth guard + Sidebar
+    ├── layout.tsx           # Auth guard + Sidebar + CommandPalette
     ├── board/
     │   └── page.tsx         # My Board — Kanban 3 cột
     └── issues/
+        ├── page.tsx         # My Issues — filterable table (Phase 2.1)
         └── [key]/
             └── page.tsx     # Issue Detail — params.key = issue key (e.g. EMSPRO2-123)
 ```
@@ -73,8 +74,18 @@ components/
 │
 ├── issue/                  # Issue Detail-specific
 │   ├── wiki-renderer.tsx   # Jira wiki markup → HTML (dùng lib/jira-wiki.ts)
-│   └── transition-button.tsx # Lazy-load transitions, execute transition
+│   ├── transition-button.tsx # Lazy-load transitions, color-coded badges (Phase 2.4)
+│   ├── log-work-modal.tsx  # Modal log work (Phase 2.2)
+│   └── comment-section.tsx # Danh sách + thêm comment (Phase 2.3)
 │
+├── issues/                 # My Issues page-specific (Phase 2.1)
+│   ├── issues-table.tsx    # Table + filter bar
+│   └── issue-row.tsx       # Single row in table
+│
+├── search/                 # Global search (Phase 2.6)
+│   └── command-palette.tsx # Ctrl+K overlay — search + recent issues
+│
+├── create-issue-modal.tsx  # Tạo issue modal (Phase 2.5) — trigger: C key, sidebar button
 └── sidebar.tsx             # Navigation sidebar — đọc user từ localStorage qua useEffect
 ```
 
@@ -106,6 +117,18 @@ Dự án này dùng `@base-ui/react` (không phải Radix UI):
 ### `hooks/use-issue.ts`
 - Dùng SWR, gọi `/issue/{key}?fields=...`
 - Return: `{ issue, isLoading, error, mutate }`
+- Includes `comment` field để hiện danh sách comments
+
+### `hooks/use-issues-list.ts` (Phase 2.1)
+- Dùng SWR key `/search-issues-list` (khác với `use-my-issues.ts`)
+- JQL: `assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC`
+- Return: `{ issues, total, isLoading, error, mutate }`
+
+### `hooks/use-search.ts` (Phase 2.6)
+- Nhận `query: string`, debounce 300ms nội tại
+- Fetch chỉ khi query >= 2 chars
+- SWR key: `['search-palette', debouncedQuery]`
+- Return: `{ results, isLoading }`
 
 **Khi thêm hook mới:** đặt trong `hooks/`, prefix `use-`, export named function.
 
@@ -149,6 +172,7 @@ JiraIssue       // id, key, fields { summary, description, status, priority, ...
 JiraComment     // id, author, body, created
 JiraTransition  // id, name, to
 JiraSearchResult // total, issues[]
+JiraProject     // id, key, name, projectTypeKey (Phase 2.5)
 ```
 
 **Khi thêm type mới:** thêm vào `types/jira.ts`, export named interface.

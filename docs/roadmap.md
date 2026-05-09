@@ -20,18 +20,18 @@
 
 ---
 
-## 🚧 Phase 2 — Core Workflow (NEXT)
+## ✅ Phase 2 — Core Workflow (DONE)
 
 > Goal: Dùng hàng ngày thay Jira được.
 
 | # | Feature | Files cần tạo/sửa | Status |
 |---|---------|-------------------|--------|
-| 2.1 | **My Issues page** `/issues` — bảng filter+sort | `app/(app)/issues/page.tsx`, `components/issues/issues-table.tsx`, `hooks/use-issues-list.ts` | ⬜ Todo |
-| 2.2 | **Log Work modal** — từ Issue Detail | `components/issue/log-work-modal.tsx` | ⬜ Todo |
-| 2.3 | **Comment** — xem + thêm comment | `components/issue/comment-section.tsx`, `components/issue/comment-form.tsx` | ⬜ Todo |
-| 2.4 | **Transition nhanh** — hoàn thiện UX | `components/issue/transition-button.tsx` (update) | ⬜ Todo |
-| 2.5 | **Tạo Issue modal** — Ctrl+N | `components/create-issue-modal.tsx` | ⬜ Todo |
-| 2.6 | **Global Search** — Ctrl+K command palette | `components/search/command-palette.tsx`, `hooks/use-search.ts` | ⬜ Todo |
+| 2.1 | **My Issues page** `/issues` — bảng filter+sort | `app/(app)/issues/page.tsx`, `components/issues/issues-table.tsx`, `components/issues/issue-row.tsx`, `hooks/use-issues-list.ts` | ✅ Done |
+| 2.2 | **Log Work modal** — từ Issue Detail | `components/issue/log-work-modal.tsx` | ✅ Done |
+| 2.3 | **Comment** — xem + thêm comment | `components/issue/comment-section.tsx` | ✅ Done |
+| 2.4 | **Transition nhanh** — hoàn thiện UX | `components/issue/transition-button.tsx` (color-coded) | ✅ Done |
+| 2.5 | **Tạo Issue modal** — C key shortcut | `components/create-issue-modal.tsx`, `components/sidebar.tsx` (+ Create button) | ✅ Done |
+| 2.6 | **Global Search** — Ctrl+K command palette | `components/search/command-palette.tsx`, `hooks/use-search.ts`, `app/(app)/layout.tsx` | ✅ Done |
 
 ---
 
@@ -98,3 +98,4 @@
 | Ngày | Thay đổi |
 |------|---------|
 | 2026-05-10 | Phase 1 hoàn thành, docs khởi tạo, hydration bug fix |
+| 2026-05-10 | Phase 2 hoàn thành: My Issues page, Log Work, Comments, Transition UX, Create Issue modal, Ctrl+K global search |

@@ -1,10 +1,14 @@
 'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock } from 'lucide-react';
 import { useIssue } from '@/hooks/use-issue';
 import { WikiRenderer } from '@/components/issue/wiki-renderer';
 import { TransitionButton } from '@/components/issue/transition-button';
+import { LogWorkModal } from '@/components/issue/log-work-modal';
+import { CommentSection } from '@/components/issue/comment-section';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Button } from '@/components/ui/button';
@@ -45,15 +49,20 @@ function DetailSkeleton() {
 
 export default function IssueDetailPage() {
   const params = useParams();
-  const issueKey = Array.isArray(params.key) ? params.key[0] : (params.key ?? '');
+  const issueKey = Array.isArray(params.key)
+    ? params.key[0]
+    : (params.key ?? '');
   const { issue, isLoading, error, mutate } = useIssue(issueKey);
+  const [logWorkOpen, setLogWorkOpen] = useState(false);
 
   if (isLoading) return <DetailSkeleton />;
 
   if (error || !issue) {
     return (
       <div className="p-6 text-center">
-        <p className="text-red-600 mb-3 text-sm">Issue not found or failed to load</p>
+        <p className="text-red-600 mb-3 text-sm">
+          Issue not found or failed to load
+        </p>
         <Link href="/board">
           <Button variant="outline" size="sm">
             ← Back to Board
@@ -136,32 +145,12 @@ export default function IssueDetailPage() {
             </section>
           )}
 
-          {/* Comments — last 5 */}
-          {f.comment && f.comment.comments.length > 0 && (
-            <section>
-              <h2 className="text-xs font-semibold text-[#5E6C84] uppercase tracking-wider mb-3">
-                Comments ({f.comment.comments.length})
-              </h2>
-              <div className="space-y-3">
-                {f.comment.comments.slice(-5).map((c) => (
-                  <div
-                    key={c.id}
-                    className="bg-white rounded-sm border border-[#DFE1E6] p-4"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-semibold text-[#172B4D]">
-                        {c.author.displayName}
-                      </span>
-                      <span className="text-xs text-[#5E6C84]">
-                        {formatDate(c.created)}
-                      </span>
-                    </div>
-                    <WikiRenderer content={c.body} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* Comments section */}
+          <CommentSection
+            issueKey={issueKey}
+            comments={f.comment?.comments ?? []}
+            onCommentAdded={() => mutate()}
+          />
         </div>
 
         {/* ── Right: Metadata sidebar ── */}
@@ -174,9 +163,22 @@ export default function IssueDetailPage() {
               </label>
               <TransitionButton
                 issueKey={issueKey}
-                currentStatus={f.status.name}
+                currentStatus={f.status}
                 onTransitioned={() => mutate()}
               />
+            </div>
+
+            {/* Log Work */}
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => setLogWorkOpen(true)}
+              >
+                <Clock size={13} />
+                Log Work
+              </Button>
             </div>
 
             {/* Priority */}
@@ -186,7 +188,9 @@ export default function IssueDetailPage() {
               </label>
               <div className="flex items-center gap-2">
                 <PriorityIcon priority={f.priority} />
-                <span className="text-sm text-[#172B4D]">{f.priority.name}</span>
+                <span className="text-sm text-[#172B4D]">
+                  {f.priority.name}
+                </span>
               </div>
             </div>
 
@@ -205,7 +209,9 @@ export default function IssueDetailPage() {
               <label className="text-xs font-semibold text-[#5E6C84] uppercase tracking-wider block mb-1.5">
                 Reporter
               </label>
-              <span className="text-sm text-[#172B4D]">{f.reporter.displayName}</span>
+              <span className="text-sm text-[#172B4D]">
+                {f.reporter.displayName}
+              </span>
             </div>
 
             {/* Project */}
@@ -236,7 +242,9 @@ export default function IssueDetailPage() {
               <label className="text-xs font-semibold text-[#5E6C84] uppercase tracking-wider block mb-1.5">
                 Created
               </label>
-              <span className="text-sm text-[#172B4D]">{formatDate(f.created)}</span>
+              <span className="text-sm text-[#172B4D]">
+                {formatDate(f.created)}
+              </span>
             </div>
 
             {/* Updated */}
@@ -244,7 +252,9 @@ export default function IssueDetailPage() {
               <label className="text-xs font-semibold text-[#5E6C84] uppercase tracking-wider block mb-1.5">
                 Updated
               </label>
-              <span className="text-sm text-[#172B4D]">{formatDate(f.updated)}</span>
+              <span className="text-sm text-[#172B4D]">
+                {formatDate(f.updated)}
+              </span>
             </div>
 
             {/* Labels */}
@@ -268,6 +278,15 @@ export default function IssueDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Log Work Modal */}
+      {logWorkOpen && (
+        <LogWorkModal
+          issueKey={issueKey}
+          onClose={() => setLogWorkOpen(false)}
+          onSuccess={() => mutate()}
+        />
+      )}
     </div>
   );
 }

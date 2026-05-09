@@ -1,4 +1,5 @@
 'use client';
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -9,31 +10,53 @@ import {
   Settings,
   ExternalLink,
   LogOut,
+  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAuth, getStoredUser } from '@/lib/api';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  TooltipProvider,
-} from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { CreateIssueModal } from '@/components/create-issue-modal';
 
 const navItems = [
-  { href: '/board',    label: 'My Board',  icon: LayoutDashboard },
-  { href: '/issues',   label: 'My Issues', icon: ListTodo },
-  { href: '/projects', label: 'Projects',  icon: FolderOpen },
-  { href: '/settings', label: 'Settings',  icon: Settings },
+  { href: '/board', label: 'My Board', icon: LayoutDashboard },
+  { href: '/issues', label: 'My Issues', icon: ListTodo },
+  { href: '/projects', label: 'Projects', icon: FolderOpen },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 
-type StoredUser = { displayName?: string; emailAddress?: string } | null;
+type StoredUser = { displayName?: string; emailAddress?: string; name?: string } | null;
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const [user, setUser] = useState<StoredUser>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Read localStorage only on client — avoids SSR/client hydration mismatch
   useEffect(() => {
     setUser(getStoredUser() as StoredUser);
+  }, []);
+
+  // Global keyboard shortcut: 'C' to open Create Issue (when not focused in input/textarea)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const tag = target.tagName.toLowerCase();
+      const isEditable =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        target.isContentEditable;
+
+      if (!isEditable && e.key === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setCreateOpen(true);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const initials = user?.displayName
@@ -63,8 +86,20 @@ export function Sidebar() {
           </div>
         </div>
 
+        {/* Create button */}
+        <div className="px-3 pt-3 pb-1">
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 w-full px-3 py-2 bg-white text-[#0052CC] text-sm font-semibold rounded-md hover:bg-blue-50 transition-colors"
+            title="Create issue (C)"
+          >
+            <Plus size={15} />
+            Create
+          </button>
+        </div>
+
         {/* Nav */}
-        <nav className="flex-1 py-3">
+        <nav className="flex-1 py-2">
           {navItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname.startsWith(href);
             return (
@@ -121,6 +156,14 @@ export function Sidebar() {
           </button>
         </div>
       </aside>
+
+      {/* Create Issue Modal */}
+      {createOpen && (
+        <CreateIssueModal
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => setCreateOpen(false)}
+        />
+      )}
     </TooltipProvider>
   );
 }

@@ -168,3 +168,47 @@ SWR cache key là URL string. Nếu user logout rồi login lại với account 
 ### Fix Applied / Workaround
 (code fix hoặc workaround)
 ```
+
+---
+
+## [GOTCHA] SWR key collision khi nhiều hooks dùng cùng endpoint
+
+**ID:** `GOTCHA-005`
+**Ngày phát hiện:** 2026-05-10
+
+`useMyIssues` và `useIssuesList` đều gọi `/search` nhưng với params khác nhau. Nếu dùng cùng SWR key `/search`, cache bị share → data sai.
+
+**Fix:** Mỗi hook dùng SWR key riêng:
+- `use-my-issues.ts` → key `/search`
+- `use-issues-list.ts` → key `/search-issues-list`
+- `use-search.ts` → key tuple `['search-palette', query]`
+
+---
+
+## [GOTCHA] TransitionButton — API thay đổi từ string sang JiraStatus object
+
+**ID:** `GOTCHA-006`
+**Ngày:** 2026-05-10
+
+Phase 2.4 đổi prop `currentStatus` từ `string` sang `JiraStatus` để có thể color-code badge:
+
+```typescript
+// ❌ Phase 1 (cũ)
+<TransitionButton currentStatus={f.status.name} ... />
+
+// ✅ Phase 2 (mới)
+<TransitionButton currentStatus={f.status} ... />
+```
+
+Call site phải truyền object đầy đủ, không chỉ `.name`.
+
+---
+
+## [GOTCHA] localStorage trong CommandPalette — recent issues
+
+**ID:** `GOTCHA-007`
+**Ngày:** 2026-05-10
+
+`CommandPalette` đọc `recent_issues` từ localStorage chỉ trong `useEffect(() => { setRecent(getRecent()); }, [open])`. Không được đọc trong render body (SSR sẽ crash).
+
+Khi user chọn một issue: gọi `saveRecent(issue)` → ghi vào localStorage TRƯỚC khi navigate.
