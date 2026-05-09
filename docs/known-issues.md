@@ -29,6 +29,37 @@ File: `app/layout.tsx`
 
 ---
 
+## [FIXED] Express v5 `/*path` captures ARRAY not string for nested paths
+
+**ID:** `BUG-004`
+**Ngày fix:** 2026-05-10
+**Severity:** Critical — mọi nested route như `/issue/KEY/transitions`, `/issue/KEY/worklog` đều trả 404
+
+### Triệu chứng
+```
+GET /api/jira/issue/PROJ-123/transitions → 404
+GET /api/jira/issue/PROJ-123/worklog → 404
+```
+
+### Root Cause
+Express v5 với `path-to-regexp` v8: wildcard `/*path` capture path thành **array** không phải string:
+```javascript
+// Input: /issue/HPMUON2-313/transitions
+req.params['path'] === ['issue', 'HPMUON2-313', 'transitions']  // ARRAY!
+
+// Code cũ dùng như string → chỉ lấy phần đầu 'issue'
+const jiraPath = req.params['path'] ?? '';  // ❌ wrong
+```
+
+### Fix Applied
+File: `backend/src/routes/jira.ts`
+```typescript
+const rawPath = req.params['path'];
+const jiraPath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '');
+```
+
+---
+
 ## [FIXED] Express v5 Wildcard Breaking Change
 
 **ID:** `BUG-001`

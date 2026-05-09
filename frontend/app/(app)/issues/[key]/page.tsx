@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Clock } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, Sparkles, Loader2, X } from 'lucide-react';
 import { useIssue } from '@/hooks/use-issue';
 import { WikiRenderer } from '@/components/issue/wiki-renderer';
 import { TransitionButton } from '@/components/issue/transition-button';
@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { aiSummarize, aiSuggestTransition } from '@/lib/ai';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('vi-VN', {
@@ -55,6 +56,23 @@ export default function IssueDetailPage() {
   const { issue, isLoading, error, mutate } = useIssue(issueKey);
   const [logWorkOpen, setLogWorkOpen] = useState(false);
 
+  // AI state
+  const [hasAiKey, setHasAiKey] = useState(false);
+  const [summaryBullets, setSummaryBullets] = useState<string[] | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [transitionSuggestion, setTransitionSuggestion] = useState<{
+    suggestion: string;
+    reason: string;
+  } | null>(null);
+  const [transitionLoading, setTransitionLoading] = useState(false);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
+
+  // Check AI key from localStorage — only in useEffect
+  useEffect(() => {
+    setHasAiKey(!!localStorage.getItem('ai_api_key'));
+  }, []);
+
   // Listen for the 'L' keyboard shortcut dispatched by the layout
   useEffect(() => {
     function handleOpenLogWork() {
@@ -63,6 +81,53 @@ export default function IssueDetailPage() {
     window.addEventListener('open-log-work', handleOpenLogWork);
     return () => window.removeEventListener('open-log-work', handleOpenLogWork);
   }, []);
+
+  async function handleAiSummarize() {
+    if (!issue) return;
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setSummaryBullets(null);
+    try {
+      const f = issue.fields;
+      const comments = (f.comment?.comments ?? []).map((c) => c.body);
+      const result = await aiSummarize({
+        issueKey,
+        summary: f.summary,
+        description: f.description ?? '',
+        comments,
+      });
+      setSummaryBullets(result.bullets);
+    } catch (err: unknown) {
+      const e = err instanceof Error ? err.message : 'AI error';
+      setSummaryError(e);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  async function handleAiSuggestTransition() {
+    if (!issue) return;
+    setTransitionLoading(true);
+    setTransitionError(null);
+    setTransitionSuggestion(null);
+    try {
+      const f = issue.fields;
+      const comments = (f.comment?.comments ?? []).map((c) => c.body);
+      const result = await aiSuggestTransition({
+        issueKey,
+        summary: f.summary,
+        description: f.description ?? '',
+        currentStatus: f.status.name,
+        comments,
+      });
+      setTransitionSuggestion(result);
+    } catch (err: unknown) {
+      const e = err instanceof Error ? err.message : 'AI error';
+      setTransitionError(e);
+    } finally {
+      setTransitionLoading(false);
+    }
+  }
 
   if (isLoading) return <DetailSkeleton />;
 
@@ -99,7 +164,7 @@ export default function IssueDetailPage() {
       </div>
 
       {/* Title row */}
-      <div className="flex items-start gap-3 mb-6">
+      <div className="flex items-start gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] flex-1 leading-snug">
           {f.summary}
         </h1>
@@ -113,6 +178,51 @@ export default function IssueDetailPage() {
           <ExternalLink size={16} />
         </a>
       </div>
+
+      {/* AI Summarize button + result card */}
+      {hasAiKey && (
+        <div className="mb-6">
+          <button
+            onClick={handleAiSummarize}
+            disabled={summaryLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 transition-colors"
+          >
+            {summaryLoading ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Sparkles size={12} />
+            )}
+            {summaryLoading ? 'Summarizing…' : '✨ Summary'}
+          </button>
+
+          {summaryError && (
+            <p className="text-xs text-red-600 mt-2">{summaryError}</p>
+          )}
+
+          {summaryBullets && (
+            <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-md p-4 relative">
+              <button
+                onClick={() => setSummaryBullets(null)}
+                className="absolute top-2 right-2 text-indigo-400 hover:text-indigo-600"
+                title="Dismiss"
+              >
+                <X size={13} />
+              </button>
+              <p className="text-xs font-semibold text-indigo-700 mb-2 flex items-center gap-1">
+                <Sparkles size={11} /> AI Summary
+              </p>
+              <ul className="space-y-1">
+                {summaryBullets.map((bullet, i) => (
+                  <li key={i} className="text-sm text-indigo-900 flex gap-2">
+                    <span className="text-indigo-400 flex-shrink-0">•</span>
+                    <span>{bullet}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 70/30 layout */}
       <div className="grid grid-cols-3 gap-6">
@@ -157,6 +267,7 @@ export default function IssueDetailPage() {
           {/* Comments section */}
           <CommentSection
             issueKey={issueKey}
+            issueSummary={f.summary}
             comments={f.comment?.comments ?? []}
             onCommentAdded={() => mutate()}
           />
@@ -175,6 +286,42 @@ export default function IssueDetailPage() {
                 currentStatus={f.status}
                 onTransitioned={() => mutate()}
               />
+              {hasAiKey && (
+                <div className="mt-2">
+                  <button
+                    onClick={handleAiSuggestTransition}
+                    disabled={transitionLoading}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-60 transition-colors"
+                  >
+                    {transitionLoading ? (
+                      <Loader2 size={10} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={10} />
+                    )}
+                    {transitionLoading ? 'Thinking…' : '✨ Suggest'}
+                  </button>
+                  {transitionError && (
+                    <p className="text-xs text-red-600 mt-1">{transitionError}</p>
+                  )}
+                  {transitionSuggestion && (
+                    <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded p-2.5 relative">
+                      <button
+                        onClick={() => setTransitionSuggestion(null)}
+                        className="absolute top-1.5 right-1.5 text-indigo-300 hover:text-indigo-500"
+                        title="Dismiss"
+                      >
+                        <X size={11} />
+                      </button>
+                      <p className="text-xs font-semibold text-indigo-700">
+                        → {transitionSuggestion.suggestion}
+                      </p>
+                      <p className="text-xs text-indigo-600 mt-0.5">
+                        {transitionSuggestion.reason}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Log Work */}

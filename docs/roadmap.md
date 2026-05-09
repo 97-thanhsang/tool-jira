@@ -50,18 +50,18 @@
 
 ---
 
-## 🤖 Phase 4 — AI Integration
+## 🤖 Phase 4 — AI Integration (DONE)
 
 > Bắt đầu sau khi Phase 2+3 web cơ bản hoàn chỉnh.
 
 | # | Feature | Mô tả | Status |
 |---|---------|-------|--------|
-| 4.1 | Settings — API key input | User nhập OpenAI/Gemini API key → localStorage | ⬜ Todo |
-| 4.2 | AI Summarize issue | Nút "✨ Summarize" → 3-5 bullet từ description+comments | ⬜ Todo |
-| 4.3 | AI Draft Comment | Nút "✨ Draft" → AI generate, user edit rồi submit | ⬜ Todo |
-| 4.4 | AI Draft Log Work | Nhập natural language → AI parse thành time+comment | ⬜ Todo |
-| 4.5 | AI Suggest Transition | Đọc context → suggest status tiếp theo phù hợp | ⬜ Todo |
-| 4.6 | AI Sprint Review | Worklog tuần → báo cáo markdown | ⬜ Todo |
+| 4.1 | Settings — API key input | User nhập Gemini API key → localStorage, với status indicator | ✅ Done |
+| 4.2 | AI Summarize issue | Nút "✨ Summary" → 3-5 bullet từ description+comments | ✅ Done |
+| 4.3 | AI Draft Comment | Nút "✨ Draft with AI" → AI generate, user edit rồi submit | ✅ Done |
+| 4.4 | AI Parse Worklog | Nhập natural language → AI parse thành timeSpent+comment | ✅ Done |
+| 4.5 | AI Suggest Transition | Đọc context → suggest status tiếp theo phù hợp | ✅ Done |
+| 4.6 | AI Sprint Review | Worklog tuần → báo cáo markdown + copy clipboard | ✅ Done |
 
 ---
 
@@ -100,3 +100,4 @@
 | 2026-05-10 | Phase 1 hoàn thành, docs khởi tạo, hydration bug fix |
 | 2026-05-10 | Phase 2 hoàn thành: My Issues page, Log Work, Comments, Transition UX, Create Issue modal, Ctrl+K global search |
 | 2026-05-10 | Phase 3 hoàn thành: Settings, Keyboard Shortcuts, Dark Mode, Projects Browser, JQL Search, Worklog History, Bulk Actions, Notifications Badge |
+| 2026-05-10 | Phase 4 hoàn thành: AI Integration (Gemini 2.5 Flash) — Settings key, Summarize, Draft Comment, Parse Worklog, Suggest Transition, Sprint Review |

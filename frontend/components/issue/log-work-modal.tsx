@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Loader2, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
+import { aiParseWorklog } from '@/lib/ai';
 import { saveWorklog } from '@/lib/worklogs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,34 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AI state
+  const [hasAiKey, setHasAiKey] = useState(false);
+  const [naturalInput, setNaturalInput] = useState('');
+  const [parseLoading, setParseLoading] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  // Read AI key from localStorage — only in useEffect
+  useEffect(() => {
+    setHasAiKey(!!localStorage.getItem('ai_api_key'));
+  }, []);
+
+  async function handleParseWorklog() {
+    if (!naturalInput.trim()) return;
+    setParseLoading(true);
+    setParseError(null);
+    try {
+      const result = await aiParseWorklog(naturalInput.trim());
+      setTimeSpent(result.timeSpent);
+      if (result.comment) setComment(result.comment);
+      setNaturalInput('');
+    } catch (err: unknown) {
+      const e = err instanceof Error ? err.message : 'AI error';
+      setParseError(e);
+    } finally {
+      setParseLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,6 +119,43 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* AI Natural Language Input */}
+          {hasAiKey && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3 space-y-2">
+              <label className="block text-xs font-semibold text-indigo-700 flex items-center gap-1">
+                <Sparkles size={11} />
+                Describe your work (optional — AI will parse)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. họp team 2 tiếng, review PR 30 phút"
+                  value={naturalInput}
+                  onChange={(e) => setNaturalInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleParseWorklog(); } }}
+                  className="flex-1 rounded border border-indigo-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleParseWorklog}
+                  disabled={parseLoading || !naturalInput.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0"
+                >
+                  {parseLoading ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={11} />
+                  )}
+                  {parseLoading ? '…' : '✨ Parse'}
+                </Button>
+              </div>
+              {parseError && (
+                <p className="text-xs text-red-600">{parseError}</p>
+              )}
+            </div>
+          )}
+
           {/* Time Spent */}
           <div>
             <label className="block text-xs font-semibold text-[#172B4D] mb-1">
@@ -99,7 +165,7 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
               placeholder="e.g. 1h 30m, 2h, 45m"
               value={timeSpent}
               onChange={(e) => setTimeSpent(e.target.value)}
-              autoFocus
+              autoFocus={!hasAiKey}
             />
             <p className="text-xs text-[#5E6C84] mt-1">
               Format: 1h, 30m, 1h 30m, 2d

@@ -83,13 +83,13 @@ components/
 ├── issue/                  # Issue Detail-specific
 │   ├── wiki-renderer.tsx   # Jira wiki markup → HTML (dùng lib/jira-wiki.ts)
 │   ├── transition-button.tsx # Lazy-load transitions, color-coded badges (Phase 2.4)
-│   ├── log-work-modal.tsx  # Modal log work (Phase 2.2) — saves to localStorage on success
-│   └── comment-section.tsx # Danh sách + thêm comment (Phase 2.3)
+│   ├── log-work-modal.tsx  # Modal log work (Phase 2.2, 4.4) — AI parse worklog + saves to localStorage
+│   └── comment-section.tsx # Danh sách + thêm comment + AI draft (Phase 2.3, 4.3)
 │
 ├── issues/                 # My Issues page-specific (Phase 2.1 + 3.4 + 3.5)
 │   ├── issues-table.tsx    # Table + filter bar + bulk selection + transition bar
 │   ├── issue-row.tsx       # Single row in table
-│   └── worklogs-tab.tsx    # Worklog history tab (localStorage) (Phase 3.5)
+│   └── worklogs-tab.tsx    # Worklog history tab (localStorage) + AI Sprint Review (Phase 3.5, 4.6)
 │
 ├── search/                 # Global search (Phase 2.6)
 │   └── command-palette.tsx # Ctrl+K overlay — search + recent issues
@@ -170,6 +170,16 @@ getStoredUser()                      // đọc user từ localStorage (null-safe
 isAuthenticated()                    // boolean, check localStorage
 getAuthHeader()                      // base64 encoded auth string
 ```
+
+### `lib/ai.ts` (Phase 4)
+AI helper — calls backend `/api/ai/*` routes. Reads `ai_api_key` from localStorage, sends as `X-AI-Key` header.
+- `aiSummarize(payload)` → `{ bullets: string[] }`
+- `aiDraftComment(payload)` → `{ draft: string }`
+- `aiParseWorklog(input)` → `{ timeSpent: string, comment: string }`
+- `aiSuggestTransition(payload)` → `{ suggestion: string, reason: string }`
+- `aiSprintReview(worklogs)` → `{ markdown: string }`
+
+**Rule:** Tất cả functions đều throw `Error('No AI API key configured')` nếu `ai_api_key` không có trong localStorage. KHÔNG bao giờ gọi Gemini trực tiếp từ browser.
 
 ### `lib/worklogs.ts` (Phase 3.5)
 - `saveWorklog(entry)` — append to `recent_worklogs` localStorage (max 20)

@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, RotateCcw, Moon, Sun } from 'lucide-react';
+import { LogOut, RotateCcw, Moon, Sun, Sparkles } from 'lucide-react';
 import { clearAuth, getStoredUser } from '@/lib/api';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 type StoredUser = {
   displayName?: string;
@@ -28,6 +29,9 @@ export default function SettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<StoredUser>(null);
   const [isDark, setIsDark] = useState(false);
+  const [aiKey, setAiKey] = useState('');
+  const [aiKeyInput, setAiKeyInput] = useState('');
+  const [aiKeySaved, setAiKeySaved] = useState(false);
 
   // Read user from localStorage — only in useEffect to avoid SSR mismatch
   useEffect(() => {
@@ -38,6 +42,12 @@ export default function SettingsPage() {
   useEffect(() => {
     const theme = localStorage.getItem('theme');
     setIsDark(theme === 'dark');
+  }, []);
+
+  // Read AI key from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('ai_api_key') ?? '';
+    setAiKey(stored);
   }, []);
 
   const initials = user?.displayName
@@ -69,6 +79,22 @@ export default function SettingsPage() {
       localStorage.setItem('theme', 'dark');
       setIsDark(true);
     }
+  }
+
+  function handleSaveAiKey() {
+    const trimmed = aiKeyInput.trim();
+    if (!trimmed) return;
+    localStorage.setItem('ai_api_key', trimmed);
+    setAiKey(trimmed);
+    setAiKeyInput('');
+    setAiKeySaved(true);
+    setTimeout(() => setAiKeySaved(false), 2000);
+  }
+
+  function handleRemoveAiKey() {
+    localStorage.removeItem('ai_api_key');
+    setAiKey('');
+    setAiKeyInput('');
   }
 
   return (
@@ -159,6 +185,67 @@ export default function SettingsPage() {
             {isDark ? <Sun size={15} /> : <Moon size={15} />}
             {isDark ? 'Light Mode' : 'Dark Mode'}
           </button>
+        </div>
+      </section>
+
+      {/* ── AI Assistant Section ── */}
+      <section className="bg-white dark:bg-gray-800 rounded-sm border border-[#DFE1E6] dark:border-gray-700 p-5">
+        <h2 className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+          <Sparkles size={13} />
+          AI Assistant (Gemini)
+        </h2>
+        <p className="text-xs text-[#5E6C84] dark:text-gray-400 mb-4">
+          Enter your Google AI Studio API key to enable AI features.{' '}
+          <a
+            href="https://aistudio.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#0052CC] hover:underline"
+          >
+            Get free API key →
+          </a>
+        </p>
+
+        {/* Status indicator */}
+        <div className="mb-3">
+          {aiKey ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2.5 py-1 rounded-full border border-green-200 dark:border-green-800">
+              ✅ API key saved
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
+              ⚠️ No API key — AI features disabled
+            </span>
+          )}
+        </div>
+
+        {/* Key input + actions */}
+        <div className="flex items-center gap-2">
+          <Input
+            type="password"
+            placeholder="AIza..."
+            value={aiKeyInput}
+            onChange={(e) => setAiKeyInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAiKey(); }}
+            className="flex-1 font-mono text-sm"
+          />
+          <Button
+            size="sm"
+            onClick={handleSaveAiKey}
+            disabled={!aiKeyInput.trim()}
+          >
+            {aiKeySaved ? '✓ Saved' : 'Save key'}
+          </Button>
+          {aiKey && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRemoveAiKey}
+              className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+            >
+              Remove
+            </Button>
+          )}
         </div>
       </section>
 

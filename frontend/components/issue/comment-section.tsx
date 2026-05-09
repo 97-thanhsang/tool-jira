@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { api } from '@/lib/api';
+import { aiDraftComment } from '@/lib/ai';
 import { Button } from '@/components/ui/button';
 import { WikiRenderer } from '@/components/issue/wiki-renderer';
 import type { JiraComment } from '@/types/jira';
@@ -28,12 +29,14 @@ function getInitials(displayName: string): string {
 
 interface CommentSectionProps {
   issueKey: string;
+  issueSummary?: string;
   comments: JiraComment[];
   onCommentAdded: () => void;
 }
 
 export function CommentSection({
   issueKey,
+  issueSummary = '',
   comments,
   onCommentAdded,
 }: CommentSectionProps) {
@@ -41,6 +44,18 @@ export function CommentSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // AI draft state
+  const [hasAiKey, setHasAiKey] = useState(false);
+  const [showDraftForm, setShowDraftForm] = useState(false);
+  const [draftIntent, setDraftIntent] = useState('');
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+
+  // Read AI key from localStorage — only in useEffect
+  useEffect(() => {
+    setHasAiKey(!!localStorage.getItem('ai_api_key'));
+  }, []);
 
   async function handleSubmit() {
     if (!body.trim()) return;
@@ -64,6 +79,30 @@ export function CommentSection({
     setShowForm(false);
     setBody('');
     setError(null);
+    setShowDraftForm(false);
+    setDraftIntent('');
+    setDraftError(null);
+  }
+
+  async function handleGenerateDraft() {
+    if (!draftIntent.trim()) return;
+    setDraftLoading(true);
+    setDraftError(null);
+    try {
+      const result = await aiDraftComment({
+        issueKey,
+        summary: issueSummary,
+        intent: draftIntent.trim(),
+      });
+      setBody(result.draft);
+      setShowDraftForm(false);
+      setDraftIntent('');
+    } catch (err: unknown) {
+      const e = err instanceof Error ? err.message : 'AI error';
+      setDraftError(e);
+    } finally {
+      setDraftLoading(false);
+    }
   }
 
   return (
@@ -100,13 +139,69 @@ export function CommentSection({
       {/* Add comment form */}
       {showForm ? (
         <div className="bg-white rounded-sm border border-[#DFE1E6] p-4">
+          {/* AI Draft with AI button */}
+          {hasAiKey && (
+            <div className="mb-3">
+              {!showDraftForm ? (
+                <button
+                  onClick={() => setShowDraftForm(true)}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
+                >
+                  <Sparkles size={11} />
+                  ✨ Draft with AI
+                </button>
+              ) : (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3 space-y-2">
+                  <p className="text-xs font-medium text-indigo-700">
+                    What do you want to say? (brief intent)
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="e.g. Cập nhật tiến độ task, xong rồi, cần review"
+                    value={draftIntent}
+                    onChange={(e) => setDraftIntent(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateDraft(); }}
+                    className="w-full rounded border border-indigo-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+                    autoFocus
+                  />
+                  {draftError && (
+                    <p className="text-xs text-red-600">{draftError}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateDraft}
+                      disabled={draftLoading || !draftIntent.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      {draftLoading ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={11} />
+                      )}
+                      {draftLoading ? 'Generating…' : 'Generate'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setShowDraftForm(false); setDraftIntent(''); setDraftError(null); }}
+                      disabled={draftLoading}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <textarea
             className="w-full rounded-lg border border-[#DFE1E6] px-2.5 py-1.5 text-sm resize-none focus:outline-none focus:border-[#0052CC] placeholder:text-[#5E6C84] transition-colors"
             rows={4}
             placeholder="Add a comment…"
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            autoFocus
+            autoFocus={!hasAiKey}
           />
           {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
           <div className="flex items-center gap-2 mt-2">

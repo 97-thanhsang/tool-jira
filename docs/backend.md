@@ -39,7 +39,8 @@ backend/src/
 │   ├── index.ts    # SQLite init, tạo bảng nếu chưa có
 │   └── schema.ts   # Drizzle schema definitions
 └── routes/
-    └── jira.ts     # Proxy route handler
+    ├── jira.ts     # Proxy route handler
+    └── ai.ts       # AI routes: /api/ai/* → Google Gemini (Phase 4)
 ```
 
 ---
@@ -52,9 +53,27 @@ backend/src/
 // Routes:
 //   GET  /health       → { status: 'ok' }
 //   ALL  /api/jira/*   → jiraRouter (proxy)
+//   POST /api/ai/*     → aiRouter (Gemini 2.5 Flash, Phase 4)
 ```
 
 **Khi thêm route mới:** import và `app.use('/api/xxx', xxxRouter)` trong `index.ts`.
+
+---
+
+## `routes/ai.ts` — AI routes (Phase 4)
+
+Stateless AI proxy to Google Gemini. Mọi route đọc `X-AI-Key` header — nếu thiếu → 401. Key KHÔNG được lưu trên server.
+
+**Package:** `@google/generative-ai` (backend only)  
+**Model:** `gemini-2.5-flash`
+
+| Method | Path | Body | Response |
+|--------|------|------|----------|
+| POST | `/api/ai/summarize` | `{ issueKey, summary, description, comments[] }` | `{ bullets: string[] }` |
+| POST | `/api/ai/draft-comment` | `{ issueKey, summary, intent }` | `{ draft: string }` |
+| POST | `/api/ai/parse-worklog` | `{ input: string }` | `{ timeSpent, comment }` |
+| POST | `/api/ai/suggest-transition` | `{ issueKey, summary, description, currentStatus, comments[] }` | `{ suggestion, reason }` |
+| POST | `/api/ai/sprint-review` | `{ worklogs: WorklogItem[] }` | `{ markdown: string }` |
 
 ---
 

@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Clock } from 'lucide-react';
+import { Clock, Sparkles, Loader2, ClipboardCopy, X } from 'lucide-react';
 import { getWorklogs } from '@/lib/worklogs';
+import { aiSprintReview } from '@/lib/ai';
 import type { WorklogEntry } from '@/lib/worklogs';
 
 function formatDate(iso: string): string {
@@ -16,11 +17,54 @@ function formatDate(iso: string): string {
 
 export function WorklogsTab() {
   const [worklogs, setWorklogs] = useState<WorklogEntry[]>([]);
+  const [hasAiKey, setHasAiKey] = useState(false);
+
+  // AI sprint review state
+  const [reviewMarkdown, setReviewMarkdown] = useState<string | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [showReview, setShowReview] = useState(false);
 
   // Read from localStorage only on client (useEffect)
   useEffect(() => {
     setWorklogs(getWorklogs());
+    setHasAiKey(!!localStorage.getItem('ai_api_key'));
   }, []);
+
+  async function handleSprintReview() {
+    setReviewLoading(true);
+    setReviewError(null);
+    setReviewMarkdown(null);
+    setShowReview(true);
+    try {
+      const result = await aiSprintReview(
+        worklogs.map((w) => ({
+          issueKey: w.issueKey,
+          summary: w.summary || w.issueKey,
+          timeSpent: w.timeSpent,
+          date: w.date,
+          comment: w.comment,
+        }))
+      );
+      setReviewMarkdown(result.markdown);
+    } catch (err: unknown) {
+      const e = err instanceof Error ? err.message : 'AI error';
+      setReviewError(e);
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  function handleCopy() {
+    if (!reviewMarkdown) return;
+    navigator.clipboard.writeText(reviewMarkdown).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // clipboard access failed silently
+    });
+  }
 
   if (worklogs.length === 0) {
     return (
@@ -39,6 +83,68 @@ export function WorklogsTab() {
 
   return (
     <div>
+      {/* AI Sprint Review button */}
+      {hasAiKey && (
+        <div className="mb-4">
+          <button
+            onClick={handleSprintReview}
+            disabled={reviewLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-60 transition-colors"
+          >
+            {reviewLoading ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Sparkles size={12} />
+            )}
+            {reviewLoading ? 'Generating…' : '✨ Generate Sprint Review'}
+          </button>
+        </div>
+      )}
+
+      {/* Sprint Review panel */}
+      {showReview && (
+        <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-md p-4 relative">
+          <button
+            onClick={() => { setShowReview(false); setReviewMarkdown(null); setReviewError(null); }}
+            className="absolute top-2.5 right-2.5 text-indigo-400 hover:text-indigo-600"
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={13} className="text-indigo-600" />
+            <span className="text-xs font-semibold text-indigo-700">AI Sprint Review</span>
+            {reviewMarkdown && (
+              <button
+                onClick={handleCopy}
+                className="ml-auto inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-100 transition-colors"
+              >
+                <ClipboardCopy size={11} />
+                {copied ? 'Copied!' : '📋 Copy'}
+              </button>
+            )}
+          </div>
+
+          {reviewLoading && (
+            <div className="flex items-center gap-2 py-4 justify-center">
+              <Loader2 size={16} className="animate-spin text-indigo-500" />
+              <span className="text-sm text-indigo-600">Generating sprint review…</span>
+            </div>
+          )}
+
+          {reviewError && (
+            <p className="text-xs text-red-600">{reviewError}</p>
+          )}
+
+          {reviewMarkdown && (
+            <pre className="whitespace-pre-wrap text-sm text-[#172B4D] dark:text-gray-200 font-sans leading-relaxed">
+              {reviewMarkdown}
+            </pre>
+          )}
+        </div>
+      )}
+
       <p className="text-xs text-[#5E6C84] dark:text-gray-400 mb-3">
         Last {worklogs.length} worklogs (stored locally)
       </p>

@@ -13,7 +13,10 @@ router.all('/*path', async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Missing X-Jira-Auth header' });
   }
 
-  const jiraPath = req.params['path'] ?? ''; // everything after /api/jira/
+  // Express v5 path-to-regexp v8: /*path captures an ARRAY of segments, not a string
+  // e.g. /issue/PROJ-123/transitions → ['issue', 'PROJ-123', 'transitions']
+  const rawPath = req.params['path'];
+  const jiraPath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '');
   const jiraUrl = `${config.jiraBaseUrl}/rest/api/2/${jiraPath}`;
 
   try {
