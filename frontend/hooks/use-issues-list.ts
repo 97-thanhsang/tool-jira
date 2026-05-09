@@ -16,10 +16,7 @@ export interface IssueFilters {
 }
 
 function buildJql(filters: IssueFilters): string {
-  const parts: string[] = [
-    'assignee = currentUser()',
-    'resolution = Unresolved',
-  ];
+  const parts: string[] = ['resolution = Unresolved'];
 
   if (filters.text) parts.push(`text ~ "${filters.text}"`);
 
@@ -32,6 +29,10 @@ function buildJql(filters: IssueFilters): string {
   if (filters.project) parts.push(`project = "${filters.project}"`);
   if (filters.issuetype) parts.push(`issuetype = "${filters.issuetype}"`);
   if (filters.labels) parts.push(`labels = "${filters.labels}"`);
+
+  // Assignee filter: 'currentUser()' = Me, 'EMPTY' = Unassigned, undefined = all
+  if (filters.assignee === 'currentUser()') parts.push('assignee = currentUser()');
+  else if (filters.assignee === 'EMPTY') parts.push('assignee is EMPTY');
 
   if (filters.updatedAfter === '-1d') parts.push('updated >= "-1d"');
   else if (filters.updatedAfter === '-7d') parts.push('updated >= "-7d"');

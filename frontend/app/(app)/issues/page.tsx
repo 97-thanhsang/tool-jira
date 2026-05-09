@@ -44,7 +44,7 @@ export default function IssuesPage() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
-          My Issues
+          Issues
         </h1>
         {!isLoading && activeTab === 'issues' && (
           <span className="text-xs bg-[#DFE1E6] dark:bg-gray-700 text-[#42526E] dark:text-gray-300 px-2 py-0.5 rounded-full font-medium">
@@ -66,7 +66,7 @@ export default function IssuesPage() {
                 : 'border-transparent text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200 hover:border-[#DFE1E6]'
             )}
           >
-            {tab === 'issues' ? 'My Issues' : 'Worklog History'}
+            {tab === 'issues' ? 'Issues' : 'Worklog History'}
           </button>
         ))}
       </div>

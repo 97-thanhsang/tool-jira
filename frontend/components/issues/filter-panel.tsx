@@ -109,7 +109,8 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     const proj = projects?.find((p) => p.key === filters.project);
     chips.push({ key: 'project', label: `Project: ${proj?.name ?? filters.project}` });
   }
-  if (filters.assignee) chips.push({ key: 'assignee', label: 'Assignee: Me' });
+  if (filters.assignee === 'currentUser()') chips.push({ key: 'assignee', label: 'Assignee: Me' });
+  else if (filters.assignee === 'EMPTY') chips.push({ key: 'assignee', label: 'Assignee: Unassigned' });
   if (filters.labels) chips.push({ key: 'labels', label: `Label: ${filters.labels}` });
   if (filters.updatedAfter) {
     const u = UPDATED_OPTIONS.find((o) => o.value === filters.updatedAfter);
