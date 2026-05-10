@@ -379,6 +379,7 @@ export default function BoardPage() {
               isLoading={isLoading}
               moveCard={moveCard}
               onCardClick={setQuickViewKey}
+              onIssueUpdate={() => mutate()}
               swimlanes={swimlaneGroups ?? undefined}
               columnDefs={columnDefs}
             />

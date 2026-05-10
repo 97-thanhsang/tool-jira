@@ -75,6 +75,8 @@ interface KanbanBoardProps {
   isLoading: boolean;
   moveCard?: MoveCardFn;
   onCardClick?: (key: string) => void;
+  /** Called after any inline edit (assignee, priority, labels) — parent revalidates */
+  onIssueUpdate?: () => void;
   /** Swimlane data: each lane has a key and columns map (label → issues). */
   swimlanes?: {
     key: string;
@@ -101,9 +103,11 @@ function ColumnSkeleton() {
 function SortableCard({
   issue,
   onCardClick,
+  onIssueUpdate,
 }: {
   issue: JiraIssue;
   onCardClick?: (key: string) => void;
+  onIssueUpdate?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: issue.id, data: { key: issue.key } });
@@ -124,7 +128,7 @@ function SortableCard({
         isDragging && 'opacity-40',
       )}
     >
-      <IssueCard issue={issue} onCardClick={onCardClick} />
+      <IssueCard issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
     </div>
   );
 }
@@ -140,6 +144,7 @@ interface DroppableColumnProps {
   issues: JiraIssue[];
   isLoading: boolean;
   onCardClick?: (key: string) => void;
+  onIssueUpdate?: () => void;
 }
 
 function DroppableColumn({
@@ -151,6 +156,7 @@ function DroppableColumn({
   issues,
   isLoading,
   onCardClick,
+  onIssueUpdate,
 }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: colId });
   const issueIds = issues.map((i) => i.id);
@@ -212,6 +218,7 @@ function DroppableColumn({
                 key={issue.id}
                 issue={issue}
                 onCardClick={onCardClick}
+                onIssueUpdate={onIssueUpdate}
               />
             ))}
           </SortableContext>
@@ -269,6 +276,7 @@ export function KanbanBoard({
   isLoading,
   moveCard,
   onCardClick,
+  onIssueUpdate,
   swimlanes,
   columnDefs,
 }: KanbanBoardProps) {
@@ -432,6 +440,7 @@ export function KanbanBoard({
                       issues={issues}
                       isLoading={isLoading}
                       onCardClick={onCardClick}
+                      onIssueUpdate={onIssueUpdate}
                     />
                   );
                 })}
@@ -478,6 +487,7 @@ export function KanbanBoard({
             issues={col.issues}
             isLoading={isLoading}
             onCardClick={onCardClick}
+            onIssueUpdate={onIssueUpdate}
           />
         ))}
       </div>
