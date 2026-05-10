@@ -64,6 +64,7 @@ function filterTask(task: TaskReport, filters: TeamFiltersState): boolean {
 
 export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   const [configOpen, setConfigOpen] = useState(false);
+  const [showWeekends, setShowWeekends] = useState(false);
   const [columnOrder, setColumnOrder] = useState(['project', 'key', 'summary', 'est', 'status']);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
     project: true, key: true, summary: true, status: true, est: true,
@@ -75,11 +76,14 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
     const to = new Date(data.dateRange.to);
     const cur = new Date(from);
     while (cur <= to) {
-      result.push(format(cur, 'yyyy-MM-dd'));
+      const day = cur.getDay();
+      if (showWeekends || (day !== 0 && day !== 6)) {
+        result.push(format(cur, 'yyyy-MM-dd'));
+      }
       cur.setDate(cur.getDate() + 1);
     }
     return result;
-  }, [data.dateRange]);
+  }, [data.dateRange, showWeekends]);
 
   const dayHeaders = useMemo(() => days.map((d) => ({
     key: d,
@@ -136,7 +140,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   }
 
   return (
-    <div className="space-y-5 min-w-max">
+    <div className="space-y-3">
       {/* Config Grid button */}
       <div className="flex justify-end relative">
         <button
@@ -173,11 +177,19 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                   {col === 'project' && 'Project'}
                 </label>
               ))}
+              <div className="border-t border-[#DFE1E6] dark:border-gray-700 my-1.5" />
+              <label className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 cursor-pointer text-xs text-[#172B4D] dark:text-gray-200">
+                <input type="checkbox" checked={showWeekends}
+                  onChange={() => setShowWeekends(prev => !prev)}
+                  className="w-3 h-3 accent-[#0052CC]" />
+                Show Sat/Sun
+              </label>
             </div>
           </>
         )}
       </div>
 
+      <div className="space-y-5 min-w-max">
       {filteredUsers.map((user) => (
         <div key={user.username}>
           {/* ── User Header ── */}
@@ -310,6 +322,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
           </div>
         </div>
       ))}
+    </div>
     </div>
   );
 }
