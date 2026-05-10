@@ -38,6 +38,11 @@ export default function TeamPage() {
       project: '',
       period: 'week',
       quickFilter: 'all',
+      filterStatus: '',
+      filterPriority: '',
+      filterType: '',
+      filterDueDate: '',
+      filterHasLog: '',
     };
   });
 
@@ -93,6 +98,17 @@ export default function TeamPage() {
     return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.projectKey)))).sort();
   }, [data]);
 
+  // Collect unique statuses and types from data
+  const uniqueStatuses = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.status)))).filter(Boolean).sort();
+  }, [data]);
+
+  const uniqueTypes = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.issueTypeName)))).filter(Boolean).sort();
+  }, [data]);
+
   // Summary stats
   const totalHours = data ? (data.totalLoggedSeconds / 3600).toFixed(1) : '0';
   const dueTasksCount = dueTasks.length;
@@ -113,6 +129,8 @@ export default function TeamPage() {
         filters={filters}
         onChange={setFilters}
         allProjects={allProjects}
+        uniqueStatuses={uniqueStatuses}
+        uniqueTypes={uniqueTypes}
       />
 
       {/* Summary bar */}
@@ -157,8 +175,7 @@ export default function TeamPage() {
         <div className="mt-3">
           <TeamReportTable
             data={data}
-            searchText={filters.searchText}
-            quickFilter={filters.quickFilter}
+            filters={filters}
           />
         </div>
       )}

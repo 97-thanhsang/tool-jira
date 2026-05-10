@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Settings2, GripVertical, Eye, EyeOff } from 'lucide-react';
 import type { TeamReportData, UserReport, TaskReport } from '@/types/jira';
+import type { TeamFiltersState } from '@/components/team/team-filters';
 
 interface TeamReportTableProps {
   data: TeamReportData;
-  searchText: string;
-  quickFilter: 'all' | 'under-8h' | 'overdue' | 'off';
+  filters: TeamFiltersState;
 }
 
 function getHourClass(seconds: number): string {
@@ -24,11 +24,41 @@ function formatCellHours(seconds: number): string {
   return `${h % 1 === 0 ? h.toFixed(0) : h.toFixed(1)}h`;
 }
 
-export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTableProps) {
+function filterTask(task: TaskReport, filters: TeamFiltersState): boolean {
+  if (filters.filterStatus && task.status !== filters.filterStatus) return false;
+  if (filters.filterPriority && task.priority !== filters.filterPriority) return false;
+  if (filters.filterType && task.issueTypeName !== filters.filterType) return false;
+
+  if (filters.filterDueDate) {
+    if (!task.duedate) return false;
+    const due = new Date(task.duedate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (due < today) {
+      // overdue tasks — always pass overdue filter if past
+    }
+    if (filters.filterDueDate === 'overdue') {
+      if (due >= today) return false;
+    } else if (filters.filterDueDate === 'today') {
+      if (due.toDateString() !== today.toDateString()) return false;
+    } else if (filters.filterDueDate === 'this-week') {
+      const weekEnd = new Date(today);
+      weekEnd.setDate(today.getDate() + (7 - today.getDay()));
+      if (due > weekEnd || due < today) return false;
+    }
+  }
+
+  if (filters.filterHasLog === 'has-log' && task.totalLoggedSeconds === 0) return false;
+  if (filters.filterHasLog === 'no-log' && task.totalLoggedSeconds > 0) return false;
+
+  return true;
+}
+
+export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   const [configOpen, setConfigOpen] = useState(false);
-  const [columnOrder, setColumnOrder] = useState(['project', 'key', 'summary', 'est']);
+  const [columnOrder, setColumnOrder] = useState(['project', 'key', 'summary', 'est', 'status']);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-    project: true, key: true, summary: true, est: true,
+    project: true, key: true, summary: true, status: true, est: true,
   });
   // Compute day columns from date range
   const days = useMemo(() => {
@@ -49,13 +79,16 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
     isToday: isToday(new Date(d)),
   })), [days]);
 
-  // Filter users by search text and quick filter
+  // Filter users by search text, quick filter, and task-level filters
   const filteredUsers = useMemo(() => {
-    let users = data.users;
+    let users = data.users.map(user => ({
+      ...user,
+      tasks: user.tasks.filter(t => filterTask(t, filters)),
+    })).filter(user => user.tasks.length > 0);
 
     // Text search: match username or displayName
-    if (searchText) {
-      const q = searchText.toLowerCase();
+    if (filters.searchText) {
+      const q = filters.searchText.toLowerCase();
       users = users.filter(
         (u) =>
           u.username.toLowerCase().includes(q) ||
@@ -64,9 +97,9 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
     }
 
     // Quick filters
-    if (quickFilter === 'off') {
+    if (filters.quickFilter === 'off') {
       users = users.filter((u) => u.totalLoggedSeconds === 0);
-    } else if (quickFilter === 'under-8h') {
+    } else if (filters.quickFilter === 'under-8h') {
       users = users.filter((u) =>
         days.some((d) => {
           const dailyTotal = u.tasks.reduce(
@@ -80,7 +113,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
     // 'overdue' is handled externally via due tasks filter; show all for now
 
     return users;
-  }, [data.users, searchText, quickFilter, days]);
+  }, [data.users, filters, days]);
 
   if (data.users.length === 0) {
     return (
@@ -115,7 +148,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
             <div className="fixed inset-0 z-30" onClick={() => setConfigOpen(false)} />
             <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 p-3">
               <p className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">Visible Columns</p>
-              {(['project', 'key', 'summary', 'est'] as const).map((col) => (
+              {(['project', 'key', 'summary', 'status', 'est'] as const).map((col) => (
                 <label key={col} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 cursor-pointer text-xs text-[#172B4D] dark:text-gray-200">
                   <input
                     type="checkbox"
@@ -125,6 +158,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
                   />
                   {col === 'key' && 'Task Key'}
                   {col === 'summary' && 'Summary'}
+                  {col === 'status' && 'Status'}
                   {col === 'est' && 'Estimate'}
                   {col === 'project' && 'Project'}
                 </label>
@@ -172,6 +206,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
               {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
               {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
               {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
+              {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">Status</div>}
               {dayHeaders.map((dh) => (
                 <div
                   key={dh.key}
@@ -234,6 +269,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
                   {user.totalEstDisplay}
                 </div>
               )}
+              {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2" />}
               {dayHeaders.map((dh) => {
                 const d = dh.key;
                 const total = user.tasks.reduce(
@@ -329,6 +365,22 @@ function TaskRow({
       {visibleColumns.est && (
         <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#5E6C84] dark:text-gray-400">
           {task.estDisplay}
+        </div>
+      )}
+
+      {/* Status */}
+      {visibleColumns.status && (
+        <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">
+          <span className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded font-medium',
+            task.status === 'Done' || task.status?.toLowerCase().includes('done')
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+              : task.status === 'In Progress'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+          )}>
+            {task.status || '-'}
+          </span>
         </div>
       )}
 

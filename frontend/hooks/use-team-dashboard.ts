@@ -28,7 +28,7 @@ function buildReport(
   usernames: string[],
 ): UserReport[] {
   // Phase 1: collect the best issue metadata per issueKey
-  const issueMeta = new Map<string, { summary: string; typeName: string; typeIcon: string; projKey: string; estSeconds: number }>();
+  const issueMeta = new Map<string, { summary: string; typeName: string; typeIcon: string; projKey: string; estSeconds: number; status: string; priority: string; duedate?: string }>();
 
   // Phase 2: group by user → issueKey → daily seconds
   const userMap = new Map<string, Map<string, Map<string, number>>>();
@@ -48,6 +48,9 @@ function buildReport(
           typeIcon: e.issueTypeIconUrl,
           projKey: e.projectKey,
           estSeconds: e.estSeconds,
+          status: e.status ?? '',
+          priority: e.priority ?? 'Medium',
+          duedate: e.duedate,
         });
       }
     }
@@ -87,6 +90,9 @@ function buildReport(
         totalLoggedSeconds: taskLogged,
         totalLoggedDisplay: formatDuration(taskLogged),
         dailySeconds,
+        status: meta.status,
+        priority: meta.priority,
+        duedate: meta.duedate,
       });
 
       totalEst += meta.estSeconds;

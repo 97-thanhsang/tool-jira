@@ -150,6 +150,9 @@ export interface WorklogEntry {
   created: string;
   updated: string;
   estSeconds: number;          // original estimate from issue timetracking
+  status?: string;             // "Done", "In Progress", "To Do", etc.
+  priority?: string;           // "High", "Medium", etc.
+  duedate?: string;            // "2026-05-15" or undefined
 }
 
 export interface WorklogFilters {
@@ -217,6 +220,9 @@ export interface TaskReport {
   totalLoggedSeconds: number;    // total logged in date range
   totalLoggedDisplay: string;    // "15.5h"
   dailySeconds: Record<string, number>; // "2026-05-06" → seconds
+  status: string;                // "Done", "In Progress", "To Do", etc.
+  priority: string;              // "High", "Medium", etc.
+  duedate?: string;              // "2026-05-15" or undefined
 }
 
 export interface UserReport {

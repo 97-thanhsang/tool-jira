@@ -12,6 +12,11 @@ export interface TeamFiltersState {
   project: string;
   period: 'week' | 'month' | 'custom';
   quickFilter: 'all' | 'under-8h' | 'overdue' | 'off';
+  filterStatus: string;          // '' = all, or status name
+  filterPriority: string;        // '' = all, or priority name
+  filterType: string;            // '' = all, or issuetype name
+  filterDueDate: string;         // '' | 'overdue' | 'today' | 'this-week'
+  filterHasLog: string;          // '' | 'has-log' | 'no-log'
 }
 
 interface TeamFiltersProps {
@@ -19,6 +24,8 @@ interface TeamFiltersProps {
   filters: TeamFiltersState;
   onChange: (f: TeamFiltersState) => void;
   allProjects: string[];
+  uniqueStatuses: string[];
+  uniqueTypes: string[];
 }
 
 interface JiraUserResult {
@@ -36,11 +43,12 @@ const chipLabels: Record<TeamFiltersState['quickFilter'], string> = {
   off: '⚡ Nghỉ/Off',
 };
 
-export function TeamFilters({ groups, filters, onChange, allProjects }: TeamFiltersProps) {
+export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStatuses, uniqueTypes }: TeamFiltersProps) {
   const [memberSearch, setMemberSearch] = useState('');
   const [memberResults, setMemberResults] = useState<JiraUserResult[]>([]);
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const memberRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,7 +245,82 @@ export function TeamFilters({ groups, filters, onChange, allProjects }: TeamFilt
             {chipLabels[qf]}
           </button>
         ))}
+
+        {/* More filters toggle */}
+        <button onClick={() => setShowMoreFilters(!showMoreFilters)}
+          className={cn('text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1 ml-auto',
+            showMoreFilters
+              ? 'bg-[#0052CC] text-white border-[#0052CC]'
+              : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800')}>
+          <Filter size={12} />
+          More Filters
+          <ChevronDown size={10} className={cn('transition-transform', showMoreFilters && 'rotate-180')} />
+        </button>
       </div>
+
+      {/* Row 3: More Filters (collapsible) */}
+      {showMoreFilters && (
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          {/* Status */}
+          {uniqueStatuses.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Status</span>
+              <select className={cn(selectClass, 'w-28')}
+                value={filters.filterStatus} onChange={(e) => update({ filterStatus: e.target.value })}>
+                <option value="">All</option>
+                {uniqueStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
+              </select>
+            </div>
+          )}
+
+          {/* Priority */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Priority</span>
+            <select className={cn(selectClass, 'w-24')}
+              value={filters.filterPriority} onChange={(e) => update({ filterPriority: e.target.value })}>
+              <option value="">All</option>
+              {['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'].map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Type */}
+          {uniqueTypes.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Type</span>
+              <select className={cn(selectClass, 'w-24')}
+                value={filters.filterType} onChange={(e) => update({ filterType: e.target.value })}>
+                <option value="">All</option>
+                {uniqueTypes.map((t) => (<option key={t} value={t}>{t}</option>))}
+              </select>
+            </div>
+          )}
+
+          {/* Due Date */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">Due Date</span>
+            <select className={cn(selectClass, 'w-24')}
+              value={filters.filterDueDate} onChange={(e) => update({ filterDueDate: e.target.value })}>
+              <option value="">All</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Today</option>
+              <option value="this-week">This Week</option>
+            </select>
+          </div>
+
+          {/* Has Worklog */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">Log</span>
+            <select className={cn(selectClass, 'w-32')}
+              value={filters.filterHasLog} onChange={(e) => update({ filterHasLog: e.target.value })}>
+              <option value="">All</option>
+              <option value="has-log">Has logged time</option>
+              <option value="no-log">No logged time</option>
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

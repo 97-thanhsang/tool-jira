@@ -21,6 +21,9 @@ interface RawIssue {
     project: { key: string; name: string };
     worklog?: { worklogs: RawWorklog[] };
     timetracking?: { originalEstimateSeconds: number; remainingEstimateSeconds: number };
+    status: { name: string; statusCategory: { key: string } };
+    priority: { name: string } | null;
+    duedate: string | null;
   };
 }
 
@@ -42,7 +45,7 @@ export async function fetchTeamWorklogs(
   }
 
   const r = await api.get<{ total: number; issues: RawIssue[] }>('/search', {
-    params: { jql, maxResults: 1000, fields: 'summary,issuetype,project,worklog,timetracking' },
+    params: { jql, maxResults: 1000, fields: 'summary,issuetype,project,worklog,timetracking,status,priority,duedate' },
   });
 
   const entries: WorklogEntry[] = [];
@@ -70,6 +73,9 @@ export async function fetchTeamWorklogs(
         created: wl.created,
         updated: wl.updated,
         estSeconds: issue.fields.timetracking?.originalEstimateSeconds ?? 0,
+        status: issue.fields.status?.name ?? '',
+        priority: issue.fields.priority?.name ?? 'Medium',
+        duedate: issue.fields.duedate ?? undefined,
       });
       dailyHours[startedDate] = (dailyHours[startedDate] ?? 0) + wl.timeSpentSeconds / 3600;
     }
