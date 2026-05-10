@@ -1,8 +1,9 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { format, isToday } from 'date-fns';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { Settings2, GripVertical, Eye, EyeOff } from 'lucide-react';
 import type { TeamReportData, UserReport, TaskReport } from '@/types/jira';
 
 interface TeamReportTableProps {
@@ -24,6 +25,11 @@ function formatCellHours(seconds: number): string {
 }
 
 export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTableProps) {
+  const [configOpen, setConfigOpen] = useState(false);
+  const [columnOrder, setColumnOrder] = useState(['project', 'key', 'summary', 'est']);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    project: true, key: true, summary: true, est: true,
+  });
   // Compute day columns from date range
   const days = useMemo(() => {
     const result: string[] = [];
@@ -88,6 +94,46 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
 
   return (
     <div className="space-y-5">
+      {/* Config Grid button */}
+      <div className="flex justify-end relative">
+        <button
+          onClick={() => setConfigOpen(!configOpen)}
+          className={cn(
+            'text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1',
+            configOpen
+              ? 'bg-[#0052CC] text-white border-[#0052CC]'
+              : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800',
+          )}
+        >
+          <Settings2 size={12} />
+          Config Grid
+        </button>
+
+        {/* Config popover */}
+        {configOpen && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setConfigOpen(false)} />
+            <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 p-3">
+              <p className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">Visible Columns</p>
+              {(['project', 'key', 'summary', 'est'] as const).map((col) => (
+                <label key={col} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 cursor-pointer text-xs text-[#172B4D] dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns[col]}
+                    onChange={() => setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }))}
+                    className="w-3 h-3 accent-[#0052CC]"
+                  />
+                  {col === 'key' && 'Task Key'}
+                  {col === 'summary' && 'Summary'}
+                  {col === 'est' && 'Estimate'}
+                  {col === 'project' && 'Project'}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {filteredUsers.map((user) => (
         <div key={user.username}>
           {/* ── User Header ── */}
@@ -122,10 +168,10 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
           <div className="border border-[#DFE1E6] dark:border-gray-700 rounded-sm overflow-hidden">
             {/* Header row */}
             <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
-              <div className="w-[64px] flex-shrink-0 px-3 py-2">Project</div>
-              <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>
-              <div className="flex-1 px-2 py-2 min-w-0">Summary</div>
-              <div className="w-[60px] flex-shrink-0 px-2 py-2 text-right">Est</div>
+              {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2">Project</div>}
+              {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
+              {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
+              {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
               {dayHeaders.map((dh) => (
                 <div
                   key={dh.key}
@@ -165,6 +211,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
                       projectRowSpan={isFirstInGroup ? groupRowSpan : 0}
                       isLast={isLastOverall}
                       isGroupDivider={!isFirstInGroup && ti === 0}
+                      visibleColumns={visibleColumns}
                     />
                   );
                 })
@@ -173,16 +220,20 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
 
             {/* Total row */}
             <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
-              <div className="w-[64px] flex-shrink-0 px-3 py-2" />
-              <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">
-                Total
-              </div>
-              <div className="flex-1 px-2 py-2 text-[#5E6C84] dark:text-gray-400 min-w-0">
-                {user.tasks.length} task{user.tasks.length !== 1 ? 's' : ''}
-              </div>
-              <div className="w-[60px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">
-                {user.totalEstDisplay}
-              </div>
+              {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2" />}
+              {visibleColumns.key && (
+                <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
+              )}
+              {visibleColumns.summary && (
+                <div className="flex-1 px-2 py-2 text-[#5E6C84] dark:text-gray-400 min-w-0">
+                  {user.tasks.length} task{user.tasks.length !== 1 ? 's' : ''}
+                </div>
+              )}
+              {visibleColumns.est && (
+                <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">
+                  {user.totalEstDisplay}
+                </div>
+              )}
               {dayHeaders.map((dh) => {
                 const d = dh.key;
                 const total = user.tasks.reduce(
@@ -219,6 +270,7 @@ function TaskRow({
   projectRowSpan,
   isLast,
   isGroupDivider,
+  visibleColumns,
 }: {
   task: TaskReport;
   dayHeaders: Array<{ key: string; label: string; isToday: boolean }>;
@@ -226,6 +278,7 @@ function TaskRow({
   projectRowSpan: number;
   isLast: boolean;
   isGroupDivider: boolean;
+  visibleColumns: Record<string, boolean>;
 }) {
   return (
     <div
@@ -236,16 +289,19 @@ function TaskRow({
       )}
     >
       {/* Project — rowspan effect */}
-      <div className="w-[64px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
-        {projectKey && (
-          <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
-            {projectKey}
-          </span>
-        )}
-      </div>
+      {visibleColumns.project && (
+        <div className="w-[80px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
+          {projectKey && (
+            <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+              {projectKey}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Key */}
-      <div className="w-[120px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
+      {visibleColumns.key && (
+        <div className="w-[120px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
         {task.issueTypeIconUrl && (
           <img
             src={task.issueTypeIconUrl}
@@ -260,16 +316,21 @@ function TaskRow({
           {task.issueKey}
         </Link>
       </div>
+      )}
 
       {/* Summary */}
-      <div className="flex-1 px-2 py-2 text-[#172B4D] dark:text-gray-200 truncate min-w-0">
-        {task.summary}
-      </div>
+      {visibleColumns.summary && (
+        <div className="flex-1 px-2 py-2 text-[#172B4D] dark:text-gray-200 truncate min-w-0">
+          {task.summary}
+        </div>
+      )}
 
       {/* Estimate */}
-      <div className="w-[60px] flex-shrink-0 px-2 py-2 text-right text-[#5E6C84] dark:text-gray-400">
-        {task.estDisplay}
-      </div>
+      {visibleColumns.est && (
+        <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#5E6C84] dark:text-gray-400">
+          {task.estDisplay}
+        </div>
+      )}
 
       {/* Daily cells */}
       {dayHeaders.map((dh) => {
