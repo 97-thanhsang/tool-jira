@@ -28,10 +28,11 @@ export async function fetchWorklogs(
             updated: string;
           }>;
         };
+        timetracking?: { originalEstimateSeconds: number; remainingEstimateSeconds: number };
       };
     }>;
   }>('/search', {
-    params: { jql, maxResults: 500, fields: 'summary,issuetype,project,worklog' },
+    params: { jql, maxResults: 500, fields: 'summary,issuetype,project,worklog,timetracking' },
   });
 
   const entries: WorklogEntry[] = [];
@@ -60,6 +61,7 @@ export async function fetchWorklogs(
         comment: wl.comment ?? '',
         created: wl.created,
         updated: wl.updated,
+        estSeconds: issue.fields.timetracking?.originalEstimateSeconds ?? 0,
       });
       dailyHours[startedDate] = (dailyHours[startedDate] ?? 0) + wl.timeSpentSeconds / 3600;
     }

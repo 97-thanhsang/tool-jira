@@ -14,6 +14,7 @@ import {
   Plus,
   Bell,
   Clock,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAuth, getStoredUser } from '@/lib/api';
@@ -23,6 +24,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 const navItems = [
   { href: '/board', label: 'My Board', icon: LayoutDashboard },
   { href: '/issues', label: 'My Issues', icon: ListTodo },
+  { href: '/team', label: 'Team', icon: Users },
   { href: '/worklog', label: 'Worklog', icon: Clock },
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/search', label: 'JQL Search', icon: Search },

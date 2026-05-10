@@ -149,6 +149,7 @@ export interface WorklogEntry {
   comment: string;
   created: string;
   updated: string;
+  estSeconds: number;          // original estimate from issue timetracking
 }
 
 export interface WorklogFilters {
@@ -170,4 +171,87 @@ export interface WorklogSearchResult {
   total: number;
   totalHours: number;
   dailyHours: Record<string, number>; // "2026-05-06" → 8
+}
+
+// ── Team Dashboard ──
+
+export interface TeamMemberSummary {
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  dailyHours: Record<string, number>;    // "2026-05-06" → 7.5
+  totalHours: number;
+  averageHours: number;
+  dueTasks: Record<string, DueTaskInfo[]>; // "2026-05-06" → tasks
+}
+
+export interface DueTaskInfo {
+  issueKey: string;
+  summary: string;
+  duedate: string;
+  status: string;
+  priority: string;
+  assignee: string;
+}
+
+export interface TeamDashboardData {
+  members: TeamMemberSummary[];
+  dateRange: { from: string; to: string };
+  allWorklogEntries: WorklogEntry[];
+  allDueTasks: DueTaskInfo[];
+  totalHours: number;
+  memberCount: number;
+}
+
+// ── Task-Centric Team Report ──
+
+export interface TaskReport {
+  issueKey: string;
+  issueId: string;
+  summary: string;
+  issueTypeName: string;
+  issueTypeIconUrl: string;
+  projectKey: string;
+  estSeconds: number;            // original estimate
+  estDisplay: string;            // "8h" or "2d" etc.
+  totalLoggedSeconds: number;    // total logged in date range
+  totalLoggedDisplay: string;    // "15.5h"
+  dailySeconds: Record<string, number>; // "2026-05-06" → seconds
+}
+
+export interface UserReport {
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  tasks: TaskReport[];
+  totalEstSeconds: number;
+  totalEstDisplay: string;
+  totalLoggedSeconds: number;
+  totalLoggedDisplay: string;
+}
+
+export interface TeamReportData {
+  users: UserReport[];
+  dateRange: { from: string; to: string };
+  totalEstSeconds: number;
+  totalLoggedSeconds: number;
+  userCount: number;
+  taskCount: number;
+}
+
+export interface TeamGroup {
+  id: string;
+  name: string;
+  members: string[];  // usernames
+}
+
+export interface TeamDashboardFilters {
+  groups: TeamGroup[];
+  selectedGroupId: string | null;
+  project: string;
+  dateFrom: string;
+  dateTo: string;
+  period: 'week' | 'month' | 'custom';
+  searchText: string;
+  quickFilter: 'all' | 'under-8h' | 'overdue' | 'off';
 }
