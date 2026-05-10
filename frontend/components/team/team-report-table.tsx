@@ -1,6 +1,6 @@
 'use client';
 import { useMemo } from 'react';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { TeamReportData, UserReport, TaskReport } from '@/types/jira';
@@ -36,6 +36,12 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
     }
     return result;
   }, [data.dateRange]);
+
+  const dayHeaders = useMemo(() => days.map((d) => ({
+    key: d,
+    label: format(new Date(d), 'EEE d'),
+    isToday: isToday(new Date(d)),
+  })), [days]);
 
   // Filter users by search text and quick filter
   const filteredUsers = useMemo(() => {
@@ -80,8 +86,6 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
     );
   }
 
-  const dayHeaders = days.map((d) => format(new Date(d), 'EEE d'));
-
   return (
     <div className="space-y-5">
       {filteredUsers.map((user) => (
@@ -118,31 +122,58 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
           <div className="border border-[#DFE1E6] dark:border-gray-700 rounded-sm overflow-hidden">
             {/* Header row */}
             <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
+              <div className="w-[64px] flex-shrink-0 px-3 py-2">Project</div>
               <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>
               <div className="flex-1 px-2 py-2 min-w-0">Summary</div>
               <div className="w-[60px] flex-shrink-0 px-2 py-2 text-right">Est</div>
               {dayHeaders.map((dh) => (
                 <div
-                  key={dh}
-                  className="w-[64px] flex-shrink-0 px-1 py-2 text-center"
+                  key={dh.key}
+                  className={cn(
+                    'w-[64px] flex-shrink-0 px-1 py-2 text-center',
+                    dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30 text-[#0052CC] dark:text-blue-300 rounded-t',
+                  )}
                 >
-                  {dh}
+                  {dh.label}
                 </div>
               ))}
             </div>
 
-            {/* Task rows */}
-            {user.tasks.map((task, idx) => (
-              <TaskRow
-                key={task.issueKey}
-                task={task}
-                days={days}
-                isLast={idx === user.tasks.length - 1}
-              />
-            ))}
+            {/* Task rows — grouped by project */}
+            {(() => {
+              // Group tasks by projectKey
+              const groups: Array<{ projKey: string; tasks: TaskReport[] }> = [];
+              for (const task of user.tasks) {
+                const last = groups[groups.length - 1];
+                if (last && last.projKey === task.projectKey) {
+                  last.tasks.push(task);
+                } else {
+                  groups.push({ projKey: task.projectKey, tasks: [task] });
+                }
+              }
+              return groups.map((group, gi) =>
+                group.tasks.map((task, ti) => {
+                  const isFirstInGroup = ti === 0;
+                  const groupRowSpan = group.tasks.length;
+                  const isLastOverall = gi === groups.length - 1 && ti === group.tasks.length - 1;
+                  return (
+                    <TaskRow
+                      key={task.issueKey}
+                      task={task}
+                      dayHeaders={dayHeaders}
+                      projectKey={isFirstInGroup ? group.projKey : null}
+                      projectRowSpan={isFirstInGroup ? groupRowSpan : 0}
+                      isLast={isLastOverall}
+                      isGroupDivider={!isFirstInGroup && ti === 0}
+                    />
+                  );
+                })
+              );
+            })()}
 
             {/* Total row */}
             <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
+              <div className="w-[64px] flex-shrink-0 px-3 py-2" />
               <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">
                 Total
               </div>
@@ -152,7 +183,8 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
               <div className="w-[60px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">
                 {user.totalEstDisplay}
               </div>
-              {days.map((d) => {
+              {dayHeaders.map((dh) => {
+                const d = dh.key;
                 const total = user.tasks.reduce(
                   (s, t) => s + (t.dailySeconds[d] ?? 0),
                   0,
@@ -163,6 +195,7 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
                     className={cn(
                       'w-[64px] flex-shrink-0 px-1 py-2 text-center',
                       getHourClass(total),
+                      dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
                     )}
                   >
                     {formatCellHours(total)}
@@ -181,20 +214,36 @@ export function TeamReportTable({ data, searchText, quickFilter }: TeamReportTab
 
 function TaskRow({
   task,
-  days,
+  dayHeaders,
+  projectKey,
+  projectRowSpan,
   isLast,
+  isGroupDivider,
 }: {
   task: TaskReport;
-  days: string[];
+  dayHeaders: Array<{ key: string; label: string; isToday: boolean }>;
+  projectKey: string | null;
+  projectRowSpan: number;
   isLast: boolean;
+  isGroupDivider: boolean;
 }) {
   return (
     <div
       className={cn(
         'flex text-xs hover:bg-[#F4F5F7]/50 dark:hover:bg-gray-800/50 transition-colors',
         !isLast && 'border-b border-[#DFE1E6] dark:border-gray-700',
+        isGroupDivider && 'border-t-2 border-t-[#DFE1E6] dark:border-t-gray-600',
       )}
     >
+      {/* Project — rowspan effect */}
+      <div className="w-[64px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
+        {projectKey && (
+          <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+            {projectKey}
+          </span>
+        )}
+      </div>
+
       {/* Key */}
       <div className="w-[120px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
         {task.issueTypeIconUrl && (
@@ -223,14 +272,15 @@ function TaskRow({
       </div>
 
       {/* Daily cells */}
-      {days.map((d) => {
-        const sec = task.dailySeconds[d] ?? 0;
+      {dayHeaders.map((dh) => {
+        const sec = task.dailySeconds[dh.key] ?? 0;
         return (
           <div
-            key={d}
+            key={dh.key}
             className={cn(
               'w-[64px] flex-shrink-0 px-1 py-2 text-center',
               getHourClass(sec),
+              dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
             )}
           >
             {formatCellHours(sec)}

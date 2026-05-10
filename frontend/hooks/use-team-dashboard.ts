@@ -94,7 +94,10 @@ function buildReport(
     }
 
     // Sort tasks by most logged first
-    tasks.sort((a, b) => b.totalLoggedSeconds - a.totalLoggedSeconds);
+    tasks.sort((a, b) => {
+        if (a.projectKey !== b.projectKey) return a.projectKey.localeCompare(b.projectKey);
+        return b.totalLoggedSeconds - a.totalLoggedSeconds;
+      });
 
     const authorInfo = entries.find((e) => e.author.name === username)?.author;
 
