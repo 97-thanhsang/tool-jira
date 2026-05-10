@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { startOfWeek, addWeeks, subWeeks, startOfMonth, addMonths, endOfMonth, format } from 'date-fns';
+import { startOfWeek, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, format } from 'date-fns';
 import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getStoredUser } from '@/lib/api';
 import { useTeamDashboard } from '@/hooks/use-team-dashboard';
@@ -62,14 +62,14 @@ export default function TeamPage() {
       const start = startOfWeek(now, { weekStartsOn: 1 });
       return {
         dateFrom: format(start, 'yyyy-MM-dd'),
-        dateTo: format(addWeeks(start, 1), 'yyyy-MM-dd'),
+        dateTo: format(addDays(start, 6), 'yyyy-MM-dd'), // Sun
       };
     }
     if (filters.period === 'month') {
       const start = startOfMonth(now);
       return {
         dateFrom: format(start, 'yyyy-MM-dd'),
-        dateTo: format(endOfMonth(now), 'yyyy-MM-dd'),
+        dateTo: format(endOfMonth(now), 'yyyy-MM-dd'), // last day
       };
     }
     // custom
@@ -218,7 +218,7 @@ export default function TeamPage() {
 
       {/* Report Table */}
       {data && !isLoading && (
-        <div className="mt-3">
+        <div className="mt-3 overflow-x-auto">
           <TeamReportTable
             data={data}
             filters={filters}

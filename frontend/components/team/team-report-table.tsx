@@ -83,7 +83,8 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
 
   const dayHeaders = useMemo(() => days.map((d) => ({
     key: d,
-    label: format(new Date(d), 'EEE d'),
+    dayName: format(new Date(d), 'EEE'),
+    dateStr: format(new Date(d), 'dd/MM'),
     isToday: isToday(new Date(d)),
   })), [days]);
 
@@ -135,7 +136,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 min-w-max">
       {/* Config Grid button */}
       <div className="flex justify-end relative">
         <button
@@ -228,12 +229,13 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                       <div
                         key={dh.key}
                         className={cn(
-                          'w-[64px] flex-shrink-0 px-1 py-2 text-center',
+                          'w-[64px] flex-shrink-0 flex flex-col items-center justify-center py-1 text-center',
                           dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30 text-[#0052CC] dark:text-blue-300 rounded-t',
                           !dh.isToday && getDayBgClass(dailyTotals[dh.key], dh.key),
                         )}
                       >
-                        {dh.label}
+                        <span className="text-[10px] leading-none">{dh.dayName}</span>
+                        <span className="text-[10px] leading-none mt-0.5">{dh.dateStr}</span>
                       </div>
                     ))}
                   </div>
@@ -325,7 +327,7 @@ function TaskRow({
   visibleColumns,
 }: {
   task: TaskReport;
-  dayHeaders: Array<{ key: string; label: string; isToday: boolean }>;
+  dayHeaders: Array<{ key: string; dayName: string; dateStr: string; isToday: boolean }>;
   dailyTotals: Record<string, number>;
   projectKey: string | null;
   projectRowSpan: number;
