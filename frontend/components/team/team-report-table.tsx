@@ -19,11 +19,14 @@ function getHourClass(seconds: number): string {
 }
 
 function getDayBgClass(seconds: number, dateStr: string): string {
-  const day = new Date(dateStr).getDay(); // 0=Sun, 6=Sat
+  const date = new Date(dateStr);
+  const day = date.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return ''; // weekend — no requirement
   if (seconds >= 28800) return 'bg-green-50 dark:bg-green-900/10';
   if (seconds > 0) return 'bg-amber-50 dark:bg-amber-900/10';
-  return 'bg-red-50 dark:bg-red-900/10';
+  // 0h: red only for past days, default for future days
+  const today = new Date(new Date().toDateString());
+  return date < today ? 'bg-red-50 dark:bg-red-900/10' : '';
 }
 
 function formatCellHours(seconds: number): string {
@@ -119,8 +122,12 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
           }
         }
         return Object.entries(dailyTotals).some(([dateStr, total]) => {
-          const day = new Date(dateStr).getDay();
+          const date = new Date(dateStr);
+          const day = date.getDay();
           if (day === 0 || day === 6) return false; // skip weekends
+          // Only check past/present days (not future)
+          const today = new Date(new Date().toDateString());
+          if (date > today) return false;
           return total < 28800;
         });
       });

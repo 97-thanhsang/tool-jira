@@ -51,18 +51,33 @@ export default function TeamPage() {
     };
   });
 
-  // Custom mode dates
-  const [customDateFrom, setCustomDateFrom] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
-  const [customDateTo, setCustomDateTo] = useState(() => format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 1), 'yyyy-MM-dd'));
+  // Custom mode dates — default to current or previous week
+  const [customDateFrom, setCustomDateFrom] = useState(() => {
+    const now = new Date();
+    let start = startOfWeek(now, { weekStartsOn: 1 });
+    if (now.getDay() <= 2) start = subWeeks(start, 1);
+    return format(start, 'yyyy-MM-dd');
+  });
+  const [customDateTo, setCustomDateTo] = useState(() => {
+    const now = new Date();
+    let start = startOfWeek(now, { weekStartsOn: 1 });
+    if (now.getDay() <= 2) start = subWeeks(start, 1);
+    return format(addDays(start, 6), 'yyyy-MM-dd');
+  });
 
   // Derive date range from period
   const dateRange = useMemo(() => {
     const now = new Date();
     if (filters.period === 'week') {
-      const start = startOfWeek(now, { weekStartsOn: 1 });
+      let start = startOfWeek(now, { weekStartsOn: 1 });
+      // If today is Monday (or within first 2 days of the week), show previous week
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon
+      if (dayOfWeek <= 2) {
+        start = subWeeks(start, 1);
+      }
       return {
         dateFrom: format(start, 'yyyy-MM-dd'),
-        dateTo: format(addDays(start, 6), 'yyyy-MM-dd'), // Sun
+        dateTo: format(addDays(start, 6), 'yyyy-MM-dd'),
       };
     }
     if (filters.period === 'month') {
