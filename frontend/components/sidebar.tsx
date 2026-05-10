@@ -13,6 +13,7 @@ import {
   LogOut,
   Plus,
   Bell,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAuth, getStoredUser } from '@/lib/api';
@@ -22,6 +23,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 const navItems = [
   { href: '/board', label: 'My Board', icon: LayoutDashboard },
   { href: '/issues', label: 'My Issues', icon: ListTodo },
+  { href: '/worklog', label: 'Worklog', icon: Clock },
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/search', label: 'JQL Search', icon: Search },
   { href: '/settings', label: 'Settings', icon: Settings },

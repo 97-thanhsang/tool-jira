@@ -123,3 +123,49 @@ export interface JiraBoardConfig {
   };
   ranking: Record<string, unknown>;
 }
+
+// ── Worklog Calendar ──
+
+export interface WorklogAuthor {
+  accountId?: string;
+  name: string;
+  displayName: string;
+  avatarUrls?: { '24x24': string };
+}
+
+export interface WorklogEntry {
+  id: string;
+  issueId: string;
+  issueKey: string;
+  issueSummary: string;
+  projectKey: string;
+  projectName: string;
+  author: WorklogAuthor;
+  timeSpent: string;           // "2h 30m"
+  timeSpentSeconds: number;    // 9000
+  started: string;             // "2026-05-06T08:30:00.000+0700"
+  comment: string;
+  created: string;
+  updated: string;
+}
+
+export interface WorklogFilters {
+  username: string;
+  dateFrom: string;            // "2026-05-01"
+  dateTo: string;              // "2026-05-31"
+  project?: string;
+}
+
+export interface WorklogCreatePayload {
+  issueKey: string;
+  timeSpentSeconds: number;
+  comment: string;
+  started: string;
+}
+
+export interface WorklogSearchResult {
+  entries: WorklogEntry[];
+  total: number;
+  totalHours: number;
+  dailyHours: Record<string, number>; // "2026-05-06" → 8
+}
