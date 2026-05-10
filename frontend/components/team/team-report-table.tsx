@@ -252,7 +252,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                 <>
                   <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
                     {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2">Project</div>}
-                    {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
+                    {visibleColumns.key && <div className="w-[160px] flex-shrink-0 px-3 py-2">Key</div>}
                     {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
                     {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
                     {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">Status</div>}
@@ -270,7 +270,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                       </div>
                     ))}
                   </div>
-                  {/* Task rows */}
+                  {/* Task rows — grouped by project with true rowspan */}
                   {(() => {
                     const groups: Array<{ projKey: string; tasks: TaskReport[] }> = [];
                     for (const task of user.tasks) {
@@ -281,32 +281,54 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                         groups.push({ projKey: task.projectKey, tasks: [task] });
                       }
                     }
-                    return groups.map((group, gi) =>
-                      group.tasks.map((task, ti) => {
-                        const isFirstInGroup = ti === 0;
-                        const groupRowSpan = group.tasks.length;
-                        const isLastOverall = gi === groups.length - 1 && ti === group.tasks.length - 1;
-                        return (
-                          <TaskRow
-                            key={task.issueKey}
-                            task={task}
-                            dayHeaders={dayHeaders}
-                            dailyTotals={dailyTotals}
-                            projectKey={isFirstInGroup ? group.projKey : null}
-                            projectRowSpan={isFirstInGroup ? groupRowSpan : 0}
-                            isLast={isLastOverall}
-                            isGroupDivider={!isFirstInGroup && ti === 0}
-                            visibleColumns={visibleColumns}
-                          />
-                        );
-                      })
-                    );
+                    return groups.map((group, gi) => (
+                      <div
+                        key={group.projKey}
+                        className={cn(
+                          'flex',
+                          gi < groups.length - 1 && 'border-b-2 border-b-[#DFE1E6] dark:border-b-gray-600',
+                        )}
+                      >
+                        {/* Project cell — vertically centered across all rows */}
+                        {visibleColumns.project && (
+                          <div className="w-[100px] flex-shrink-0 flex flex-col items-start justify-center px-3 py-2 border-r border-[#DFE1E6] dark:border-gray-700"
+                            style={{ minHeight: `${group.tasks.length * 32}px` }}>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm text-white"
+                              style={{ backgroundColor: projectColor(group.projKey) }}>
+                              {group.projKey}
+                            </span>
+                            <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 mt-0.5">
+                              {group.tasks.length} task{group.tasks.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Task rows */}
+                        <div className="flex-1 flex flex-col min-w-0">
+                          {group.tasks.map((task, ti) => {
+                            const isLastInGroup = ti === group.tasks.length - 1;
+                            const isLastOverall = gi === groups.length - 1 && isLastInGroup;
+                            return (
+                              <TaskRow
+                                key={task.issueKey}
+                                task={task}
+                                dayHeaders={dayHeaders}
+                                dailyTotals={dailyTotals}
+                                isLast={isLastOverall}
+                                isLastInGroup={isLastInGroup}
+                                visibleColumns={visibleColumns}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
                   })()}
                   {/* Total row */}
                   <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
                     {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2" />}
                     {visibleColumns.key && (
-                      <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
+                      <div className="w-[160px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
                     )}
                     {visibleColumns.summary && (
                       <div className="flex-1 px-2 py-2 text-[#5E6C84] dark:text-gray-400 min-w-0">
@@ -352,47 +374,30 @@ function TaskRow({
   task,
   dayHeaders,
   dailyTotals,
-  projectKey,
-  projectRowSpan,
   isLast,
-  isGroupDivider,
+  isLastInGroup,
   visibleColumns,
 }: {
   task: TaskReport;
   dayHeaders: Array<{ key: string; dayName: string; dateStr: string; isToday: boolean }>;
   dailyTotals: Record<string, number>;
-  projectKey: string | null;
-  projectRowSpan: number;
   isLast: boolean;
-  isGroupDivider: boolean;
+  isLastInGroup: boolean;
   visibleColumns: Record<string, boolean>;
 }) {
   return (
     <div
       className={cn(
         'flex text-xs hover:bg-[#F4F5F7]/50 dark:hover:bg-gray-800/50 transition-colors',
-        !isLast && 'border-b border-[#DFE1E6] dark:border-gray-700',
-        isGroupDivider && 'border-t-2 border-t-[#DFE1E6] dark:border-t-gray-600',
+        !isLastInGroup && 'border-b border-[#DFE1E6] dark:border-gray-700',
         task.totalLoggedSeconds === 0 && 'bg-red-50 dark:bg-red-900/10',
       )}
     >
-      {/* Project — rowspan effect */}
-      {visibleColumns.project && (
-        <div className="w-[100px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
-          {projectKey && (
-            <span
-              className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm text-white"
-              style={{ backgroundColor: projectColor(projectKey) }}
-            >
-              {projectKey}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Project — removed, now at group level */}
 
       {/* Key */}
       {visibleColumns.key && (
-        <div className="w-[120px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
+        <div className="w-[160px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
         {task.issueTypeIconUrl && (
           <img
             src={task.issueTypeIconUrl}
