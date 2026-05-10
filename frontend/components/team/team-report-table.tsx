@@ -96,21 +96,27 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
       );
     }
 
-    // Quick filters
-    if (filters.quickFilter === 'off') {
-      users = users.filter((u) => u.totalLoggedSeconds === 0);
-    } else if (filters.quickFilter === 'under-8h') {
-      users = users.filter((u) =>
-        days.some((d) => {
-          const dailyTotal = u.tasks.reduce(
-            (s, t) => s + (t.dailySeconds[d] ?? 0),
-            0,
-          );
-          return dailyTotal > 0 && dailyTotal < 28800;
+    // Quick filters (task-level)
+    if (filters.quickFilter !== 'all') {
+      users = users.map(u => ({
+        ...u,
+        tasks: u.tasks.filter(t => {
+          if (filters.quickFilter === 'no-log') return t.totalLoggedSeconds === 0;
+          if (filters.quickFilter === 'overdue') return t.duedate && new Date(t.duedate) < new Date(new Date().toDateString());
+          if (filters.quickFilter === 'under-est') return t.estSeconds > 0 && t.totalLoggedSeconds < t.estSeconds;
+          if (filters.quickFilter === 'due-soon') {
+            if (!t.duedate) return false;
+            const due = new Date(t.duedate);
+            const today = new Date(new Date().toDateString());
+            const in2Days = new Date(today);
+            in2Days.setDate(today.getDate() + 2);
+            return due >= today && due <= in2Days;
+          }
+          if (filters.quickFilter === 'high-prio') return t.priority === 'Highest' || t.priority === 'High';
+          return true;
         }),
-      );
+      })).filter(u => u.tasks.length > 0);
     }
-    // 'overdue' is handled externally via due tasks filter; show all for now
 
     return users;
   }, [data.users, filters, days]);
@@ -322,6 +328,7 @@ function TaskRow({
         'flex text-xs hover:bg-[#F4F5F7]/50 dark:hover:bg-gray-800/50 transition-colors',
         !isLast && 'border-b border-[#DFE1E6] dark:border-gray-700',
         isGroupDivider && 'border-t-2 border-t-[#DFE1E6] dark:border-t-gray-600',
+        task.totalLoggedSeconds === 0 && 'bg-red-50 dark:bg-red-900/10',
       )}
     >
       {/* Project — rowspan effect */}
@@ -373,11 +380,13 @@ function TaskRow({
         <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">
           <span className={cn(
             'text-[10px] px-1.5 py-0.5 rounded font-medium',
-            task.status === 'Done' || task.status?.toLowerCase().includes('done')
+            task.status === 'Done' || task.status?.toLowerCase().includes('done') || task.status?.toLowerCase().includes('closed') || task.status?.toLowerCase().includes('resolved')
               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : task.status === 'In Progress'
+              : task.status === 'In Progress' || task.status?.toLowerCase().includes('progress') || task.status?.toLowerCase().includes('review') || task.status?.toLowerCase().includes('qa')
                 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                : task.status?.toLowerCase().includes('reject') || task.status?.toLowerCase().includes('cancel')
+                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
           )}>
             {task.status || '-'}
           </span>

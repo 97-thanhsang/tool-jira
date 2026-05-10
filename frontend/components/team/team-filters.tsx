@@ -11,7 +11,7 @@ export interface TeamFiltersState {
   memberDisplayNames: Record<string, string>; // username → displayName
   project: string;
   period: 'week' | 'month' | 'custom';
-  quickFilter: 'all' | 'under-8h' | 'overdue' | 'off';
+  quickFilter: 'all' | 'no-log' | 'overdue' | 'under-est' | 'due-soon' | 'high-prio';
   filterStatus: string;          // '' = all, or status name
   filterPriority: string;        // '' = all, or priority name
   filterType: string;            // '' = all, or issuetype name
@@ -38,9 +38,11 @@ const selectClass =
 
 const chipLabels: Record<TeamFiltersState['quickFilter'], string> = {
   all: 'Tất cả',
-  'under-8h': '⚠️ Thiếu 8h',
+  'no-log': '🔴 Chưa log',
   overdue: '⚠️ Quá hạn',
-  off: '⚡ Nghỉ/Off',
+  'under-est': '🟡 Thiếu giờ',
+  'due-soon': '🕐 Sắp hết hạn',
+  'high-prio': '🔺 Priority cao',
 };
 
 export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStatuses, uniqueTypes }: TeamFiltersProps) {
@@ -197,14 +199,48 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
           )}
         </div>
 
-        {/* Project filter */}
-        {allProjects.length > 0 && (
+        {/* Project filter — now always visible */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Project</span>
+          <select className={cn(selectClass, 'w-28')}
+            value={filters.project} onChange={(e) => update({ project: e.target.value })}>
+            <option value="">All</option>
+            {allProjects.map((p) => (<option key={p} value={p}>{p}</option>))}
+          </select>
+        </div>
+
+        {/* Status filter */}
+        {uniqueStatuses.length > 0 && (
           <div className="flex items-center gap-1.5">
-            <Filter size={14} className="text-[#5E6C84] dark:text-gray-400" />
-            <select className={cn(selectClass, 'w-36')}
-              value={filters.project} onChange={(e) => update({ project: e.target.value })}>
-              <option value="">All Projects</option>
-              {allProjects.map((p) => (<option key={p} value={p}>{p}</option>))}
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Status</span>
+            <select className={cn(selectClass, 'w-28')}
+              value={filters.filterStatus} onChange={(e) => update({ filterStatus: e.target.value })}>
+              <option value="">All</option>
+              {uniqueStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
+            </select>
+          </div>
+        )}
+
+        {/* Priority filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Priority</span>
+          <select className={cn(selectClass, 'w-24')}
+            value={filters.filterPriority} onChange={(e) => update({ filterPriority: e.target.value })}>
+            <option value="">All</option>
+            {['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'].map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Type filter */}
+        {uniqueTypes.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Type</span>
+            <select className={cn(selectClass, 'w-24')}
+              value={filters.filterType} onChange={(e) => update({ filterType: e.target.value })}>
+              <option value="">All</option>
+              {uniqueTypes.map((t) => (<option key={t} value={t}>{t}</option>))}
             </select>
           </div>
         )}
@@ -238,7 +274,7 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
           )}
         </div>
 
-        {(['all', 'under-8h', 'overdue', 'off'] as const).map((qf) => (
+        {(['all', 'no-log', 'overdue', 'under-est', 'due-soon', 'high-prio'] as const).map((qf) => (
           <button key={qf} type="button" onClick={() => update({ quickFilter: qf })}
             className={cn('text-xs px-2 py-1 rounded-full border transition-colors font-medium',
               filters.quickFilter === qf ? 'bg-[#0052CC] text-white border-[#0052CC]' : 'border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800')}>
@@ -258,48 +294,12 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
         </button>
       </div>
 
-      {/* Row 3: More Filters (collapsible) */}
+      {/* Row 3: More Filters (collapsible — Due Date, Has Log) */}
       {showMoreFilters && (
         <div className="flex items-center gap-3 flex-wrap pt-1">
-          {/* Status */}
-          {uniqueStatuses.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Status</span>
-              <select className={cn(selectClass, 'w-28')}
-                value={filters.filterStatus} onChange={(e) => update({ filterStatus: e.target.value })}>
-                <option value="">All</option>
-                {uniqueStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
-              </select>
-            </div>
-          )}
-
-          {/* Priority */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Priority</span>
-            <select className={cn(selectClass, 'w-24')}
-              value={filters.filterPriority} onChange={(e) => update({ filterPriority: e.target.value })}>
-              <option value="">All</option>
-              {['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'].map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Type */}
-          {uniqueTypes.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 w-10">Type</span>
-              <select className={cn(selectClass, 'w-24')}
-                value={filters.filterType} onChange={(e) => update({ filterType: e.target.value })}>
-                <option value="">All</option>
-                {uniqueTypes.map((t) => (<option key={t} value={t}>{t}</option>))}
-              </select>
-            </div>
-          )}
-
           {/* Due Date */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">Due Date</span>
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Due Date</span>
             <select className={cn(selectClass, 'w-24')}
               value={filters.filterDueDate} onChange={(e) => update({ filterDueDate: e.target.value })}>
               <option value="">All</option>
@@ -311,7 +311,7 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
 
           {/* Has Worklog */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">Log</span>
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Log</span>
             <select className={cn(selectClass, 'w-32')}
               value={filters.filterHasLog} onChange={(e) => update({ filterHasLog: e.target.value })}>
               <option value="">All</option>

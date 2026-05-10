@@ -12,6 +12,11 @@ import type { TeamGroup } from '@/types/jira';
 
 const defaultGroups: TeamGroup[] = [
   {
+    id: 'rd1',
+    name: 'R&D1',
+    members: ['SangNT', 'TriHD', 'NghiaDT', 'ThinhTPQ', 'HieuDT', 'PhatNH'],
+  },
+  {
     id: 'frontend',
     name: 'Team Frontend',
     members: ['SangNT', 'PhatNH', 'HuyNQ', 'LinhPT', 'MinhNV'],
