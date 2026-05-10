@@ -9,20 +9,93 @@ export interface BoardFilters {
   projects:    string[];
   issueTypes:  string[];
   priorities:  string[];
+  searchText:     string;
+  // Quick filters
+  onlyMyIssues:    boolean;
+  recentlyUpdated: boolean;  // last 24h
+  dueThisWeek:     boolean;
+  highPriority:    boolean;  // Highest + High
 }
 
 export const EMPTY_FILTERS: BoardFilters = {
-  projects:   [],
-  issueTypes: [],
-  priorities: [],
+  projects:        [],
+  issueTypes:      [],
+  priorities:      [],
+  searchText:      '',
+  onlyMyIssues:    false,
+  recentlyUpdated:  false,
+  dueThisWeek:     false,
+  highPriority:    false,
 };
 
+/** Compute start of current week (Monday 00:00) */
+function getWeekStart(): Date {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  const monday = new Date(now.getFullYear(), now.getMonth(), diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+/** Compute end of current week (Sunday 23:59:59.999) */
+function getWeekEnd(): Date {
+  const monday = getWeekStart();
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return sunday;
+}
+
 /** Apply filters client-side on already-fetched issues */
-export function applyFilters(issues: JiraIssue[], filters: BoardFilters): JiraIssue[] {
+export function applyFilters(
+  issues: JiraIssue[],
+  filters: BoardFilters,
+  currentUsername?: string,
+): JiraIssue[] {
+  const now = Date.now();
+  const DAY_MS = 86_400_000;
+  const weekStart = getWeekStart().getTime();
+  const weekEnd = getWeekEnd().getTime();
+
   return issues.filter((issue) => {
+    // Standard chip filters
     if (filters.projects.length   > 0 && !filters.projects.includes(issue.fields.project.key))     return false;
     if (filters.issueTypes.length > 0 && !filters.issueTypes.includes(issue.fields.issuetype.name)) return false;
     if (filters.priorities.length > 0 && !filters.priorities.includes(issue.fields.priority.name))  return false;
+
+    // Search text (summary + key)
+    if (filters.searchText) {
+      const q = filters.searchText.toLowerCase();
+      if (
+        !issue.key.toLowerCase().includes(q) &&
+        !issue.fields.summary.toLowerCase().includes(q)
+      ) return false;
+    }
+
+    // Quick filter: only my issues
+    if (filters.onlyMyIssues && currentUsername) {
+      if (issue.fields.assignee?.name !== currentUsername) return false;
+    }
+
+    // Quick filter: recently updated (last 24h)
+    if (filters.recentlyUpdated) {
+      const updatedMs = new Date(issue.fields.updated).getTime();
+      if (now - updatedMs > DAY_MS) return false;
+    }
+
+    // Quick filter: due this week
+    if (filters.dueThisWeek) {
+      if (!issue.fields.duedate) return false;
+      const dueMs = new Date(issue.fields.duedate).getTime();
+      if (dueMs < weekStart || dueMs > weekEnd) return false;
+    }
+
+    // Quick filter: high priority only
+    if (filters.highPriority) {
+      if (!['Highest', 'High'].includes(issue.fields.priority.name)) return false;
+    }
+
     return true;
   });
 }
@@ -69,7 +142,7 @@ export function BoardFilterBar({ filters, onChange, allIssues }: BoardFilterBarP
     filters.issueTypes.length > 0 ||
     filters.priorities.length > 0;
 
-  function toggle(field: keyof BoardFilters, value: string) {
+  function toggle(field: 'projects' | 'issueTypes' | 'priorities', value: string) {
     const current = filters[field];
     const next    = current.includes(value)
       ? current.filter((v) => v !== value)
