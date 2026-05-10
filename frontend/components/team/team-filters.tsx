@@ -11,7 +11,7 @@ export interface TeamFiltersState {
   memberDisplayNames: Record<string, string>; // username → displayName
   project: string;
   period: 'week' | 'month' | 'custom';
-  quickFilter: 'all' | 'no-log' | 'overdue' | 'under-est' | 'due-soon' | 'high-prio';
+  quickFilter: 'all' | 'under-8h';
   filterStatus: string;          // '' = all, or status name
   filterPriority: string;        // '' = all, or priority name
   filterType: string;            // '' = all, or issuetype name
@@ -38,11 +38,7 @@ const selectClass =
 
 const chipLabels: Record<TeamFiltersState['quickFilter'], string> = {
   all: 'Tất cả',
-  'no-log': '🔴 Chưa log',
-  overdue: '⚠️ Quá hạn',
-  'under-est': '🟡 Thiếu giờ',
-  'due-soon': '🕐 Sắp hết hạn',
-  'high-prio': '🔺 Priority cao',
+  'under-8h': '⚠️ Thiếu 8h',
 };
 
 export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStatuses, uniqueTypes }: TeamFiltersProps) {
@@ -274,7 +270,7 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
           )}
         </div>
 
-        {(['all', 'no-log', 'overdue', 'under-est', 'due-soon', 'high-prio'] as const).map((qf) => (
+        {(['all', 'under-8h'] as const).map((qf) => (
           <button key={qf} type="button" onClick={() => update({ quickFilter: qf })}
             className={cn('text-xs px-2 py-1 rounded-full border transition-colors font-medium',
               filters.quickFilter === qf ? 'bg-[#0052CC] text-white border-[#0052CC]' : 'border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800')}>

@@ -104,26 +104,21 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
       );
     }
 
-    // Quick filters (task-level)
-    if (filters.quickFilter !== 'all') {
-      users = users.map(u => ({
-        ...u,
-        tasks: u.tasks.filter(t => {
-          if (filters.quickFilter === 'no-log') return t.totalLoggedSeconds === 0;
-          if (filters.quickFilter === 'overdue') return t.duedate && new Date(t.duedate) < new Date(new Date().toDateString());
-          if (filters.quickFilter === 'under-est') return t.estSeconds > 0 && t.totalLoggedSeconds < t.estSeconds;
-          if (filters.quickFilter === 'due-soon') {
-            if (!t.duedate) return false;
-            const due = new Date(t.duedate);
-            const today = new Date(new Date().toDateString());
-            const in2Days = new Date(today);
-            in2Days.setDate(today.getDate() + 2);
-            return due >= today && due <= in2Days;
+    // Quick filters
+    if (filters.quickFilter === 'under-8h') {
+      users = users.filter(u => {
+        const dailyTotals: Record<string, number> = {};
+        for (const t of u.tasks) {
+          for (const [d, sec] of Object.entries(t.dailySeconds)) {
+            dailyTotals[d] = (dailyTotals[d] ?? 0) + sec;
           }
-          if (filters.quickFilter === 'high-prio') return t.priority === 'Highest' || t.priority === 'High';
-          return true;
-        }),
-      })).filter(u => u.tasks.length > 0);
+        }
+        return Object.entries(dailyTotals).some(([dateStr, total]) => {
+          const day = new Date(dateStr).getDay();
+          if (day === 0 || day === 6) return false; // skip weekends
+          return total < 28800;
+        });
+      });
     }
 
     return users;

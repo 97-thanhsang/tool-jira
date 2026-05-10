@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { startOfWeek, addWeeks, startOfMonth, addMonths, format } from 'date-fns';
-import { Users } from 'lucide-react';
+import { startOfWeek, addWeeks, subWeeks, startOfMonth, addMonths, endOfMonth, format } from 'date-fns';
+import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getStoredUser } from '@/lib/api';
 import { useTeamDashboard } from '@/hooks/use-team-dashboard';
 import { TeamFilters, type TeamFiltersState } from '@/components/team/team-filters';
@@ -51,7 +51,11 @@ export default function TeamPage() {
     };
   });
 
-  // Derive date range from period (same pattern as worklog page)
+  // Custom mode dates
+  const [customDateFrom, setCustomDateFrom] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+  const [customDateTo, setCustomDateTo] = useState(() => format(addWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 1), 'yyyy-MM-dd'));
+
+  // Derive date range from period
   const dateRange = useMemo(() => {
     const now = new Date();
     if (filters.period === 'week') {
@@ -65,16 +69,15 @@ export default function TeamPage() {
       const start = startOfMonth(now);
       return {
         dateFrom: format(start, 'yyyy-MM-dd'),
-        dateTo: format(addMonths(start, 1), 'yyyy-MM-dd'),
+        dateTo: format(endOfMonth(now), 'yyyy-MM-dd'),
       };
     }
-    // custom — show current week as default until user picks custom dates
-    const start = startOfWeek(now, { weekStartsOn: 1 });
+    // custom
     return {
-      dateFrom: format(start, 'yyyy-MM-dd'),
-      dateTo: format(addWeeks(start, 1), 'yyyy-MM-dd'),
+      dateFrom: customDateFrom,
+      dateTo: customDateTo,
     };
-  }, [filters.period]);
+  }, [filters.period, customDateFrom, customDateTo]);
 
   // Use selected members directly from filter state
   const { usernames, isAllMembers } = useMemo(() => {
@@ -126,6 +129,44 @@ export default function TeamPage() {
           <Users size={20} className="text-[#0052CC]" />
           Team Dashboard
         </h1>
+        {/* Custom mode navigation */}
+        {filters.period === 'custom' && (
+          <div className="flex items-center gap-1.5 ml-4">
+            <button
+              onClick={() => {
+                const start = subWeeks(new Date(customDateFrom), 1);
+                setCustomDateFrom(format(start, 'yyyy-MM-dd'));
+                setCustomDateTo(format(addWeeks(start, 1), 'yyyy-MM-dd'));
+              }}
+              className="p-0.5 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-800 text-[#5E6C84] dark:text-gray-400"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <input
+              type="date"
+              value={customDateFrom}
+              onChange={(e) => setCustomDateFrom(e.target.value)}
+              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+            />
+            <span className="text-xs text-[#5E6C84] dark:text-gray-400">–</span>
+            <input
+              type="date"
+              value={customDateTo}
+              onChange={(e) => setCustomDateTo(e.target.value)}
+              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+            />
+            <button
+              onClick={() => {
+                const start = addWeeks(new Date(customDateFrom), 1);
+                setCustomDateFrom(format(start, 'yyyy-MM-dd'));
+                setCustomDateTo(format(addWeeks(start, 1), 'yyyy-MM-dd'));
+              }}
+              className="p-0.5 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-800 text-[#5E6C84] dark:text-gray-400"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
