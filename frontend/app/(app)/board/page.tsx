@@ -4,20 +4,29 @@ import useSWR from 'swr';
 import { api, getStoredUser } from '@/lib/api';
 import { RefreshCw, CheckCircle2, XCircle, Search, X } from 'lucide-react';
 import { useBoardState, type ColumnMapEntry } from '@/hooks/use-board-state';
-import { KanbanBoard, type BoardColumn } from '@/components/board/kanban-board';
+import { KanbanBoard, type BoardColumn, type BoardColumnDef } from '@/components/board/kanban-board';
 import { BoardCharts } from '@/components/board/board-charts';
 import { BoardFilterBar, EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardQuickFilters } from '@/components/board/board-quick-filters';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
+import { BoardEpicPanel } from '@/components/board/board-epic-panel';
+import { BoardVersionPanel } from '@/components/board/board-version-panel';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { JiraBoard, JiraBoardConfig } from '@/types/jira';
+import type { JiraBoard, JiraBoardConfig, JiraIssue } from '@/types/jira';
 
-// Color palette for auto-assigned column colors
+// ─── Color palette ───────────────────────────────────────────────────────────
+
 const COLUMN_COLORS = [
   '#5E6C84', '#0052CC', '#36B37E', '#DE350B',
   '#FF8B00', '#6554C0', '#008DA6', '#E774BB',
 ];
+
+// ─── Swimlane type ───────────────────────────────────────────────────────────
+
+type SwimlaneMode = 'none' | 'assignee' | 'epic';
+
+// ─── Page component ──────────────────────────────────────────────────────────
 
 export default function BoardPage() {
   // Current user for "only my issues" quick filter
@@ -26,6 +35,15 @@ export default function BoardPage() {
 
   // Board selection
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
+
+  // Swimlane mode
+  const [swimlaneMode, setSwimlaneMode] = useState<SwimlaneMode>('none');
+
+  // Epic & Version panel state
+  const [epicPanelOpen, setEpicPanelOpen] = useState(false);
+  const [versionPanelOpen, setVersionPanelOpen] = useState(false);
+  const [selectedEpic, setSelectedEpic] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 
   const { data: boards } = useSWR<JiraBoard[]>(
     '/agile/board?maxResults=50&type=kanban',
@@ -83,21 +101,84 @@ export default function BoardPage() {
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
 
+  // ── All issues (unfiltered, for epic/version extraction) ──────────────────
   const allIssues = useMemo(
     () => Object.values(grouped).flat(),
     [grouped],
   );
 
+  // ── Epic filter ───────────────────────────────────────────────────────────
+  const epicallyFilteredIssues = useMemo(() => {
+    if (!selectedEpic) return allIssues;
+    return allIssues.filter(issue => issue.fields.parent?.key === selectedEpic);
+  }, [allIssues, selectedEpic]);
+
+  // ── Version filter (applies after epic filter) ─────────────────────────────
+  const versionFilteredIssues = useMemo(() => {
+    if (!selectedVersion) return epicallyFilteredIssues;
+    return epicallyFilteredIssues.filter(issue =>
+      issue.fields.fixVersions?.some(v => v.name === selectedVersion),
+    );
+  }, [epicallyFilteredIssues, selectedVersion]);
+
+  // ── Apply epic/version filter to grouped ───────────────────────────────────
+  const epicVersionGrouped = useMemo(() => {
+    const issueSet = new Set(versionFilteredIssues.map(i => i.id));
+    const result: Record<string, JiraIssue[]> = {};
+    for (const [colName, issues] of Object.entries(grouped)) {
+      result[colName] = issues.filter(i => issueSet.has(i.id));
+    }
+    return result;
+  }, [grouped, versionFilteredIssues]);
+
   // Apply client-side filters to each column
   const filteredGrouped = useMemo(() => {
     const result: Record<string, typeof allIssues> = {};
-    for (const [colName, issues] of Object.entries(grouped)) {
+    for (const [colName, issues] of Object.entries(epicVersionGrouped)) {
       result[colName] = applyFilters(issues, filters, currentUsername);
     }
     return result;
-  }, [grouped, filters, currentUsername]);
+  }, [epicVersionGrouped, filters, currentUsername]);
 
   const totalShown = Object.values(filteredGrouped).reduce((sum, issues) => sum + issues.length, 0);
+
+  // ── Swimlane groups ───────────────────────────────────────────────────────
+  const swimlaneGroups = useMemo(() => {
+    if (swimlaneMode === 'none') return null;
+
+    const groups = new Map<string, Record<string, JiraIssue[]>>();
+
+    // Initialize groups with existing column names
+    const colNames = Object.keys(filteredGrouped);
+
+    for (const [colName, issues] of Object.entries(filteredGrouped)) {
+      for (const issue of issues) {
+        let groupKey: string;
+        if (swimlaneMode === 'assignee') {
+          groupKey = issue.fields.assignee?.displayName || 'Unassigned';
+        } else {
+          // epic mode: use parent if exists (subtask parent)
+          groupKey = issue.fields.parent?.fields?.summary || 'No Epic';
+        }
+
+        if (!groups.has(groupKey)) {
+          const empty: Record<string, JiraIssue[]> = {};
+          for (const cn of colNames) empty[cn] = [];
+          groups.set(groupKey, empty);
+        }
+        groups.get(groupKey)![colName].push(issue);
+      }
+    }
+
+    // Sort: "Unassigned"/"No Epic" last, rest alphabetically
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => {
+        if (a === 'Unassigned' || a === 'No Epic') return 1;
+        if (b === 'Unassigned' || b === 'No Epic') return -1;
+        return a.localeCompare(b);
+      })
+      .map(([key, columns]) => ({ key, columns }));
+  }, [swimlaneMode, filteredGrouped]);
 
   // Build column counts for charts
   const columnCounts = useMemo(() => {
@@ -108,7 +189,27 @@ export default function BoardPage() {
     return counts;
   }, [filteredGrouped]);
 
-  // Build dynamic BoardColumn array
+  // ── Column definitions (metadata only, for swimlane + flat render) ─────────
+  const columnDefs: BoardColumnDef[] = useMemo(() => {
+    if (dynamicColumns.length > 0) {
+      return dynamicColumns.map(col => ({
+        id: col.name.toLowerCase().replace(/\s+/g, '-'),
+        label: col.name,
+        color: col.color,
+        wipMin: col.wipMin,
+        wipMax: col.wipMax,
+        statusIds: col.statusIds,
+      }));
+    }
+    // Fallback
+    return [
+      { id: 'to-do', label: 'To Do', color: '#5E6C84', wipMax: 5, statusIds: [] },
+      { id: 'in-progress', label: 'In Progress', color: '#0052CC', wipMax: 5, statusIds: [] },
+      { id: 'done', label: 'Done', color: '#36B37E', statusIds: [] },
+    ];
+  }, [dynamicColumns]);
+
+  // Build dynamic BoardColumn array (with issues, for flat mode)
   const columns: BoardColumn[] = useMemo(() => {
     if (dynamicColumns.length > 0) {
       return dynamicColumns.map(col => ({
@@ -157,6 +258,44 @@ export default function BoardPage() {
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
+
+          {/* Swimlane selector */}
+          <select
+            value={swimlaneMode}
+            onChange={(e) => setSwimlaneMode(e.target.value as SwimlaneMode)}
+            className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] shrink-0"
+          >
+            <option value="none">No Swimlanes</option>
+            <option value="assignee">By Assignee</option>
+            <option value="epic">By Epic</option>
+          </select>
+
+          {/* Epic panel toggle */}
+          <button
+            onClick={() => setEpicPanelOpen(!epicPanelOpen)}
+            className={cn(
+              'text-xs px-2 py-1 rounded border transition-colors shrink-0',
+              epicPanelOpen
+                ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800',
+            )}
+          >
+            Epics
+          </button>
+
+          {/* Version panel toggle */}
+          <button
+            onClick={() => setVersionPanelOpen(!versionPanelOpen)}
+            className={cn(
+              'text-xs px-2 py-1 rounded border transition-colors shrink-0',
+              versionPanelOpen
+                ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800',
+            )}
+          >
+            Versions
+          </button>
+
           {!isLoading && (
             <p className="text-sm text-[#5E6C84] dark:text-gray-400 shrink-0">
               {totalShown} issues
@@ -211,14 +350,40 @@ export default function BoardPage() {
         <BoardFilterBar filters={filters} onChange={setFilters} allIssues={allIssues} />
       )}
 
-      {/* Board */}
-      <div className="flex-1 min-h-0">
-        <KanbanBoard
-          columns={columns}
-          isLoading={isLoading}
-          moveCard={moveCard}
-          onCardClick={setQuickViewKey}
+      {/* Main content area: sidebars + board */}
+      <div className="flex flex-1 min-h-0">
+        {/* Epic Panel */}
+        <BoardEpicPanel
+          allIssues={allIssues}
+          selectedEpic={selectedEpic}
+          onSelectEpic={setSelectedEpic}
+          isOpen={epicPanelOpen}
+          onToggle={() => setEpicPanelOpen(!epicPanelOpen)}
         />
+
+        {/* Version Panel */}
+        <BoardVersionPanel
+          allIssues={allIssues}
+          selectedVersion={selectedVersion}
+          onSelectVersion={setSelectedVersion}
+          isOpen={versionPanelOpen}
+          onToggle={() => setVersionPanelOpen(!versionPanelOpen)}
+        />
+
+        {/* Board content (flex-1) */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          {/* Board */}
+          <div className="flex-1 min-h-0">
+            <KanbanBoard
+              columns={columns}
+              isLoading={isLoading}
+              moveCard={moveCard}
+              onCardClick={setQuickViewKey}
+              swimlanes={swimlaneGroups ?? undefined}
+              columnDefs={columnDefs}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Quick View */}

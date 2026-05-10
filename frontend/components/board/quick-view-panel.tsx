@@ -132,7 +132,7 @@ export function QuickViewPanel({ issueKey, onClose }: QuickViewPanelProps) {
                 <div className="flex items-center gap-1.5">
                   <PriorityIcon priority={issue.fields.priority} />
                   <span className="text-xs text-[#5E6C84] dark:text-gray-400">
-                    {issue.fields.priority.name}
+                    {issue.fields.priority?.name || 'None'}
                   </span>
                 </div>
               </div>

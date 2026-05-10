@@ -60,9 +60,9 @@ export function applyFilters(
 
   return issues.filter((issue) => {
     // Standard chip filters
-    if (filters.projects.length   > 0 && !filters.projects.includes(issue.fields.project.key))     return false;
-    if (filters.issueTypes.length > 0 && !filters.issueTypes.includes(issue.fields.issuetype.name)) return false;
-    if (filters.priorities.length > 0 && !filters.priorities.includes(issue.fields.priority.name))  return false;
+    if (filters.projects.length   > 0 && (!issue.fields.project || !filters.projects.includes(issue.fields.project.key)))     return false;
+    if (filters.issueTypes.length > 0 && (!issue.fields.issuetype || !filters.issueTypes.includes(issue.fields.issuetype.name))) return false;
+    if (filters.priorities.length > 0 && (!issue.fields.priority || !filters.priorities.includes(issue.fields.priority.name)))  return false;
 
     // Search text (summary + key)
     if (filters.searchText) {
@@ -93,7 +93,7 @@ export function applyFilters(
 
     // Quick filter: high priority only
     if (filters.highPriority) {
-      if (!['Highest', 'High'].includes(issue.fields.priority.name)) return false;
+      if (!['Highest', 'High'].includes(issue.fields.priority?.name ?? '')) return false;
     }
 
     return true;
@@ -133,9 +133,9 @@ function FilterChip({
 }
 
 export function BoardFilterBar({ filters, onChange, allIssues }: BoardFilterBarProps) {
-  const projects   = Array.from(new Set(allIssues.map((i) => i.fields.project.key)));
-  const issueTypes = Array.from(new Set(allIssues.map((i) => i.fields.issuetype.name)));
-  const priorities = Array.from(new Set(allIssues.map((i) => i.fields.priority.name)));
+  const projects   = Array.from(new Set(allIssues.filter(i => i.fields.project).map((i) => i.fields.project.key)));
+  const issueTypes = Array.from(new Set(allIssues.filter(i => i.fields.issuetype).map((i) => i.fields.issuetype.name)));
+  const priorities = Array.from(new Set(allIssues.filter(i => i.fields.priority).map((i) => i.fields.priority.name)));
 
   const hasFilters =
     filters.projects.length > 0 ||

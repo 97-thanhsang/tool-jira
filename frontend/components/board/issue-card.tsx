@@ -69,7 +69,7 @@ function labelColor(name: string): string {
 }
 
 export function IssueCard({ issue, onCardClick }: IssueCardProps) {
-  const typeColor  = issueTypeColors[issue.fields.issuetype.name] ?? 'bg-gray-400 text-white';
+  const typeColor  = issueTypeColors[issue.fields.issuetype?.name ?? ''] ?? 'bg-gray-400 text-white';
   const dueDateStatus = getDueDateStatus(issue.fields.duedate);
   const daysOld = daysSince(issue.fields.updated);
   const labels = issue.fields.labels ?? [];
@@ -88,7 +88,7 @@ export function IssueCard({ issue, onCardClick }: IssueCardProps) {
       {/* Type badge + key + external link */}
       <div className="flex items-center gap-1.5 mb-2">
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${typeColor}`}>
-          {issueTypeLabel(issue.fields.issuetype.name)}
+          {issueTypeLabel(issue.fields.issuetype?.name ?? '')}
         </span>
         <Link
           href={`/issues/${issue.key}`}
@@ -163,7 +163,7 @@ export function IssueCard({ issue, onCardClick }: IssueCardProps) {
       <div className="flex items-center gap-2">
         <PriorityIcon priority={issue.fields.priority} />
         <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate flex-1">
-          {issue.fields.project.name}
+          {issue.fields.project?.name}
         </span>
 
         {/* Days since updated */}

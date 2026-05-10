@@ -57,7 +57,7 @@ export function BoardCharts({ allIssues, columnCounts }: BoardChartsProps) {
   // ── Priority bar ──────────────────────────────────────────────────────────
   const priorityMap: Record<string, number> = {};
   for (const issue of allIssues) {
-    const p = issue.fields.priority.name;
+    const p = issue.fields.priority?.name || 'None';
     priorityMap[p] = (priorityMap[p] ?? 0) + 1;
   }
   const priorityData = Object.entries(priorityMap).map(([name, value]) => ({
@@ -69,6 +69,7 @@ export function BoardCharts({ allIssues, columnCounts }: BoardChartsProps) {
   // ── Project bar (top 5) ───────────────────────────────────────────────────
   const projectMap: Record<string, { label: string; value: number }> = {};
   for (const issue of allIssues) {
+    if (!issue.fields.project) continue;
     const k = issue.fields.project.key;
     if (!projectMap[k]) projectMap[k] = { label: issue.fields.project.name, value: 0 };
     projectMap[k].value++;

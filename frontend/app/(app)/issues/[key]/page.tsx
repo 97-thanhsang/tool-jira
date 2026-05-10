@@ -480,7 +480,7 @@ export default function IssueDetailPage() {
               <div className="flex items-center gap-2">
                 <PriorityIcon priority={f.priority} />
                 <span className="text-sm text-[#172B4D] dark:text-gray-100">
-                  {f.priority.name}
+                  {f.priority?.name ?? 'None'}
                 </span>
               </div>
             </div>
