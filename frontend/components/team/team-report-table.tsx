@@ -18,6 +18,14 @@ function getHourClass(seconds: number): string {
   return 'text-[#C1C7D0] dark:text-gray-600';
 }
 
+function getDayBgClass(seconds: number, dateStr: string): string {
+  const day = new Date(dateStr).getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return ''; // weekend — no requirement
+  if (seconds >= 28800) return 'bg-green-50 dark:bg-green-900/10';
+  if (seconds > 0) return 'bg-amber-50 dark:bg-amber-900/10';
+  return 'bg-red-50 dark:bg-red-900/10';
+}
+
 function formatCellHours(seconds: number): string {
   if (seconds === 0) return '-';
   const h = seconds / 3600;
@@ -206,96 +214,102 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
 
           {/* ── Task Table ── */}
           <div className="border border-[#DFE1E6] dark:border-gray-700 rounded-sm overflow-hidden">
-            {/* Header row */}
-            <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
-              {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2">Project</div>}
-              {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
-              {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
-              {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
-              {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">Status</div>}
-              {dayHeaders.map((dh) => (
-                <div
-                  key={dh.key}
-                  className={cn(
-                    'w-[64px] flex-shrink-0 px-1 py-2 text-center',
-                    dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30 text-[#0052CC] dark:text-blue-300 rounded-t',
-                  )}
-                >
-                  {dh.label}
-                </div>
-              ))}
-            </div>
-
-            {/* Task rows — grouped by project */}
+            {/* Compute daily totals for column coloring */}
             {(() => {
-              // Group tasks by projectKey
-              const groups: Array<{ projKey: string; tasks: TaskReport[] }> = [];
-              for (const task of user.tasks) {
-                const last = groups[groups.length - 1];
-                if (last && last.projKey === task.projectKey) {
-                  last.tasks.push(task);
-                } else {
-                  groups.push({ projKey: task.projectKey, tasks: [task] });
-                }
+              const dailyTotals: Record<string, number> = {};
+              for (const d of days) {
+                dailyTotals[d] = user.tasks.reduce((s, t) => s + (t.dailySeconds[d] ?? 0), 0);
               }
-              return groups.map((group, gi) =>
-                group.tasks.map((task, ti) => {
-                  const isFirstInGroup = ti === 0;
-                  const groupRowSpan = group.tasks.length;
-                  const isLastOverall = gi === groups.length - 1 && ti === group.tasks.length - 1;
-                  return (
-                    <TaskRow
-                      key={task.issueKey}
-                      task={task}
-                      dayHeaders={dayHeaders}
-                      projectKey={isFirstInGroup ? group.projKey : null}
-                      projectRowSpan={isFirstInGroup ? groupRowSpan : 0}
-                      isLast={isLastOverall}
-                      isGroupDivider={!isFirstInGroup && ti === 0}
-                      visibleColumns={visibleColumns}
-                    />
-                  );
-                })
+
+              return (
+                <>
+                  <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
+                    {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2">Project</div>}
+                    {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
+                    {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
+                    {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
+                    {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">Status</div>}
+                    {dayHeaders.map((dh) => (
+                      <div
+                        key={dh.key}
+                        className={cn(
+                          'w-[64px] flex-shrink-0 px-1 py-2 text-center',
+                          dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30 text-[#0052CC] dark:text-blue-300 rounded-t',
+                          !dh.isToday && getDayBgClass(dailyTotals[dh.key], dh.key),
+                        )}
+                      >
+                        {dh.label}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Task rows */}
+                  {(() => {
+                    const groups: Array<{ projKey: string; tasks: TaskReport[] }> = [];
+                    for (const task of user.tasks) {
+                      const last = groups[groups.length - 1];
+                      if (last && last.projKey === task.projectKey) {
+                        last.tasks.push(task);
+                      } else {
+                        groups.push({ projKey: task.projectKey, tasks: [task] });
+                      }
+                    }
+                    return groups.map((group, gi) =>
+                      group.tasks.map((task, ti) => {
+                        const isFirstInGroup = ti === 0;
+                        const groupRowSpan = group.tasks.length;
+                        const isLastOverall = gi === groups.length - 1 && ti === group.tasks.length - 1;
+                        return (
+                          <TaskRow
+                            key={task.issueKey}
+                            task={task}
+                            dayHeaders={dayHeaders}
+                            dailyTotals={dailyTotals}
+                            projectKey={isFirstInGroup ? group.projKey : null}
+                            projectRowSpan={isFirstInGroup ? groupRowSpan : 0}
+                            isLast={isLastOverall}
+                            isGroupDivider={!isFirstInGroup && ti === 0}
+                            visibleColumns={visibleColumns}
+                          />
+                        );
+                      })
+                    );
+                  })()}
+                  {/* Total row */}
+                  <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
+                    {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2" />}
+                    {visibleColumns.key && (
+                      <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
+                    )}
+                    {visibleColumns.summary && (
+                      <div className="flex-1 px-2 py-2 text-[#5E6C84] dark:text-gray-400 min-w-0">
+                        {user.tasks.length} task{user.tasks.length !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {visibleColumns.est && (
+                      <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">{user.totalEstDisplay}</div>
+                    )}
+                    {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2" />}
+                    {dayHeaders.map((dh) => {
+                      const d = dh.key;
+                      const total = dailyTotals[d] ?? 0;
+                      return (
+                        <div
+                          key={d}
+                          className={cn(
+                            'w-[64px] flex-shrink-0 px-1 py-2 text-center',
+                            getHourClass(total),
+                            dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
+                            !dh.isToday && getDayBgClass(total, dh.key),
+                          )}
+                        >
+                          {formatCellHours(total)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               );
             })()}
-
-            {/* Total row */}
-            <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
-              {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2" />}
-              {visibleColumns.key && (
-                <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
-              )}
-              {visibleColumns.summary && (
-                <div className="flex-1 px-2 py-2 text-[#5E6C84] dark:text-gray-400 min-w-0">
-                  {user.tasks.length} task{user.tasks.length !== 1 ? 's' : ''}
-                </div>
-              )}
-              {visibleColumns.est && (
-                <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">
-                  {user.totalEstDisplay}
-                </div>
-              )}
-              {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2" />}
-              {dayHeaders.map((dh) => {
-                const d = dh.key;
-                const total = user.tasks.reduce(
-                  (s, t) => s + (t.dailySeconds[d] ?? 0),
-                  0,
-                );
-                return (
-                  <div
-                    key={d}
-                    className={cn(
-                      'w-[64px] flex-shrink-0 px-1 py-2 text-center',
-                      getHourClass(total),
-                      dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
-                    )}
-                  >
-                    {formatCellHours(total)}
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
       ))}
@@ -308,6 +322,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
 function TaskRow({
   task,
   dayHeaders,
+  dailyTotals,
   projectKey,
   projectRowSpan,
   isLast,
@@ -316,6 +331,7 @@ function TaskRow({
 }: {
   task: TaskReport;
   dayHeaders: Array<{ key: string; label: string; isToday: boolean }>;
+  dailyTotals: Record<string, number>;
   projectKey: string | null;
   projectRowSpan: number;
   isLast: boolean;
@@ -399,11 +415,12 @@ function TaskRow({
         return (
           <div
             key={dh.key}
-            className={cn(
-              'w-[64px] flex-shrink-0 px-1 py-2 text-center',
-              getHourClass(sec),
-              dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
-            )}
+              className={cn(
+                'w-[64px] flex-shrink-0 px-1 py-2 text-center',
+                getHourClass(sec),
+                dh.isToday && 'bg-[#DEEBFF] dark:bg-blue-900/30',
+                !dh.isToday && getDayBgClass(dailyTotals[dh.key] ?? 0, dh.key),
+              )}
           >
             {formatCellHours(sec)}
           </div>
