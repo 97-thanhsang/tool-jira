@@ -14,6 +14,7 @@ export async function fetchWorklogs(
       key: string;
       fields: {
         summary: string;
+        issuetype: { name: string; iconUrl: string };
         project: { key: string; name: string };
         worklog: {
           worklogs: Array<{
@@ -30,7 +31,7 @@ export async function fetchWorklogs(
       };
     }>;
   }>('/search', {
-    params: { jql, maxResults: 500, fields: 'summary,project,worklog' },
+    params: { jql, maxResults: 500, fields: 'summary,issuetype,project,worklog' },
   });
 
   const entries: WorklogEntry[] = [];
@@ -48,6 +49,8 @@ export async function fetchWorklogs(
         issueId: issue.id,
         issueKey: issue.key,
         issueSummary: issue.fields.summary,
+        issueTypeName: issue.fields.issuetype?.name ?? 'Task',
+        issueTypeIconUrl: issue.fields.issuetype?.iconUrl ?? '',
         projectKey: issue.fields.project.key,
         projectName: issue.fields.project.name,
         author: wl.author,

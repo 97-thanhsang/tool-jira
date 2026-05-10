@@ -138,6 +138,8 @@ export interface WorklogEntry {
   issueId: string;
   issueKey: string;
   issueSummary: string;
+  issueTypeName: string;        // "Story", "Task", "Bug", "Sub-task", etc.
+  issueTypeIconUrl: string;     // Jira icon URL
   projectKey: string;
   projectName: string;
   author: WorklogAuthor;

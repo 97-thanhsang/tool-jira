@@ -32,6 +32,7 @@ export function WorklogCalendar({
   onDragEnd,
 }: WorklogCalendarProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragSourceDate, setDragSourceDate] = useState<string | null>(null);
 
   const days = useMemo(() => {
     const result: Date[] = [];
@@ -125,9 +126,20 @@ export function WorklogCalendar({
       {/* Calendar grid */}
       <DndContext
         collisionDetection={closestCenter}
-        onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+        onDragStart={(e: DragStartEvent) => {
+          setActiveId(String(e.active.id));
+          // Find which date the dragged entry belongs to
+          const id = String(e.active.id);
+          for (const [dateKey, entries] of Object.entries(entriesByDate)) {
+            if (entries.some(entry => entry.id === id)) {
+              setDragSourceDate(dateKey);
+              break;
+            }
+          }
+        }}
         onDragEnd={(e: DragEndEvent) => {
           setActiveId(null);
+          setDragSourceDate(null);
           if (e.over) onDragEnd?.(String(e.active.id), String(e.over.id));
         }}
       >
@@ -137,6 +149,7 @@ export function WorklogCalendar({
         >
           {days.map((day) => {
             const key = format(day, 'yyyy-MM-dd');
+            const isDragSource = activeId !== null && key === dragSourceDate;
             return (
               <WorklogDayCell
                 key={key}
@@ -147,6 +160,8 @@ export function WorklogCalendar({
                 isCurrentMonth={
                   mode === 'week' || day.getMonth() === baseDate.getMonth()
                 }
+                isDragActive={activeId !== null}
+                isDragSource={isDragSource}
                 onEntryClick={onEntryClick}
                 onDayClick={onDayClick}
               />

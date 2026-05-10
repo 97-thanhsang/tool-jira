@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { startOfWeek, subWeeks, addWeeks, addDays, startOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { getStoredUser } from '@/lib/api';
@@ -13,17 +13,25 @@ import type { WorklogEntry } from '@/types/jira';
 import { cn } from '@/lib/utils';
 
 export default function WorklogPage() {
-  const currentUser = getStoredUser();
-  const initialUsername = (currentUser as { name?: string } | null)?.name ?? '';
+  const [initialized, setInitialized] = useState(false);
 
-  // Filters
+  // Filters — always start empty on server, populate username on client mount
   const [filters, setFilters] = useState<WorklogFiltersType>({
-    username: initialUsername,
+    username: '',
     dateFrom: '',
     dateTo: '',
     period: 'week',
     project: '',
   });
+
+  useEffect(() => {
+    const user = getStoredUser();
+    const username = (user as { name?: string } | null)?.name ?? '';
+    if (username) {
+      setFilters(prev => prev.username ? prev : { ...prev, username });
+    }
+    setInitialized(true);
+  }, []);
 
   // Derive date range from period
   const activeFilters = useMemo(() => {
@@ -53,7 +61,7 @@ export default function WorklogPage() {
   }, [filters]);
 
   const { data, entriesByDate, isLoading, mutate } = useWorklogs(
-    activeFilters.username ? activeFilters : null,
+    initialized && activeFilters.username ? activeFilters : null,
   );
 
   // Calendar state

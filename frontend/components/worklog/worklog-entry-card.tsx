@@ -35,9 +35,18 @@ export function WorklogEntryCard({
       {...(dragHandleProps as Record<string, unknown>)}
     >
       <div className="flex items-center justify-between gap-1">
-        <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">
-          {entry.issueKey}
-        </span>
+        <div className="flex items-center gap-1 min-w-0">
+          {entry.issueTypeIconUrl ? (
+            <img src={entry.issueTypeIconUrl} alt={entry.issueTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
+          ) : (
+            <span className="text-[8px] font-bold px-1 py-0.5 rounded-sm flex-shrink-0 bg-gray-400 text-white">
+              {entry.issueTypeName.slice(0, 3).toUpperCase()}
+            </span>
+          )}
+          <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">
+            {entry.issueKey}
+          </span>
+        </div>
         <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">
           {(entry.timeSpentSeconds / 3600).toFixed(1)}h
         </span>
