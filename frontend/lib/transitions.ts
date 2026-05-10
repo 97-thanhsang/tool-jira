@@ -49,3 +49,37 @@ export async function moveIssue(key: string, targetColumnId: ColumnId): Promise<
 
   await api.post(`/issue/${key}/transitions`, { transition: { id: transition.id } });
 }
+
+/**
+ * Moves an issue to a specific target status (by status ID).
+ * Used for dynamic board columns that map to status IDs from board config.
+ */
+export async function moveIssueToStatus(key: string, targetStatusId: string): Promise<void> {
+  const { data } = await api.get<TransitionsResponse>(`/issue/${key}/transitions`);
+  const transitions = data.transitions;
+
+  const transition = transitions.find((t) => t.to.id === targetStatusId);
+  if (!transition) {
+    throw new Error(`No transition found to status "${targetStatusId}" for issue ${key}`);
+  }
+
+  await api.post(`/issue/${key}/transitions`, { transition: { id: transition.id } });
+}
+
+/**
+ * Moves an issue to any of the given target status IDs (from board config columns).
+ * Fetches available transitions once, then picks the first match.
+ */
+export async function moveIssueToAnyStatus(key: string, targetStatusIds: string[]): Promise<void> {
+  const { data } = await api.get<TransitionsResponse>(`/issue/${key}/transitions`);
+  const transitions = data.transitions;
+
+  const transition = transitions.find((t) => targetStatusIds.includes(t.to.id));
+  if (!transition) {
+    throw new Error(
+      `No transition found for ${key} to any of [${targetStatusIds.join(', ')}]`,
+    );
+  }
+
+  await api.post(`/issue/${key}/transitions`, { transition: { id: transition.id } });
+}

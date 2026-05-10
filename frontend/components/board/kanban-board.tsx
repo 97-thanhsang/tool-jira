@@ -14,10 +14,9 @@ import {
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, TrendingDown } from 'lucide-react';
 
 import type { JiraIssue } from '@/types/jira';
-import type { ColumnId } from '@/lib/transitions';
 import { IssueCard } from './issue-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -29,22 +28,29 @@ export interface BoardColumn {
   label: string;
   issues: JiraIssue[];
   color: string;
-  wipLimit?: number | null;
+  wipMin?: number;
+  wipMax?: number;
+  /** Status IDs mapped to this column (from board config). Used for transitions. */
+  statusIds: string[];
 }
+
+/** Move handler: called when a card is dropped into a target column. */
+export type MoveCardFn = (
+  issueId: string,
+  issueKey: string,
+  targetColumnName: string,
+  targetLabel: string,
+  targetStatusIds?: string[],
+) => void;
 
 interface KanbanBoardProps {
   columns: BoardColumn[];
   isLoading: boolean;
-  moveCard?: (
-    issueId: string,
-    issueKey: string,
-    targetColumnId: ColumnId,
-    targetLabel: string,
-  ) => void;
+  moveCard?: MoveCardFn;
   onCardClick?: (key: string) => void;
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── Skeleton ────────────────────────────────────────────────────────────────
 
 function ColumnSkeleton() {
   return (
@@ -56,7 +62,7 @@ function ColumnSkeleton() {
   );
 }
 
-// ─── Sortable card wrapper ────────────────────────────────────────────────────
+// ─── Sortable card wrapper ───────────────────────────────────────────────────
 
 function SortableCard({
   issue,
@@ -89,7 +95,7 @@ function SortableCard({
   );
 }
 
-// ─── Droppable column ─────────────────────────────────────────────────────────
+// ─── Droppable column ────────────────────────────────────────────────────────
 
 function DroppableColumn({
   col,
@@ -103,7 +109,9 @@ function DroppableColumn({
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   const issueIds = col.issues.map((i) => i.id);
 
-  const overWip = col.wipLimit != null && col.issues.length > col.wipLimit;
+  const count = col.issues.length;
+  const overMax = col.wipMax != null && count > col.wipMax;
+  const underMin = col.wipMin != null && count < col.wipMin;
 
   return (
     <div className="flex flex-col min-h-0">
@@ -116,14 +124,17 @@ function DroppableColumn({
         <span
           className={cn(
             'ml-auto text-xs px-1.5 py-0.5 rounded-full flex items-center gap-0.5',
-            overWip
+            overMax
               ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-semibold'
-              : 'text-[#5E6C84] dark:text-gray-400 bg-[#DFE1E6] dark:bg-gray-700',
+              : underMin
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-semibold'
+                : 'text-[#5E6C84] dark:text-gray-400 bg-[#DFE1E6] dark:bg-gray-700',
           )}
         >
-          {overWip && <AlertCircle size={10} />}
-          {col.issues.length}
-          {col.wipLimit != null ? `/${col.wipLimit}` : ''}
+          {overMax && <AlertCircle size={10} />}
+          {underMin && <TrendingDown size={10} />}
+          {count}
+          {col.wipMax != null ? `/${col.wipMax}` : ''}
         </span>
       </div>
 
@@ -154,7 +165,7 @@ function DroppableColumn({
   );
 }
 
-// ─── Main board ───────────────────────────────────────────────────────────────
+// ─── Main board ──────────────────────────────────────────────────────────────
 
 export function KanbanBoard({
   columns,
@@ -208,12 +219,23 @@ export function KanbanBoard({
     }
     if (!sourceIssue || sourceColId === targetCol.id) return;
 
-    moveCard?.(activeId, sourceIssue.key, targetCol.id as ColumnId, targetCol.label);
+    moveCard?.(
+      activeId,
+      sourceIssue.key,
+      targetCol.label,
+      targetCol.label,
+      targetCol.statusIds.length > 0 ? targetCol.statusIds : undefined,
+    );
   }
 
   function handleDragCancel() {
     setActiveIssue(null);
   }
+
+  // Dynamic grid: use inline style since Tailwind JIT can't handle dynamic classes
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+  };
 
   return (
     <DndContext
@@ -222,7 +244,7 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="grid grid-cols-3 gap-4 h-full">
+      <div className="grid gap-4 h-full" style={gridStyle}>
         {columns.map((col) => (
           <DroppableColumn
             key={col.id}

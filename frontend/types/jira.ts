@@ -6,6 +6,7 @@ export interface JiraUser {
 }
 
 export interface JiraStatus {
+  id: string;
   name: string;
   statusCategory: {
     key: 'new' | 'indeterminate' | 'done';
@@ -93,4 +94,32 @@ export interface JiraProject {
   key: string;
   name: string;
   projectTypeKey?: string;
+}
+
+export interface JiraBoard {
+  id: number;
+  name: string;
+  type: 'kanban' | 'scrum';
+  self?: string;
+}
+
+export interface JiraBoardColumnConfig {
+  name: string;
+  statuses: Array<{ id: string; self?: string }>;
+  min?: number;
+  max?: number;
+}
+
+export interface JiraBoardConfig {
+  id: number;
+  name: string;
+  type: 'kanban' | 'scrum';
+  self: string;
+  filter: { id: string; self: string };
+  subQuery?: { query: string };
+  columnConfig: {
+    columns: JiraBoardColumnConfig[];
+    constraintType: string;
+  };
+  ranking: Record<string, unknown>;
 }

@@ -27,31 +27,34 @@ const PRIORITY_COLORS: Record<string, string> = {
   Minor:   '#6B778C',
 };
 
+const COLUMN_PALETTE = [
+  '#5E6C84', '#0052CC', '#36B37E', '#DE350B',
+  '#FF8B00', '#6554C0', '#008DA6', '#E774BB',
+];
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface BoardChartsProps {
-  grouped: {
-    todo:       JiraIssue[];
-    inProgress: JiraIssue[];
-    done:       JiraIssue[];
-  };
+  /** All issues (flat) for priority + project charts */
+  allIssues: JiraIssue[];
+  /** Column → issue count for the status donut. Keys are column labels. */
+  columnCounts: Record<string, number>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BoardCharts({ grouped }: BoardChartsProps) {
+export function BoardCharts({ allIssues, columnCounts }: BoardChartsProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const allIssues = [...grouped.todo, ...grouped.inProgress, ...grouped.done];
+  // ── Status donut — dynamic columns ────────────────────────────────────────
+  const colEntries = Object.entries(columnCounts).filter(([, c]) => c > 0);
+  const statusData = colEntries.map(([name, value], idx) => ({
+    name,
+    value,
+    color: COLUMN_PALETTE[idx % COLUMN_PALETTE.length],
+  }));
 
-  // ── Status donut ────────────────────────────────────────────────────────────
-  const statusData = [
-    { name: 'To Do',       value: grouped.todo.length,       color: '#5E6C84' },
-    { name: 'In Progress', value: grouped.inProgress.length, color: '#0052CC' },
-    { name: 'Done',        value: grouped.done.length,       color: '#36B37E' },
-  ].filter((d) => d.value > 0);
-
-  // ── Priority bar ────────────────────────────────────────────────────────────
+  // ── Priority bar ──────────────────────────────────────────────────────────
   const priorityMap: Record<string, number> = {};
   for (const issue of allIssues) {
     const p = issue.fields.priority.name;
@@ -63,7 +66,7 @@ export function BoardCharts({ grouped }: BoardChartsProps) {
     fill: PRIORITY_COLORS[name] ?? '#8884d8',
   }));
 
-  // ── Project bar (top 5) ─────────────────────────────────────────────────────
+  // ── Project bar (top 5) ───────────────────────────────────────────────────
   const projectMap: Record<string, { label: string; value: number }> = {};
   for (const issue of allIssues) {
     const k = issue.fields.project.key;
@@ -96,7 +99,7 @@ export function BoardCharts({ grouped }: BoardChartsProps) {
 
       {expanded && (
         <div className="mt-3 grid grid-cols-3 gap-4 bg-white dark:bg-gray-800 rounded-lg border border-[#DFE1E6] dark:border-gray-700 p-4">
-          {/* 1. Donut — by Status */}
+          {/* 1. Donut — by Status (dynamic columns) */}
           <div>
             <p className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 mb-2 text-center">
               By Status

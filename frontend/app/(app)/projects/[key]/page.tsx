@@ -12,6 +12,7 @@ interface Column {
   label: string;
   issues: JiraIssue[];
   color: string;
+  statusIds: string[];
 }
 
 function groupIntoColumns(issues: JiraIssue[]): Column[] {
@@ -27,9 +28,9 @@ function groupIntoColumns(issues: JiraIssue[]): Column[] {
   }
 
   return [
-    { id: 'todo', label: 'To Do', issues: todo, color: '#DFE1E6' },
-    { id: 'inprogress', label: 'In Progress', issues: inProgress, color: '#0052CC' },
-    { id: 'done', label: 'Done', issues: done, color: '#36B37E' },
+    { id: 'todo', label: 'To Do', issues: todo, color: '#DFE1E6', statusIds: [] },
+    { id: 'inprogress', label: 'In Progress', issues: inProgress, color: '#0052CC', statusIds: [] },
+    { id: 'done', label: 'Done', issues: done, color: '#36B37E', statusIds: [] },
   ];
 }
 

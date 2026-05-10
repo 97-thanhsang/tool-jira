@@ -13,15 +13,24 @@ export interface IssueCardProps {
 }
 
 const issueTypeColors: Record<string, string> = {
-  Story:      'bg-[#36B37E] text-white',
-  'Sub-task': 'bg-[#0052CC] text-white',
-  Bug:        'bg-[#DE350B] text-white',
-  Task:       'bg-[#4BADE8] text-white',
+  Story:           'bg-[#36B37E] text-white',
+  'Sub-task':      'bg-[#0052CC] text-white',
+  Bug:             'bg-[#DE350B] text-white',
+  Task:            'bg-[#4BADE8] text-white',
+  Epic:            'bg-[#904EE2] text-white',
+  Support:         'bg-[#FF8B00] text-white',
+  Enhancement:     'bg-[#008DA6] text-white',
+  Improvement:     'bg-[#6554C0] text-white',
+  'New Feature':   'bg-[#E774BB] text-white',
+  'Build Release': 'bg-[#7A869A] text-white',
+  'Bug after release': 'bg-[#BF2600] text-white',
+  WBS:             'bg-[#505F79] text-white',
 };
 
 function issueTypeLabel(name: string): string {
   if (name === 'Sub-task') return 'SUB';
   if (name === 'Story')    return 'STR';
+  if (name === 'Bug')      return 'BUG';
   return name.slice(0, 3).toUpperCase();
 }
 
@@ -35,9 +44,38 @@ function getDueDateStatus(duedate?: string): 'overdue' | 'due-soon' | null {
   return null;
 }
 
+/** Days since a given ISO date string. Returns null for future dates. */
+function daysSince(dateStr: string): number | null {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  if (diff < 0) return null;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+const LABEL_COLORS = [
+  '#0052CC', '#36B37E', '#DE350B', '#FF8B00',
+  '#6554C0', '#008DA6', '#E774BB', '#FF5630',
+  '#00B8D9', '#8777D9',
+];
+
+/** Deterministic hash-based color for a label name. */
+function labelColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return LABEL_COLORS[Math.abs(hash) % LABEL_COLORS.length];
+}
+
 export function IssueCard({ issue, onCardClick }: IssueCardProps) {
   const typeColor  = issueTypeColors[issue.fields.issuetype.name] ?? 'bg-gray-400 text-white';
   const dueDateStatus = getDueDateStatus(issue.fields.duedate);
+  const daysOld = daysSince(issue.fields.updated);
+  const labels = issue.fields.labels ?? [];
+  const components = issue.fields.components ?? [];
+
+  const hasTags = labels.length > 0 || components.length > 0;
 
   return (
     <Card
@@ -82,6 +120,29 @@ export function IssueCard({ issue, onCardClick }: IssueCardProps) {
         </p>
       </button>
 
+      {/* Labels + Components chips */}
+      {hasTags && (
+        <div className="flex items-center gap-1 flex-wrap mb-2">
+          {components.map((c) => (
+            <span
+              key={c.id}
+              className="text-[10px] px-1.5 py-0.5 rounded-sm bg-[#DFE1E6] dark:bg-gray-700 text-[#5E6C84] dark:text-gray-400"
+            >
+              {c.name}
+            </span>
+          ))}
+          {labels.map((label) => (
+            <span
+              key={label}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm text-white"
+              style={{ backgroundColor: labelColor(label) }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Due date badges */}
       {dueDateStatus && (
         <div className="mb-2">
@@ -98,12 +159,19 @@ export function IssueCard({ issue, onCardClick }: IssueCardProps) {
         </div>
       )}
 
-      {/* Footer: priority + project + assignee avatar */}
+      {/* Footer: priority + project + days ago + assignee avatar */}
       <div className="flex items-center gap-2">
         <PriorityIcon priority={issue.fields.priority} />
         <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate flex-1">
           {issue.fields.project.name}
         </span>
+
+        {/* Days since updated */}
+        {daysOld != null && (
+          <span className="text-[10px] text-[#8993A4] dark:text-gray-500 flex-shrink-0">
+            {daysOld}d
+          </span>
+        )}
 
         {/* Assignee avatar */}
         {issue.fields.assignee ? (
