@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
 import { startOfWeek, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, format } from 'date-fns';
 import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getStoredUser } from '@/lib/api';
 import { useTeamDashboard } from '@/hooks/use-team-dashboard';
+import { fetchTeamFilterMeta } from '@/lib/team-api';
 import { TeamFilters, type TeamFiltersState } from '@/components/team/team-filters';
 import { TeamReportTable } from '@/components/team/team-report-table';
 import type { TeamGroup } from '@/types/jira';
@@ -115,22 +116,19 @@ export default function TeamPage() {
     allUsers: isAllMembers,
   });
 
-  // Collect unique projects from data
-  const allProjects = useMemo(() => {
-    if (!data) return [];
-    return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.projectKey)))).sort();
-  }, [data]);
+  // Fetch full filter values from ALL sub-tasks (not just those with worklogs)
+  const filterMetaKey = usernames.length > 0 || isAllMembers
+    ? ['team-filter-meta', isAllMembers ? 'all' : usernames.join(',')]
+    : null;
+  const { data: filterMeta } = useSWR(
+    filterMetaKey,
+    () => fetchTeamFilterMeta(usernames, isAllMembers),
+    { revalidateOnFocus: false, dedupingInterval: 60000 },
+  );
 
-  // Collect unique statuses and types from data
-  const uniqueStatuses = useMemo(() => {
-    if (!data) return [];
-    return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.status)))).filter(Boolean).sort();
-  }, [data]);
-
-  const uniqueTypes = useMemo(() => {
-    if (!data) return [];
-    return Array.from(new Set(data.users.flatMap((u) => u.tasks.map((t) => t.issueTypeName)))).filter(Boolean).sort();
-  }, [data]);
+  const allProjects = filterMeta?.projects ?? [];
+  const uniqueStatuses = filterMeta?.statuses ?? [];
+  const uniqueTypes = filterMeta?.types ?? [];
 
   // Summary stats
   const totalHours = data ? (data.totalLoggedSeconds / 3600).toFixed(1) : '0';

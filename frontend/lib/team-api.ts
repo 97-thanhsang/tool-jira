@@ -125,3 +125,43 @@ export async function fetchTeamDueDates(
     assignee: i.fields.assignee?.name ?? '',
   }));
 }
+
+/** Fetch all sub-tasks for filter values (projects, statuses, types) — lightweight */
+export async function fetchTeamFilterMeta(
+  usernames: string[],
+  allUsers: boolean = false,
+): Promise<{ projects: string[]; statuses: string[]; types: string[] }> {
+  if (usernames.length === 0 && !allUsers) return { projects: [], statuses: [], types: [] };
+
+  let jql: string;
+  if (allUsers) {
+    jql = 'issuetype = "Sub-task" AND resolution = Unresolved ORDER BY created DESC';
+  } else {
+    const userList = usernames.map((u) => `"${u}"`).join(', ');
+    jql = `assignee IN (${userList}) AND issuetype = "Sub-task" AND resolution = Unresolved ORDER BY created DESC`;
+  }
+
+  const r = await api.get<{
+    issues: Array<{
+      fields: { project: { key: string }; status: { name: string }; issuetype: { name: string } };
+    }>;
+  }>('/search', {
+    params: { jql, maxResults: 2000, fields: 'project,status,issuetype' },
+  });
+
+  const projects = new Set<string>();
+  const statuses = new Set<string>();
+  const types = new Set<string>();
+
+  for (const i of r.data.issues ?? []) {
+    projects.add(i.fields.project.key);
+    statuses.add(i.fields.status.name);
+    types.add(i.fields.issuetype.name);
+  }
+
+  return {
+    projects: Array.from(projects).sort(),
+    statuses: Array.from(statuses).sort(),
+    types: Array.from(types).sort(),
+  };
+}

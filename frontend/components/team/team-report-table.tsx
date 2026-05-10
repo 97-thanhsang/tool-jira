@@ -35,6 +35,18 @@ function formatCellHours(seconds: number): string {
   return `${h % 1 === 0 ? h.toFixed(0) : h.toFixed(1)}h`;
 }
 
+const PROJECT_PALETTE = [
+  '#0052CC', '#36B37E', '#DE350B', '#FF8B00', '#6554C0',
+  '#008DA6', '#E774BB', '#FF5630', '#00B8D9', '#8777D9',
+  '#253858', '#57D9A3', '#FFAB00', '#4C9AFF', '#97A0AF',
+];
+
+function projectColor(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = key.charCodeAt(i) + ((hash << 5) - hash);
+  return PROJECT_PALETTE[Math.abs(hash) % PROJECT_PALETTE.length];
+}
+
 function filterTask(task: TaskReport, filters: TeamFiltersState): boolean {
   if (filters.filterStatus && task.status !== filters.filterStatus) return false;
   if (filters.filterPriority && task.priority !== filters.filterPriority) return false;
@@ -239,7 +251,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
               return (
                 <>
                   <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
-                    {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2">Project</div>}
+                    {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2">Project</div>}
                     {visibleColumns.key && <div className="w-[120px] flex-shrink-0 px-3 py-2">Key</div>}
                     {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
                     {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
@@ -292,7 +304,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                   })()}
                   {/* Total row */}
                   <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
-                    {visibleColumns.project && <div className="w-[80px] flex-shrink-0 px-3 py-2" />}
+                    {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2" />}
                     {visibleColumns.key && (
                       <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
                     )}
@@ -366,9 +378,12 @@ function TaskRow({
     >
       {/* Project — rowspan effect */}
       {visibleColumns.project && (
-        <div className="w-[80px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
+        <div className="w-[100px] flex-shrink-0 px-3 py-2 flex items-center border-r border-[#DFE1E6] dark:border-gray-700">
           {projectKey && (
-            <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm text-white"
+              style={{ backgroundColor: projectColor(projectKey) }}
+            >
               {projectKey}
             </span>
           )}
