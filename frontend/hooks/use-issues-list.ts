@@ -5,18 +5,35 @@ import type { JiraSearchResult } from '@/types/jira';
 export interface IssueFilters {
   text?: string;
   status?: string;        // 'new' | 'indeterminate' | 'done'
-  priority?: string;      // 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'
+  priority?: string;      // priority name
   project?: string;       // project key
-  issuetype?: string;     // 'Bug' | 'Task' | 'Story' | 'Sub-task' | 'Epic'
-  assignee?: string;      // 'currentUser()' | username
+  issuetype?: string;     // issue type name
+  assignee?: string;      // 'currentUser()' | 'EMPTY' | username
   labels?: string;        // single label string
   updatedAfter?: string;  // '-1d' | '-7d' | '-30d' | ''
   duedate?: string;       // 'overdue' | 'this_week' | 'next_week' | ''
   startAt?: number;
+  // ── New filter fields ──
+  reporter?: string;      // 'currentUser()' | username (no EMPTY variant)
+  resolution?: string;    // resolution name, 'all', or undefined (defaults Unresolved)
+  sprint?: string;        // sprint name
+  component?: string;     // component name
+  fixVersion?: string;    // fix version name
+  createdAfter?: string;  // '-1d' | '-7d' | '-30d' | '-90d'
 }
 
 function buildJql(filters: IssueFilters): string {
-  const parts: string[] = ['resolution = Unresolved'];
+  const parts: string[] = [];
+
+  // ── Resolution logic (moved from hardcoded default) ──
+  if (filters.resolution === 'all') {
+    // Show all — no resolution constraint
+  } else if (filters.resolution && filters.resolution !== 'Unresolved') {
+    parts.push(`resolution = "${filters.resolution}"`);
+  } else {
+    // Default: only unresolved
+    parts.push('resolution = Unresolved');
+  }
 
   if (filters.text) parts.push(`text ~ "${filters.text}"`);
 
@@ -33,10 +50,24 @@ function buildJql(filters: IssueFilters): string {
   // Assignee filter: 'currentUser()' = Me, 'EMPTY' = Unassigned, undefined = all
   if (filters.assignee === 'currentUser()') parts.push('assignee = currentUser()');
   else if (filters.assignee === 'EMPTY') parts.push('assignee is EMPTY');
+  else if (filters.assignee) parts.push(`assignee = "${filters.assignee}"`);
+
+  // Reporter filter: 'currentUser()' → no quotes, else username string
+  if (filters.reporter === 'currentUser()') parts.push('reporter = currentUser()');
+  else if (filters.reporter) parts.push(`reporter = "${filters.reporter}"`);
+
+  if (filters.sprint) parts.push(`sprint = "${filters.sprint}"`);
+  if (filters.component) parts.push(`component = "${filters.component}"`);
+  if (filters.fixVersion) parts.push(`fixVersion = "${filters.fixVersion}"`);
 
   if (filters.updatedAfter === '-1d') parts.push('updated >= "-1d"');
   else if (filters.updatedAfter === '-7d') parts.push('updated >= "-7d"');
   else if (filters.updatedAfter === '-30d') parts.push('updated >= "-30d"');
+
+  if (filters.createdAfter === '-1d') parts.push('created >= "-1d"');
+  else if (filters.createdAfter === '-7d') parts.push('created >= "-7d"');
+  else if (filters.createdAfter === '-30d') parts.push('created >= "-30d"');
+  else if (filters.createdAfter === '-90d') parts.push('created >= "-90d"');
 
   if (filters.duedate === 'overdue')
     parts.push('duedate < now() AND duedate is not EMPTY');
@@ -63,7 +94,7 @@ export function useIssuesList(filters: IssueFilters = {}) {
             maxResults: PAGE_SIZE,
             startAt: filters.startAt ?? 0,
             fields:
-              'summary,status,priority,issuetype,project,updated,assignee,labels,duedate',
+              'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components,sprint',
           },
         })
         .then((r) => r.data),

@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { api } from '@/lib/api';
 import type { IssueFilters } from '@/hooks/use-issues-list';
 import type { JiraProject } from '@/types/jira';
+import { UserSearchInput } from './user-search-input';
 import { Search, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +29,32 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ISSUE_TYPES = ['Bug', 'Task', 'Story', 'Sub-task', 'Epic'];
+// ── Static data ──
+
+const ISSUE_TYPES = [
+  { id: '10100', name: 'Task' },
+  { id: '10101', name: 'Sub-task' },
+  { id: '10001', name: 'Story' },
+  { id: '10000', name: 'Epic' },
+  { id: '10102', name: 'Bug' },
+  { id: '10203', name: 'Support' },
+  { id: '10400', name: 'Enhancement' },
+  { id: '10500', name: 'Improvement' },
+  { id: '10501', name: 'New Feature' },
+  { id: '10201', name: 'Build Release' },
+  { id: '10202', name: 'Bug after release' },
+  { id: '10200', name: 'WBS' },
+];
+
+const PRIORITY_OPTIONS = [
+  { id: '1', name: 'Highest' },
+  { id: '2', name: 'High' },
+  { id: '3', name: 'Medium' },
+  { id: '4', name: 'Low' },
+  { id: '5', name: 'Lowest' },
+  { id: '10000', name: 'Blocker' },
+  { id: '10001', name: 'Minor' },
+];
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'To Do' },
@@ -36,12 +62,22 @@ const STATUS_OPTIONS = [
   { value: 'done', label: 'Done' },
 ];
 
-const PRIORITY_OPTIONS = [
-  'Highest',
-  'High',
-  'Medium',
-  'Low',
-  'Lowest',
+const RESOLUTION_OPTIONS = [
+  'Done',
+  "Won't Do",
+  'Duplicate',
+  'Cannot Reproduce',
+  'Declined',
+  'Known Error',
+  'Hardware failure',
+  'Software failure',
+];
+
+const CREATED_OPTIONS = [
+  { value: '-1d', label: 'Last 24h' },
+  { value: '-7d', label: 'Last 7 days' },
+  { value: '-30d', label: 'Last 30 days' },
+  { value: '-90d', label: 'Last 90 days' },
 ];
 
 const UPDATED_OPTIONS = [
@@ -55,6 +91,72 @@ const DUEDATE_OPTIONS = [
   { value: 'this_week', label: 'This week' },
   { value: 'next_week', label: 'Next week' },
 ];
+
+// ── Sprint fetch hook ──
+function useSprints() {
+  const { data: boards } = useSWR<{ values: { id: number }[] }>(
+    '/agile/board?maxResults=50',
+    (url: string) => api.get<{ values: { id: number }[] }>(url).then((r) => r.data)
+  );
+
+  const { data: sprints } = useSWR<{ values: { id: number; name: string }[] }>(
+    boards ? 'sprints' : null,
+    async () => {
+      if (!boards?.values?.length) return { values: [] };
+      const results = await Promise.all(
+        boards.values.map((b) =>
+          api
+            .get<{ values: { id: number; name: string }[] }>(
+              `/agile/board/${b.id}/sprint?state=active,future`
+            )
+            .then((r) => r.data.values)
+            .catch(() => [] as { id: number; name: string }[])
+        )
+      );
+      // Deduplicate by name, sort alpha
+      const seen = new Set<string>();
+      const unique: { id: number; name: string }[] = [];
+      results.flat().forEach((s) => {
+        if (!seen.has(s.name)) {
+          seen.add(s.name);
+          unique.push(s);
+        }
+      });
+      unique.sort((a, b) => a.name.localeCompare(b.name));
+      return { values: unique };
+    }
+  );
+
+  return sprints?.values ?? [];
+}
+
+// ── Components fetch hook (project-scoped) ──
+function useComponents(projectKey: string | undefined) {
+  const { data } = useSWR<{ id: string; name: string }[]>(
+    projectKey ? `/project/${projectKey}/components` : null,
+    (url: string) =>
+      api
+        .get<{ id: string; name: string }[]>(url)
+        .then((r) => Array.isArray(r.data) ? r.data : [])
+        .catch(() => [])
+  );
+  return data ?? [];
+}
+
+// ── Versions fetch hook (project-scoped) ──
+function useVersions(projectKey: string | undefined) {
+  const { data } = useSWR<{ id: string; name: string }[]>(
+    projectKey ? `/project/${projectKey}/versions` : null,
+    (url: string) =>
+      api
+        .get<{ id: string; name: string }[]>(url)
+        .then((r) => Array.isArray(r.data) ? r.data : [])
+        .catch(() => [])
+  );
+  return data ?? [];
+}
+
+// ── Main component ──
 
 export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   const [showMore, setShowMore] = useState(false);
@@ -87,30 +189,57 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     (url: string) => api.get<JiraProject[]>(url).then((r) => r.data)
   );
 
+  // Dynamic data
+  const sprints = useSprints();
+  const components = useComponents(filters.project);
+  const fixVersions = useVersions(filters.project);
+
   // Count advanced (row-2) active filters
   const advancedActiveCount = [
-    filters.project,
     filters.assignee,
+    filters.reporter,
+    filters.project,
+    filters.sprint,
+    filters.resolution,
+    filters.createdAfter,
     filters.labels,
     filters.updatedAfter,
     filters.duedate,
+    filters.component,
+    filters.fixVersion,
   ].filter(Boolean).length;
 
   // All active filter chips
-  const chips: { key: keyof IssueFilters; label: string }[] = [];
+  const chips: { key: string; label: string }[] = [];
   if (filters.text) chips.push({ key: 'text', label: `Text: "${filters.text}"` });
   if (filters.status) {
     const s = STATUS_OPTIONS.find((o) => o.value === filters.status);
     chips.push({ key: 'status', label: `Status: ${s?.label ?? filters.status}` });
   }
-  if (filters.priority) chips.push({ key: 'priority', label: `Priority: ${filters.priority}` });
-  if (filters.issuetype) chips.push({ key: 'issuetype', label: `Type: ${filters.issuetype}` });
+  if (filters.priority) {
+    const p = PRIORITY_OPTIONS.find((o) => o.name === filters.priority);
+    chips.push({ key: 'priority', label: `Priority: ${p?.name ?? filters.priority}` });
+  }
+  if (filters.issuetype) {
+    const t = ISSUE_TYPES.find((o) => o.name === filters.issuetype);
+    chips.push({ key: 'issuetype', label: `Type: ${t?.name ?? filters.issuetype}` });
+  }
   if (filters.project) {
     const proj = projects?.find((p) => p.key === filters.project);
     chips.push({ key: 'project', label: `Project: ${proj?.name ?? filters.project}` });
   }
   if (filters.assignee === 'currentUser()') chips.push({ key: 'assignee', label: 'Assignee: Me' });
   else if (filters.assignee === 'EMPTY') chips.push({ key: 'assignee', label: 'Assignee: Unassigned' });
+  else if (filters.assignee) chips.push({ key: 'assignee', label: `Assignee: ${filters.assignee}` });
+  if (filters.reporter === 'currentUser()') chips.push({ key: 'reporter', label: 'Reporter: Me' });
+  else if (filters.reporter) chips.push({ key: 'reporter', label: `Reporter: ${filters.reporter}` });
+  if (filters.sprint) chips.push({ key: 'sprint', label: `Sprint: ${filters.sprint}` });
+  if (filters.resolution === 'all') chips.push({ key: 'resolution', label: 'Resolution: All' });
+  else if (filters.resolution) chips.push({ key: 'resolution', label: `Resolution: ${filters.resolution}` });
+  if (filters.createdAfter) {
+    const c = CREATED_OPTIONS.find((o) => o.value === filters.createdAfter);
+    chips.push({ key: 'createdAfter', label: `Created: ${c?.label ?? filters.createdAfter}` });
+  }
   if (filters.labels) chips.push({ key: 'labels', label: `Label: ${filters.labels}` });
   if (filters.updatedAfter) {
     const u = UPDATED_OPTIONS.find((o) => o.value === filters.updatedAfter);
@@ -120,16 +249,19 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     const d = DUEDATE_OPTIONS.find((o) => o.value === filters.duedate);
     chips.push({ key: 'duedate', label: `Due: ${d?.label ?? filters.duedate}` });
   }
+  if (filters.component) chips.push({ key: 'component', label: `Component: ${filters.component}` });
+  if (filters.fixVersion) chips.push({ key: 'fixVersion', label: `Fix version: ${filters.fixVersion}` });
 
   const hasAnyFilter = chips.length > 0;
 
-  function removeChip(key: keyof IssueFilters) {
+  function removeChip(key: string) {
     if (key === 'text') setTextInput('');
-    onUpdate({ [key]: undefined });
+    // Cast is safe — all chip keys are IssueFilters keys
+    onUpdate({ [key]: undefined } as Partial<IssueFilters>);
   }
 
   return (
-    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 overflow-hidden">
+    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-10">
       {/* Row 1 — always visible */}
       <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
         {/* Text search */}
@@ -159,8 +291,8 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           >
             <option value="">All</option>
             {ISSUE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+              <option key={t.id} value={t.name}>
+                {t.name}
               </option>
             ))}
           </select>
@@ -197,8 +329,8 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           >
             <option value="">All</option>
             {PRIORITY_OPTIONS.map((p) => (
-              <option key={p} value={p}>
-                {p}
+              <option key={p.id} value={p.name}>
+                {p.name}
               </option>
             ))}
           </select>
@@ -240,9 +372,29 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
         )}
       </div>
 
-      {/* Row 2 — collapsible */}
+      {/* Row 2 — collapsible More filters */}
       {showMore && (
         <div className="flex items-center gap-2 px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700 bg-white dark:bg-gray-800 flex-wrap">
+          {/* Assignee — typeahead with unassigned option */}
+          <div className="flex items-center gap-1.5">
+            <FilterLabel>Assignee</FilterLabel>
+            <UserSearchInput
+              value={filters.assignee}
+              onChange={(username) => onUpdate({ assignee: username })}
+              placeholder="Assignee..."
+              includeUnassigned
+              label="Assignee"
+            />
+          </div>
+
+          {/* Reporter — typeahead (no unassigned) */}
+          <UserSearchInput
+            value={filters.reporter}
+            onChange={(username) => onUpdate({ reporter: username })}
+            placeholder="Reporter..."
+            label="Reporter"
+          />
+
           {/* Project */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Project</FilterLabel>
@@ -262,19 +414,68 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             </select>
           </div>
 
-          {/* Assignee */}
+          {/* Sprint — fetched from agile API */}
           <div className="flex items-center gap-1.5">
-            <FilterLabel>Assignee</FilterLabel>
+            <FilterLabel>Sprint</FilterLabel>
             <select
               className={selectClass}
-              value={filters.assignee ?? ''}
+              value={filters.sprint ?? ''}
               onChange={(e) =>
-                onUpdate({ assignee: e.target.value || undefined })
+                onUpdate({ sprint: e.target.value || undefined })
               }
             >
               <option value="">All</option>
-              <option value="currentUser()">Me</option>
-              <option value="EMPTY">Unassigned</option>
+              {sprints.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Resolution */}
+          <div className="flex items-center gap-1.5">
+            <FilterLabel>Resolution</FilterLabel>
+            <select
+              className={selectClass}
+              value={filters.resolution === 'all' ? 'all' : (filters.resolution ?? '')}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  onUpdate({ resolution: undefined });
+                } else if (val === 'all') {
+                  onUpdate({ resolution: 'all' });
+                } else {
+                  onUpdate({ resolution: val });
+                }
+              }}
+            >
+              <option value="">Unresolved</option>
+              <option value="all">All (including resolved)</option>
+              {RESOLUTION_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Created date */}
+          <div className="flex items-center gap-1.5">
+            <FilterLabel>Created</FilterLabel>
+            <select
+              className={selectClass}
+              value={filters.createdAfter ?? ''}
+              onChange={(e) =>
+                onUpdate({ createdAfter: e.target.value || undefined })
+              }
+            >
+              <option value="">Any time</option>
+              {CREATED_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -325,6 +526,46 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
               {DUEDATE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Components — only when project selected */}
+          <div className="flex items-center gap-1.5">
+            <FilterLabel>Component</FilterLabel>
+            <select
+              className={cn(selectClass, !filters.project && 'opacity-50 cursor-not-allowed')}
+              value={filters.component ?? ''}
+              disabled={!filters.project || components.length === 0}
+              onChange={(e) =>
+                onUpdate({ component: e.target.value || undefined })
+              }
+            >
+              <option value="">All</option>
+              {components.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Fix Version — only when project selected */}
+          <div className="flex items-center gap-1.5">
+            <FilterLabel>Fix version</FilterLabel>
+            <select
+              className={cn(selectClass, !filters.project && 'opacity-50 cursor-not-allowed')}
+              value={filters.fixVersion ?? ''}
+              disabled={!filters.project || fixVersions.length === 0}
+              onChange={(e) =>
+                onUpdate({ fixVersion: e.target.value || undefined })
+              }
+            >
+              <option value="">All</option>
+              {fixVersions.map((v) => (
+                <option key={v.id} value={v.name}>
+                  {v.name}
                 </option>
               ))}
             </select>

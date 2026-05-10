@@ -123,6 +123,41 @@ router.get('/attachment-thumbnail/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ─── Agile proxy: /api/jira/agile/* → Jira Agile REST API v1 ────────────────
+// Used for board, sprint, and other agile endpoints
+router.all('/agile/*path', async (req: Request, res: Response) => {
+  const rawAuth = req.headers['x-jira-auth'];
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Missing X-Jira-Auth header' });
+  }
+
+  const rawPath = req.params['path'];
+  const agilePath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '');
+  const jiraUrl = `${config.jiraBaseUrl}/rest/agile/1.0/${agilePath}`;
+
+  try {
+    const response = await axios({
+      method: req.method,
+      url: jiraUrl,
+      headers: {
+        Authorization: `Basic ${authHeader}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      params: req.query,
+      data: req.method !== 'GET' ? req.body : undefined,
+    });
+
+    return res.status(response.status).json(response.data);
+  } catch (err) {
+    const error = err as AxiosError;
+    const status = error.response?.status || 500;
+    const data = error.response?.data || { error: 'Jira Agile API error' };
+    return res.status(status).json(data);
+  }
+});
+
 // ─── Generic proxy: all other /api/jira/* requests ──────────────────────────
 // Proxy all requests: GET/POST /api/jira/* → Jira REST API v2
 // Express v5 uses path-to-regexp v8: wildcards must be named (/*path not /*)
