@@ -109,6 +109,7 @@ export default function TeamPlanPage() {
     usernames,
     dateFrom: dateRange.dateFrom,
     dateTo: dateRange.dateTo,
+    project: filters.project || undefined,
     allUsers: isAllMembers,
   });
 
