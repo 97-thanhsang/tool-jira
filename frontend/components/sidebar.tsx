@@ -15,6 +15,7 @@ import {
   Bell,
   Clock,
   Users,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAuth, getStoredUser } from '@/lib/api';
@@ -25,6 +26,7 @@ const navItems = [
   { href: '/board', label: 'My Board', icon: LayoutDashboard },
   { href: '/issues', label: 'My Issues', icon: ListTodo },
   { href: '/team', label: 'Team', icon: Users },
+  { href: '/team-plan', label: 'Team Plan', icon: Calendar },
   { href: '/worklog', label: 'Worklog', icon: Clock },
   { href: '/projects', label: 'Projects', icon: FolderOpen },
   { href: '/search', label: 'JQL Search', icon: Search },
