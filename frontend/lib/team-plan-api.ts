@@ -11,7 +11,11 @@ interface SubTaskIssue {
     status: { name: string };
     priority: { name: string } | null;
     duedate: string | null;
-    assignee: { name: string; displayName: string } | null;
+    assignee: {
+      name: string;
+      displayName: string;
+      avatarUrls?: { '16x16': string; '24x24': string; '32x32': string; '48x48': string };
+    } | null;
   };
 }
 
@@ -63,7 +67,7 @@ export async function fetchTeamPlan(
       userMap.set(uname, {
         username: uname,
         displayName: issue.fields.assignee?.displayName ?? uname,
-        avatarUrl: '',
+        avatarUrl: issue.fields.assignee?.avatarUrls?.['24x24'] ?? '',
         tasks: [],
         totalEstSeconds: 0,
         totalEstDisplay: '',
