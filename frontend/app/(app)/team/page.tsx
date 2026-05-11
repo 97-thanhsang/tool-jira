@@ -55,14 +55,12 @@ export default function TeamPage() {
   // Custom mode dates — default to current or previous week
   const [customDateFrom, setCustomDateFrom] = useState(() => {
     const now = new Date();
-    let start = startOfWeek(now, { weekStartsOn: 1 });
-    if (now.getDay() <= 2) start = subWeeks(start, 1);
+    const start = startOfWeek(now, { weekStartsOn: 1 });
     return format(start, 'yyyy-MM-dd');
   });
   const [customDateTo, setCustomDateTo] = useState(() => {
     const now = new Date();
-    let start = startOfWeek(now, { weekStartsOn: 1 });
-    if (now.getDay() <= 2) start = subWeeks(start, 1);
+    const start = startOfWeek(now, { weekStartsOn: 1 });
     return format(addDays(start, 6), 'yyyy-MM-dd');
   });
 
@@ -70,12 +68,7 @@ export default function TeamPage() {
   const dateRange = useMemo(() => {
     const now = new Date();
     if (filters.period === 'week') {
-      let start = startOfWeek(now, { weekStartsOn: 1 });
-      // If today is Monday (or within first 2 days of the week), show previous week
-      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon
-      if (dayOfWeek <= 2) {
-        start = subWeeks(start, 1);
-      }
+      const start = startOfWeek(now, { weekStartsOn: 1 });
       return {
         dateFrom: format(start, 'yyyy-MM-dd'),
         dateTo: format(addDays(start, 6), 'yyyy-MM-dd'),
