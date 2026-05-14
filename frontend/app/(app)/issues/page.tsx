@@ -10,17 +10,22 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'issues' | 'worklogs';
 
-const PAGE_SIZE = 25;
-
 export default function IssuesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('issues');
   const [filters, setFilters] = useState<IssueFilters>({});
-  const [page, setPage] = useState(0);
+  const [sortField, setSortField] = useState('updated');
+  const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
 
   const { issues, total, isLoading, error, mutate } = useIssuesList({
     ...filters,
-    startAt: page * PAGE_SIZE,
+    sortField,
+    sortDir,
   });
+
+  function handleSortChange(field: string, dir: 'ASC' | 'DESC') {
+    setSortField(field);
+    setSortDir(dir);
+  }
 
   // Listen for bulk transition events → mutate
   useEffect(() => {
@@ -31,16 +36,14 @@ export default function IssuesPage() {
 
   function updateFilters(newFilters: Partial<IssueFilters>) {
     setFilters((prev) => ({ ...prev, ...newFilters }));
-    setPage(0);
   }
 
   function clearFilters() {
     setFilters({});
-    setPage(0);
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
@@ -90,9 +93,9 @@ export default function IssuesPage() {
               issues={issues}
               total={total}
               isLoading={isLoading}
-              page={page}
-              pageSize={PAGE_SIZE}
-              onPageChange={setPage}
+              sortField={sortField}
+              sortDir={sortDir}
+              onSortChange={handleSortChange}
             />
           </>
         )
