@@ -429,7 +429,6 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                     {/* Column headers */}
                     <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
                       {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2">Project</div>}
-                      {visibleColumns.tasktype && <div className="w-[200px] flex-shrink-0 px-2 py-2">Task Type</div>}
                       {visibleColumns.key && <div className="w-[150px] flex-shrink-0 px-3 py-2">Key</div>}
                       {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
                       {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
@@ -486,9 +485,28 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                             </div>
                           )}
 
-                          {/* When tasktype column is ON → sub-group by parent; otherwise flat list */}
-                          {visibleColumns.tasktype ? (() => {
-                            // Build parent sub-groups (tasks already sorted by parentKey above)
+                          {/* Task rows — when tasktype ON: full-width banner row per parent group */}
+                          {(() => {
+                            if (!visibleColumns.tasktype) {
+                              // Flat list — no parent grouping
+                              return (
+                                <div className="flex-1 flex flex-col min-w-0">
+                                  {group.tasks.map((task, ti) => (
+                                    <TaskRow
+                                      key={task.issueKey}
+                                      task={task}
+                                      dayHeaders={dayHeaders}
+                                      dailyTotals={dailyTotals}
+                                      isLastInGroup={ti === group.tasks.length - 1}
+                                      visibleColumns={visibleColumns}
+                                      onIssueClick={setPanelIssueKey}
+                                    />
+                                  ))}
+                                </div>
+                              );
+                            }
+
+                            // Build parent sub-groups
                             type ParentGroup = {
                               parentKey: string; parentSummary: string;
                               parentTypeName: string; parentTypeIcon: string;
@@ -516,6 +534,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                 });
                               }
                             }
+
                             return (
                               <div className="flex-1 flex flex-col min-w-0">
                                 {parentGroups.map((pg, pgi) => {
@@ -525,105 +544,97 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                     : pCat === 'indeterminate'
                                       ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                       : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+                                  const bannerBg = pCat === 'done'
+                                    ? 'bg-green-50 dark:bg-green-900/10'
+                                    : pCat === 'indeterminate'
+                                      ? 'bg-blue-50 dark:bg-blue-900/10'
+                                      : 'bg-[#F4F5F7] dark:bg-gray-800/60';
                                   const pDueToday = new Date(new Date().toDateString());
                                   const pIsOverdue = pg.parentDuedate && pCat !== 'done'
                                     && new Date(pg.parentDuedate) < pDueToday;
+
                                   return (
-                                  <div
-                                    key={`${pg.parentKey}-${pgi}`}
-                                    className={cn(
-                                      'flex',
-                                      pgi < parentGroups.length - 1 && 'border-b border-[#DFE1E6] dark:border-gray-700',
-                                    )}
-                                  >
-                                    {/* Tasktype cell — spans all child task rows */}
                                     <div
-                                      className="w-[200px] flex-shrink-0 flex flex-col items-start justify-center px-2 py-1.5 border-r border-[#DFE1E6] dark:border-gray-700 gap-0.5"
-                                      style={{ minHeight: `${pg.tasks.length * 32}px` }}
+                                      key={`${pg.parentKey}-${pgi}`}
+                                      className={cn(
+                                        'flex flex-col',
+                                        pgi < parentGroups.length - 1 && 'border-b border-[#DFE1E6] dark:border-gray-700',
+                                      )}
                                     >
+                                      {/* ── Parent banner row ── */}
                                       {pg.parentKey !== '__none__' ? (
-                                        <>
-                                          {/* Parent key + icon */}
-                                          <div className="flex items-center gap-1 min-w-0 w-full">
+                                        <div className={cn(
+                                          'flex items-center gap-2 px-3 py-1 border-b border-[#DFE1E6] dark:border-gray-700 min-w-0',
+                                          bannerBg,
+                                        )}>
+                                          {/* Icon + key */}
+                                          <div className="flex items-center gap-1.5 flex-shrink-0">
                                             {pg.parentTypeIcon && (
                                               <img src={pg.parentTypeIcon} alt={pg.parentTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
                                             )}
                                             <button
                                               onClick={() => setPanelIssueKey(pg.parentKey)}
-                                              className="text-[11px] font-semibold text-[#0052CC] dark:text-blue-400 hover:underline truncate text-left"
+                                              className="text-xs font-bold text-[#0052CC] dark:text-blue-400 hover:underline whitespace-nowrap"
                                               title={`Open ${pg.parentKey}`}
                                             >
                                               {pg.parentKey}
                                             </button>
                                           </div>
-                                          {/* Parent summary */}
-                                          <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 leading-tight line-clamp-2 w-full">
+                                          {/* Summary — takes remaining space */}
+                                          <span className="text-xs text-[#172B4D] dark:text-gray-200 truncate flex-1 min-w-0">
                                             {pg.parentSummary}
                                           </span>
-                                          {/* Parent meta: status + duedate + est */}
-                                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                          {/* Right-side meta */}
+                                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                                             {pg.parentStatus && (
-                                              <span className={cn('text-[9px] px-1 py-0 rounded font-medium leading-tight', pStatusCls)}>
+                                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap', pStatusCls)}>
                                                 {pg.parentStatus}
                                               </span>
                                             )}
                                             {pg.parentDuedate && (
                                               <span className={cn(
-                                                'text-[9px] font-medium leading-tight',
+                                                'text-[10px] font-medium whitespace-nowrap',
                                                 pIsOverdue ? 'text-[#DE350B] dark:text-red-400' : 'text-[#5E6C84] dark:text-gray-400',
                                               )}>
-                                                {pIsOverdue && <span className="mr-0.5">&#9888;</span>}{formatDueDate(pg.parentDuedate)}
+                                                {pIsOverdue && '⚠ '}{formatDueDate(pg.parentDuedate)}
                                               </span>
                                             )}
                                             {pg.parentEstDisplay && (
-                                              <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 leading-tight">
+                                              <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 font-medium whitespace-nowrap">
                                                 {pg.parentEstDisplay}
                                               </span>
                                             )}
+                                            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 whitespace-nowrap">
+                                              {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
+                                            </span>
                                           </div>
-                                          {/* Sub-task count */}
-                                          <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 mt-0.5">
-                                            {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
-                                          </span>
-                                        </>
+                                        </div>
                                       ) : (
-                                        <span className="text-[9px] text-[#C1C7D0] dark:text-gray-600 italic">No parent</span>
+                                        <div className="flex items-center gap-2 px-3 py-1 border-b border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60">
+                                          <span className="text-[10px] text-[#C1C7D0] dark:text-gray-600 italic">No parent task</span>
+                                        </div>
                                       )}
+
+                                      {/* ── Sub-task rows ── */}
+                                      <div className="flex flex-col">
+                                        {pg.tasks.map((task, ti) => (
+                                          <TaskRow
+                                            key={task.issueKey}
+                                            task={task}
+                                            dayHeaders={dayHeaders}
+                                            dailyTotals={dailyTotals}
+                                            isLastInGroup={ti === pg.tasks.length - 1}
+                                            visibleColumns={visibleColumns}
+                                            onIssueClick={setPanelIssueKey}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                    {/* Task rows for this parent */}
-                                    <div className="flex-1 flex flex-col min-w-0">
-                                      {pg.tasks.map((task, ti) => (
-                                        <TaskRow
-                                          key={task.issueKey}
-                                          task={task}
-                                          dayHeaders={dayHeaders}
-                                          dailyTotals={dailyTotals}
-                                          isLastInGroup={ti === pg.tasks.length - 1}
-                                          visibleColumns={visibleColumns}
-                                          onIssueClick={setPanelIssueKey}
-                                        />
-                                      ))}
-                                    </div>
-                                  </div>
                                   );
                                 })}
                               </div>
                             );
-                          })() : (
-                            <div className="flex-1 flex flex-col min-w-0">
-                              {group.tasks.map((task, ti) => (
-                                <TaskRow
-                                  key={task.issueKey}
-                                  task={task}
-                                  dayHeaders={dayHeaders}
-                                  dailyTotals={dailyTotals}
-                                  isLastInGroup={ti === group.tasks.length - 1}
-                                  visibleColumns={visibleColumns}
-                                  onIssueClick={setPanelIssueKey}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          })()}
                         </div>
                       ));
                     })()}
@@ -631,7 +642,6 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                     {/* Total row */}
                     <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
                       {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2" />}
-                      {visibleColumns.tasktype && <div className="w-[200px] flex-shrink-0 px-2 py-2" />}
                       {visibleColumns.key && (
                         <div className="w-[150px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
                       )}

@@ -664,7 +664,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
 
       {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[820px] max-w-full bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-0 h-full w-[1100px] max-w-[95vw] bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col"
         style={{ animation: 'slideInRight 0.2s ease-out' }}
       >
         {/* ── Header ── */}
@@ -743,7 +743,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
             <div className="flex flex-1 min-h-0 min-w-0">
 
               {/* ── Left sidebar: metadata ── */}
-              <div className="w-[260px] flex-shrink-0 border-r border-[#DFE1E6] dark:border-gray-700 overflow-y-auto">
+              <div className="w-[300px] flex-shrink-0 border-r border-[#DFE1E6] dark:border-gray-700 overflow-y-auto">
                 <div className="px-4 py-3">
                   <p className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-500 uppercase tracking-wider mb-2">Details</p>
 
