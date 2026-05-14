@@ -70,11 +70,7 @@ const PRIORITY_OPTIONS = [
   { id: '10001', name: 'Minor'   },
 ];
 
-const STATUS_OPTIONS = [
-  { value: 'new',           label: 'To Do'       },
-  { value: 'indeterminate', label: 'In Progress'  },
-  { value: 'done',          label: 'Done'         },
-];
+// Status options are fetched dynamically — see useStatuses() hook below
 
 const RESOLUTION_OPTIONS = [
   'Done', "Won't Do", 'Duplicate', 'Cannot Reproduce',
@@ -118,15 +114,22 @@ function persistSavedFilters(list: SavedFilter[]) {
 
 // ─── MultiSelectFilter ───────────────────────────────────────────
 
+interface MultiSelectOption {
+  value: string;
+  label: string;
+  group?: string; // if set, a thin separator + label is shown above the first item in this group
+}
+
 interface MultiSelectFilterProps {
   label: string;
-  options: { value: string; label: string }[];
+  options: MultiSelectOption[];
   selectedValues: string[];
   exclude: boolean;
   onChange: (values: string[], exclude: boolean) => void;
+  loading?: boolean;
 }
 
-function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }: MultiSelectFilterProps) {
+function MultiSelectFilter({ label, options, selectedValues, exclude, onChange, loading }: MultiSelectFilterProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -211,29 +214,48 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }
             </div>
 
             {/* Option list */}
-            <div className="py-1 max-h-56 overflow-y-auto">
-              {options.map(opt => {
-                const checked = selectedValues.includes(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => toggleValue(opt.value)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
-                  >
-                    <div className={cn(
-                      'w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0',
-                      checked
-                        ? exclude
-                          ? 'bg-orange-500 border-orange-500'
-                          : 'bg-[#0052CC] border-[#0052CC]'
-                        : 'border-[#DFE1E6] dark:border-gray-500',
-                    )}>
-                      {checked && <Check size={9} className="text-white" />}
+            <div className="py-1 max-h-64 overflow-y-auto">
+              {loading ? (
+                <div className="px-3 py-3 text-xs text-[#5E6C84] dark:text-gray-400 text-center">
+                  Loading…
+                </div>
+              ) : options.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-[#5E6C84] dark:text-gray-400 text-center">
+                  No options
+                </div>
+              ) : (() => {
+                let lastGroup: string | undefined;
+                return options.map(opt => {
+                  const checked = selectedValues.includes(opt.value);
+                  const showGroupHeader = opt.group !== undefined && opt.group !== lastGroup;
+                  lastGroup = opt.group;
+                  return (
+                    <div key={opt.value}>
+                      {showGroupHeader && (
+                        <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-[#5E6C84] dark:text-gray-500 uppercase tracking-wide border-t border-[#DFE1E6] dark:border-gray-700 first:border-t-0 mt-1 first:mt-0">
+                          {opt.group}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => toggleValue(opt.value)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
+                      >
+                        <div className={cn(
+                          'w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0',
+                          checked
+                            ? exclude
+                              ? 'bg-orange-500 border-orange-500'
+                              : 'bg-[#0052CC] border-[#0052CC]'
+                            : 'border-[#DFE1E6] dark:border-gray-500',
+                        )}>
+                          {checked && <Check size={9} className="text-white" />}
+                        </div>
+                        <span className="text-xs text-[#172B4D] dark:text-gray-200">{opt.label}</span>
+                      </button>
                     </div>
-                    <span className="text-xs text-[#172B4D] dark:text-gray-200">{opt.label}</span>
-                  </button>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
 
             {/* Footer */}
@@ -302,6 +324,30 @@ function useVersions(projectKey: string | undefined) {
       .then(r => Array.isArray(r.data) ? r.data : []).catch(() => [])
   );
   return data ?? [];
+}
+
+interface JiraStatusRaw {
+  id: string;
+  name: string;
+  statusCategory: { key: string; name: string; colorName: string };
+}
+
+const CATEGORY_ORDER: Record<string, number> = { new: 0, indeterminate: 1, done: 2 };
+const CATEGORY_LABEL: Record<string, string> = {
+  new: 'To Do',
+  indeterminate: 'In Progress',
+  done: 'Done',
+};
+
+function useStatuses() {
+  const { data, isLoading } = useSWR<JiraStatusRaw[]>(
+    '/status',
+    (url: string) =>
+      api.get<JiraStatusRaw[]>(url)
+        .then(r => Array.isArray(r.data) ? r.data : [])
+        .catch(() => [])
+  );
+  return { statuses: data ?? [], loading: isLoading && !data };
 }
 
 // ─── Saved Filters Panel ──────────────────────────────────────────
@@ -503,9 +549,25 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     (url: string) => api.get<JiraProject[]>(url).then(r => r.data)
   );
 
-  const sprints    = useSprints();
-  const components = useComponents(filters.project);
+  const sprints     = useSprints();
+  const components  = useComponents(filters.project);
   const fixVersions = useVersions(filters.project);
+  const { statuses, loading: statusesLoading } = useStatuses();
+
+  // Build grouped status options sorted by category order then name
+  const statusOptions: MultiSelectOption[] = statuses
+    .slice()
+    .sort((a, b) => {
+      const catA = CATEGORY_ORDER[a.statusCategory.key] ?? 99;
+      const catB = CATEGORY_ORDER[b.statusCategory.key] ?? 99;
+      if (catA !== catB) return catA - catB;
+      return a.name.localeCompare(b.name);
+    })
+    .map(s => ({
+      value: s.name,
+      label: s.name,
+      group: CATEGORY_LABEL[s.statusCategory.key] ?? s.statusCategory.name,
+    }));
 
   // ── Apply saved filter ──
   const applySavedFilter = useCallback((f: IssueFilters) => {
@@ -537,9 +599,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   if (filters.text) chips.push({ key: 'text', label: `Text: "${filters.text}"` });
 
   if (filters.statusIn?.length) {
-    const labels = filters.statusIn
-      .map(v => STATUS_OPTIONS.find(o => o.value === v)?.label ?? v)
-      .join(', ');
+    const labels = filters.statusIn.join(', ');
     chips.push({ key: 'status', label: `Status ${filters.statusExclude ? '≠' : '='} ${labels}` });
   }
   if (filters.priorityIn?.length) {
@@ -619,10 +679,11 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           })}
         />
 
-        {/* Status — multi-select */}
+        {/* Status — multi-select (options fetched from Jira /status) */}
         <MultiSelectFilter
           label="Status"
-          options={STATUS_OPTIONS}
+          options={statusOptions}
+          loading={statusesLoading}
           selectedValues={filters.statusIn ?? []}
           exclude={filters.statusExclude ?? false}
           onChange={(values, exc) => onUpdate({
