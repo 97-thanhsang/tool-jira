@@ -1,17 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 import type { JiraIssue, JiraTransition, JiraSprint } from '@/types/jira';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
+import { IssueDetailPanel } from './issue-detail-panel';
 import {
   Loader2, X, ChevronDown, ChevronRight,
   ChevronUp, ChevronsUpDown, FolderOpen,
-  Columns, Download, Check,
+  Columns, Download, Check, User, Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +53,11 @@ const COLUMNS: ColumnDef[] = [
 const DEFAULT_VISIBLE = new Set<ColumnKey>(
   COLUMNS.filter(c => c.defaultVisible).map(c => c.key)
 );
+
+// Columns that support inline edit in the grid
+const INLINE_EDITABLE: ColumnKey[] = ['status', 'priority', 'due'];
+
+const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   none: 'None', project: 'Project', status: 'Status',
@@ -192,12 +197,17 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
   switch (col.key) {
     case 'key':
       return (
-        <div className="flex items-center gap-1.5">
+        <a
+          href={`/issues/${issue.key}`}
+          data-no-panel
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-1.5 hover:underline"
+        >
           {f.issuetype.iconUrl
             ? <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={14} height={14} className="flex-shrink-0" unoptimized />
             : <IssueTypeFallback name={f.issuetype.name} />}
           <span className="text-xs text-[#0052CC] dark:text-blue-400 font-medium truncate">{issue.key}</span>
-        </div>
+        </a>
       );
 
     case 'summary':
@@ -282,36 +292,213 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
   }
 }
 
-function IssueTableRow({ issue, selected, onToggle, visibleCols }: {
-  issue: JiraIssue; selected: boolean; onToggle: () => void; visibleCols: ColumnDef[];
+// ── Inline edit cells ─────────────────────────────────────────────
+
+function InlineStatusEdit({ issue, onDone, onCancel }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void;
 }) {
+  const [transitions, setTransitions] = useState<JiraTransition[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [applying, setApplying]       = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.get<{ transitions: JiraTransition[] }>(`/issue/${issue.key}/transitions`)
+      .then(r => setTransitions(r.data.transitions ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [issue.key]);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onCancel]);
+
+  async function apply(t: JiraTransition) {
+    setApplying(t.id);
+    try { await api.post(`/issue/${issue.key}/transitions`, { transition: { id: t.id } }); onDone(); }
+    catch { setApplying(null); }
+  }
+
   return (
-    <div className={cn(
-      'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors',
-      selected && 'bg-[#E6F0FF] dark:bg-blue-900/20',
-    )}>
+    <div ref={ref} className="absolute left-0 top-full mt-0.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-30 min-w-[160px] py-1" onClick={e => e.stopPropagation()}>
+      {loading ? (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#5E6C84]"><Loader2 size={12} className="animate-spin" /> Loading…</div>
+      ) : transitions.map(t => (
+        <button
+          key={t.id}
+          onClick={() => apply(t)}
+          disabled={applying !== null}
+          className="w-full flex items-center gap-2 text-left text-xs px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+        >
+          {applying === t.id ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={11} className="text-[#5E6C84]" />}
+          {t.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function InlinePriorityEdit({ issue, onDone, onCancel }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onCancel]);
+
+  async function save(name: string) {
+    setSaving(true);
+    try { await api.put(`/issue/${issue.key}`, { fields: { priority: { name } } }); onDone(); }
+    catch { setSaving(false); }
+  }
+
+  return (
+    <div ref={ref} className="absolute left-0 top-full mt-0.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-30 min-w-[130px] py-1" onClick={e => e.stopPropagation()}>
+      {PRIORITY_NAMES.map(p => (
+        <button
+          key={p}
+          onClick={() => save(p)}
+          disabled={saving}
+          className={cn(
+            'w-full text-left text-xs px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors disabled:opacity-50',
+            issue.fields.priority?.name === p && 'font-semibold text-[#0052CC]',
+          )}
+        >
+          {p}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function InlineDueDateEdit({ issue, onDone, onCancel }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(issue.fields.duedate ?? '');
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try { await api.put(`/issue/${issue.key}`, { fields: { duedate: draft || null } }); onDone(); }
+    catch { setSaving(false); }
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <input
+        autoFocus
+        type="date"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onCancel(); }}
+        disabled={saving}
+        className="text-xs border border-[#0052CC] rounded px-1.5 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none w-28"
+      />
+      <button onMouseDown={save} disabled={saving} className="p-1 rounded bg-[#0052CC] text-white hover:bg-[#0747A6] disabled:opacity-50">
+        {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+      </button>
+      <button onMouseDown={onCancel} className="p-1 rounded border border-[#DFE1E6] text-[#5E6C84] hover:text-red-500">
+        <X size={10} />
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+
+function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved }: {
+  issue: JiraIssue; selected: boolean; onToggle: () => void;
+  visibleCols: ColumnDef[];
+  onOpenPanel: (key: string) => void;
+  onInlineSaved: () => void;
+}) {
+  const [inlineEdit, setInlineEdit] = useState<ColumnKey | null>(null);
+
+  function handleCellClick(e: React.MouseEvent, col: ColumnDef) {
+    if (!INLINE_EDITABLE.includes(col.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setInlineEdit(col.key);
+  }
+
+  function handleInlineDone() { setInlineEdit(null); onInlineSaved(); }
+  function handleInlineCancel() { setInlineEdit(null); }
+
+  function handleRowClick(e: React.MouseEvent) {
+    // Don't open panel when clicking checkbox or when an inline edit is open
+    if (inlineEdit) return;
+    if ((e.target as Element).closest('[data-no-panel]')) return;
+    onOpenPanel(issue.key);
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors cursor-pointer',
+        selected && 'bg-[#E6F0FF] dark:bg-blue-900/20',
+      )}
+      onClick={handleRowClick}
+    >
+      {/* Checkbox */}
       <input
         type="checkbox"
         checked={selected}
         onChange={onToggle}
         onClick={e => e.stopPropagation()}
+        data-no-panel
         className="w-3.5 h-3.5 rounded border-[#DFE1E6] cursor-pointer accent-[#0052CC] flex-shrink-0"
         aria-label={`Select ${issue.key}`}
       />
-      <Link href={`/issues/${issue.key}`} className="flex items-center gap-3 flex-1 min-w-0">
-        {visibleCols.map(col => (
+
+      {/* Cells */}
+      {visibleCols.map(col => {
+        const isEditable = INLINE_EDITABLE.includes(col.key);
+        const isEditing  = inlineEdit === col.key;
+        return (
           <div
             key={col.key}
             className={cn(
               col.widthClass,
               col.key !== 'summary' && 'flex-shrink-0',
               col.align === 'right' && 'text-right',
+              // Key column: link to issue page
+              col.key === 'key' && 'flex-shrink-0',
+              // Inline-editable columns
+              isEditable && !isEditing && 'group/cell relative cursor-pointer',
+              isEditing && 'relative',
             )}
+            onClick={isEditable ? e => handleCellClick(e, col) : undefined}
+            data-no-panel={isEditable ? '' : undefined}
           >
-            <CellContent col={col} issue={issue} />
+            {isEditing ? (
+              <>
+                {col.key === 'status'   && <InlineStatusEdit   issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
+                {col.key === 'priority' && <InlinePriorityEdit issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
+                {col.key === 'due'      && <InlineDueDateEdit  issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
+              </>
+            ) : (
+              <div className={cn('flex items-center', isEditable && 'group-hover/cell:opacity-80 transition-opacity')}>
+                <CellContent col={col} issue={issue} />
+                {isEditable && col.key !== 'status' && (
+                  <span className="ml-1 opacity-0 group-hover/cell:opacity-60 transition-opacity">
+                    <ChevronDown size={9} className="text-[#5E6C84]" />
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-        ))}
-      </Link>
+        );
+      })}
     </div>
   );
 }
@@ -337,6 +524,19 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [visibleColumns, setVisibleColumns]     = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
   const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
   const [showColumnPicker, setShowColPicker]    = useState(false);
+  // Panel
+  const [panelKey, setPanelKey]                 = useState<string | null>(null);
+  // Bulk extras
+  const [bulkAssignOpen, setBulkAssignOpen]     = useState(false);
+  const [bulkPriorityOpen, setBulkPriorityOpen] = useState(false);
+  const [bulkDueOpen, setBulkDueOpen]           = useState(false);
+  const [bulkAssignQuery, setBulkAssignQuery]   = useState('');
+  const [bulkPriority, setBulkPriority]         = useState('');
+  const [bulkDue, setBulkDue]                   = useState('');
+  const [bulkApplying, setBulkApplying]         = useState(false);
+  const bulkAssignRef  = useRef<HTMLDivElement>(null);
+  const bulkPriorityRef = useRef<HTMLDivElement>(null);
+  const bulkDueRef     = useRef<HTMLDivElement>(null);
 
   const colPickerRef = useRef<HTMLDivElement>(null);
 
@@ -351,6 +551,32 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [showColumnPicker]);
+
+  // Close bulk dropdowns on outside click
+  useEffect(() => {
+    if (!bulkAssignOpen && !bulkPriorityOpen && !bulkDueOpen) return;
+    function handler(e: MouseEvent) {
+      if (bulkAssignOpen   && bulkAssignRef.current   && !bulkAssignRef.current.contains(e.target as Node))   setBulkAssignOpen(false);
+      if (bulkPriorityOpen && bulkPriorityRef.current && !bulkPriorityRef.current.contains(e.target as Node)) setBulkPriorityOpen(false);
+      if (bulkDueOpen      && bulkDueRef.current      && !bulkDueRef.current.contains(e.target as Node))      setBulkDueOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [bulkAssignOpen, bulkPriorityOpen, bulkDueOpen]);
+
+  // Bulk apply fields
+  async function applyBulkField(fields: Record<string, unknown>) {
+    setBulkApplying(true);
+    for (const issue of selectedIssues) {
+      try { await api.put(`/issue/${issue.key}`, { fields }); }
+      catch { /* continue */ }
+    }
+    setBulkApplying(false);
+    setBulkAssignOpen(false); setBulkPriorityOpen(false); setBulkDueOpen(false);
+    setBulkAssignQuery(''); setBulkPriority(''); setBulkDue('');
+    setSelected(new Set());
+    window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
+  }
 
   const visibleCols = useMemo(
     () => COLUMNS.filter(c => visibleColumns.has(c.key)),
@@ -530,20 +756,21 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
 
       {/* ── Bulk action bar ───────────────────────────────────── */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-3 mb-3 px-4 py-2.5 bg-[#E6F0FF] dark:bg-blue-900/30 border border-[#0052CC]/30 dark:border-blue-600/30 rounded-sm">
-          <span className="text-sm font-medium text-[#0052CC] dark:text-blue-300">
+        <div className="flex items-center gap-2 mb-3 px-4 py-2.5 bg-[#E6F0FF] dark:bg-blue-900/30 border border-[#0052CC]/30 dark:border-blue-600/30 rounded-sm flex-wrap">
+          <span className="text-sm font-medium text-[#0052CC] dark:text-blue-300 mr-1">
             {selectedCount} selected
           </span>
 
+          {/* Transition */}
           <div className="relative">
             <button
               onClick={() => setTransDropOpen(p => !p)}
-              disabled={transitionsLoading || transitioning}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
+              disabled={transitionsLoading || transitioning || bulkApplying}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
             >
               {transitionsLoading || transitioning
-                ? <Loader2 size={12} className="animate-spin" />
-                : <ChevronDown size={12} />}
+                ? <Loader2 size={11} className="animate-spin" />
+                : <ChevronDown size={11} />}
               Transition to…
             </button>
             {transitionDropOpen && commonTransitions.length > 0 && (
@@ -557,6 +784,104 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                     {t.name}
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Bulk assign */}
+          <div className="relative" ref={bulkAssignRef}>
+            <button
+              onClick={() => { setBulkAssignOpen(p => !p); setBulkPriorityOpen(false); setBulkDueOpen(false); }}
+              disabled={bulkApplying}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
+            >
+              <User size={11} />
+              Assign to…
+            </button>
+            {bulkAssignOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 p-3 min-w-[220px]">
+                <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 mb-2 font-semibold uppercase">Assign {selectedCount} issue{selectedCount > 1 ? 's' : ''} to</p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={bulkAssignQuery}
+                  onChange={e => setBulkAssignQuery(e.target.value)}
+                  placeholder="Username…"
+                  className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] mb-2"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => applyBulkField({ assignee: bulkAssignQuery ? { name: bulkAssignQuery } : null })}
+                    disabled={bulkApplying}
+                    className="flex-1 text-xs px-2 py-1.5 bg-[#0052CC] text-white rounded hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
+                  >
+                    {bulkApplying ? <Loader2 size={11} className="animate-spin mx-auto" /> : 'Apply'}
+                  </button>
+                  <button onClick={() => setBulkAssignOpen(false)} className="text-xs px-2 py-1.5 border border-[#DFE1E6] rounded text-[#5E6C84] hover:text-[#172B4D]">Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bulk priority */}
+          <div className="relative" ref={bulkPriorityRef}>
+            <button
+              onClick={() => { setBulkPriorityOpen(p => !p); setBulkAssignOpen(false); setBulkDueOpen(false); }}
+              disabled={bulkApplying}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
+            >
+              <ChevronDown size={11} />
+              Set priority…
+            </button>
+            {bulkPriorityOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 min-w-[140px] py-1">
+                {PRIORITY_NAMES.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => { setBulkPriority(p); applyBulkField({ priority: { name: p } }); }}
+                    disabled={bulkApplying}
+                    className={cn(
+                      'w-full text-left text-xs px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors disabled:opacity-50',
+                      bulkPriority === p && 'text-[#0052CC] font-semibold',
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Bulk due date */}
+          <div className="relative" ref={bulkDueRef}>
+            <button
+              onClick={() => { setBulkDueOpen(p => !p); setBulkAssignOpen(false); setBulkPriorityOpen(false); }}
+              disabled={bulkApplying}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
+            >
+              <Calendar size={11} />
+              Set due date…
+            </button>
+            {bulkDueOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 p-3 min-w-[200px]">
+                <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 mb-2 font-semibold uppercase">Due date for {selectedCount} issue{selectedCount > 1 ? 's' : ''}</p>
+                <input
+                  autoFocus
+                  type="date"
+                  value={bulkDue}
+                  onChange={e => setBulkDue(e.target.value)}
+                  className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] mb-2"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => applyBulkField({ duedate: bulkDue || null })}
+                    disabled={bulkApplying}
+                    className="flex-1 text-xs px-2 py-1.5 bg-[#0052CC] text-white rounded hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
+                  >
+                    {bulkApplying ? <Loader2 size={11} className="animate-spin mx-auto" /> : 'Apply'}
+                  </button>
+                  <button onClick={() => setBulkDueOpen(false)} className="text-xs px-2 py-1.5 border border-[#DFE1E6] rounded text-[#5E6C84] hover:text-[#172B4D]">Cancel</button>
+                </div>
               </div>
             )}
           </div>
@@ -638,6 +963,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                     selected={selected.has(issue.id)}
                     onToggle={() => toggleSelect(issue.id)}
                     visibleCols={visibleCols}
+                    onOpenPanel={setPanelKey}
+                    onInlineSaved={() => window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'))}
                   />
                 ))}
               </div>
@@ -656,6 +983,13 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
           </span>
         </div>
       )}
+
+      {/* Issue detail panel */}
+      <IssueDetailPanel
+        issueKey={panelKey}
+        onClose={() => setPanelKey(null)}
+        onUpdated={() => window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'))}
+      />
     </div>
   );
 }
