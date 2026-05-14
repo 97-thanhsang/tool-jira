@@ -45,6 +45,14 @@ export interface JiraTimeTracking {
   timeSpentSeconds?: number;
 }
 
+export interface JiraSprint {
+  id: number;
+  name: string;
+  state: 'active' | 'closed' | 'future';
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface JiraIssue {
   id: string;
   key: string;
@@ -68,6 +76,7 @@ export interface JiraIssue {
     timetracking?: JiraTimeTracking;
     fixVersions?: Array<{ id: string; name: string; released: boolean }>;
     components?: Array<{ id: string; name: string }>;
+    sprint?: JiraSprint | JiraSprint[] | null;
   };
 }
 

@@ -1,19 +1,33 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
 import { api } from '@/lib/api';
 import type { IssueFilters } from '@/hooks/use-issues-list';
 import type { JiraProject } from '@/types/jira';
 import { UserSearchInput } from './user-search-input';
-import { Search, ChevronDown, ChevronUp, X } from 'lucide-react';
+import {
+  Search, ChevronDown, ChevronUp, X, Check,
+  UserX, Save, Bookmark, Trash2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ─── Types ────────────────────────────────────────────────────────
+
+interface SavedFilter {
+  id: string;
+  name: string;
+  filters: IssueFilters;
+  createdAt: string;
+}
 
 interface FilterPanelProps {
   filters: IssueFilters;
   onUpdate: (f: Partial<IssueFilters>) => void;
   onClear: () => void;
 }
+
+// ─── Style constants ──────────────────────────────────────────────
 
 const selectClass =
   'text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] dark:focus:border-blue-400 min-w-[110px]';
@@ -29,7 +43,7 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Static data ──
+// ─── Static option lists ──────────────────────────────────────────
 
 const ISSUE_TYPES = [
   { id: '10100', name: 'Task' },
@@ -47,56 +61,205 @@ const ISSUE_TYPES = [
 ];
 
 const PRIORITY_OPTIONS = [
-  { id: '1', name: 'Highest' },
-  { id: '2', name: 'High' },
-  { id: '3', name: 'Medium' },
-  { id: '4', name: 'Low' },
-  { id: '5', name: 'Lowest' },
+  { id: '1',     name: 'Highest' },
+  { id: '2',     name: 'High'    },
+  { id: '3',     name: 'Medium'  },
+  { id: '4',     name: 'Low'     },
+  { id: '5',     name: 'Lowest'  },
   { id: '10000', name: 'Blocker' },
-  { id: '10001', name: 'Minor' },
+  { id: '10001', name: 'Minor'   },
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'new', label: 'To Do' },
-  { value: 'indeterminate', label: 'In Progress' },
-  { value: 'done', label: 'Done' },
+  { value: 'new',           label: 'To Do'       },
+  { value: 'indeterminate', label: 'In Progress'  },
+  { value: 'done',          label: 'Done'         },
 ];
 
 const RESOLUTION_OPTIONS = [
-  'Done',
-  "Won't Do",
-  'Duplicate',
-  'Cannot Reproduce',
-  'Declined',
-  'Known Error',
-  'Hardware failure',
-  'Software failure',
+  'Done', "Won't Do", 'Duplicate', 'Cannot Reproduce',
+  'Declined', 'Known Error', 'Hardware failure', 'Software failure',
 ];
 
 const CREATED_OPTIONS = [
-  { value: '-1d', label: 'Last 24h' },
-  { value: '-7d', label: 'Last 7 days' },
-  { value: '-30d', label: 'Last 30 days' },
-  { value: '-90d', label: 'Last 90 days' },
+  { value: '-1d',  label: 'Last 24h'    },
+  { value: '-7d',  label: 'Last 7 days' },
+  { value: '-30d', label: 'Last 30 days'},
+  { value: '-90d', label: 'Last 90 days'},
 ];
 
 const UPDATED_OPTIONS = [
-  { value: '-1d', label: 'Last 24h' },
-  { value: '-7d', label: 'Last 7 days' },
-  { value: '-30d', label: 'Last 30 days' },
+  { value: '-1d',  label: 'Last 24h'    },
+  { value: '-7d',  label: 'Last 7 days' },
+  { value: '-30d', label: 'Last 30 days'},
 ];
 
 const DUEDATE_OPTIONS = [
-  { value: 'overdue', label: 'Overdue' },
+  { value: 'overdue',   label: 'Overdue'   },
   { value: 'this_week', label: 'This week' },
   { value: 'next_week', label: 'Next week' },
 ];
 
-// ── Sprint fetch hook ──
+// ─── Saved filters localStorage ──────────────────────────────────
+
+const LS_KEY = 'jira-saved-filters';
+
+function loadSavedFilters(): SavedFilter[] {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as SavedFilter[];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedFilters(list: SavedFilter[]) {
+  localStorage.setItem(LS_KEY, JSON.stringify(list));
+}
+
+// ─── MultiSelectFilter ───────────────────────────────────────────
+
+interface MultiSelectFilterProps {
+  label: string;
+  options: { value: string; label: string }[];
+  selectedValues: string[];
+  exclude: boolean;
+  onChange: (values: string[], exclude: boolean) => void;
+}
+
+function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }: MultiSelectFilterProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const hasSelection = selectedValues.length > 0;
+
+  // Build button label
+  let btnLabel: string;
+  if (!hasSelection) {
+    btnLabel = 'All';
+  } else if (selectedValues.length === 1) {
+    const opt = options.find(o => o.value === selectedValues[0]);
+    btnLabel = (exclude ? '≠ ' : '') + (opt?.label ?? selectedValues[0]);
+  } else {
+    btnLabel = (exclude ? 'NOT ' : '') + `${selectedValues.length} selected`;
+  }
+
+  function toggleValue(value: string) {
+    const next = selectedValues.includes(value)
+      ? selectedValues.filter(v => v !== value)
+      : [...selectedValues, value];
+    onChange(next, exclude);
+  }
+
+  function toggleExclude() {
+    onChange(selectedValues, !exclude);
+  }
+
+  function clearAll() {
+    onChange([], false);
+    setOpen(false);
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <FilterLabel>{label}</FilterLabel>
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen(p => !p)}
+          className={cn(
+            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px]',
+            hasSelection
+              ? exclude
+                ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-500 text-orange-700 dark:text-orange-300'
+                : 'bg-[#E6F0FF] dark:bg-blue-900/30 border-[#0052CC]/40 dark:border-blue-600/40 text-[#0052CC] dark:text-blue-300'
+              : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
+          )}
+        >
+          <span className="flex-1 text-left">{btnLabel}</span>
+          <ChevronDown size={10} className="flex-shrink-0 opacity-60" />
+        </button>
+
+        {open && (
+          <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 min-w-[180px]">
+            {/* Exclude toggle */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
+              <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-100">
+                {label}
+              </span>
+              <button
+                onClick={toggleExclude}
+                disabled={!hasSelection}
+                title={exclude ? 'Switch to INCLUDE mode' : 'Switch to EXCLUDE mode'}
+                className={cn(
+                  'flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors disabled:opacity-40',
+                  exclude
+                    ? 'bg-orange-100 dark:bg-orange-900/30 border-orange-400 text-orange-700 dark:text-orange-300'
+                    : 'bg-white dark:bg-gray-700 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-orange-400 hover:text-orange-600',
+                )}
+              >
+                {exclude ? '≠ Exclude' : '= Include'}
+              </button>
+            </div>
+
+            {/* Option list */}
+            <div className="py-1 max-h-56 overflow-y-auto">
+              {options.map(opt => {
+                const checked = selectedValues.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => toggleValue(opt.value)}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
+                  >
+                    <div className={cn(
+                      'w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0',
+                      checked
+                        ? exclude
+                          ? 'bg-orange-500 border-orange-500'
+                          : 'bg-[#0052CC] border-[#0052CC]'
+                        : 'border-[#DFE1E6] dark:border-gray-500',
+                    )}>
+                      {checked && <Check size={9} className="text-white" />}
+                    </div>
+                    <span className="text-xs text-[#172B4D] dark:text-gray-200">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            {hasSelection && (
+              <div className="border-t border-[#DFE1E6] dark:border-gray-700 px-3 py-2">
+                <button
+                  onClick={clearAll}
+                  className="text-[11px] text-[#5E6C84] dark:text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sprint + data hooks ──────────────────────────────────────────
+
 function useSprints() {
   const { data: boards } = useSWR<{ values: { id: number }[] }>(
     '/agile/board?maxResults=50',
-    (url: string) => api.get<{ values: { id: number }[] }>(url).then((r) => r.data)
+    (url: string) => api.get<{ values: { id: number }[] }>(url).then(r => r.data)
   );
 
   const { data: sprints } = useSWR<{ values: { id: number; name: string }[] }>(
@@ -104,23 +267,16 @@ function useSprints() {
     async () => {
       if (!boards?.values?.length) return { values: [] };
       const results = await Promise.all(
-        boards.values.map((b) =>
-          api
-            .get<{ values: { id: number; name: string }[] }>(
-              `/agile/board/${b.id}/sprint?state=active,future`
-            )
-            .then((r) => r.data.values)
-            .catch(() => [] as { id: number; name: string }[])
+        boards.values.map(b =>
+          api.get<{ values: { id: number; name: string }[] }>(
+            `/agile/board/${b.id}/sprint?state=active,future`
+          ).then(r => r.data.values).catch(() => [] as { id: number; name: string }[])
         )
       );
-      // Deduplicate by name, sort alpha
       const seen = new Set<string>();
       const unique: { id: number; name: string }[] = [];
-      results.flat().forEach((s) => {
-        if (!seen.has(s.name)) {
-          seen.add(s.name);
-          unique.push(s);
-        }
+      results.flat().forEach(s => {
+        if (!seen.has(s.name)) { seen.add(s.name); unique.push(s); }
       });
       unique.sort((a, b) => a.name.localeCompare(b.name));
       return { values: unique };
@@ -130,40 +286,202 @@ function useSprints() {
   return sprints?.values ?? [];
 }
 
-// ── Components fetch hook (project-scoped) ──
 function useComponents(projectKey: string | undefined) {
   const { data } = useSWR<{ id: string; name: string }[]>(
     projectKey ? `/project/${projectKey}/components` : null,
-    (url: string) =>
-      api
-        .get<{ id: string; name: string }[]>(url)
-        .then((r) => Array.isArray(r.data) ? r.data : [])
-        .catch(() => [])
+    (url: string) => api.get<{ id: string; name: string }[]>(url)
+      .then(r => Array.isArray(r.data) ? r.data : []).catch(() => [])
   );
   return data ?? [];
 }
 
-// ── Versions fetch hook (project-scoped) ──
 function useVersions(projectKey: string | undefined) {
   const { data } = useSWR<{ id: string; name: string }[]>(
     projectKey ? `/project/${projectKey}/versions` : null,
-    (url: string) =>
-      api
-        .get<{ id: string; name: string }[]>(url)
-        .then((r) => Array.isArray(r.data) ? r.data : [])
-        .catch(() => [])
+    (url: string) => api.get<{ id: string; name: string }[]>(url)
+      .then(r => Array.isArray(r.data) ? r.data : []).catch(() => [])
   );
   return data ?? [];
 }
 
-// ── Main component ──
+// ─── Saved Filters Panel ──────────────────────────────────────────
+
+interface SavedFiltersPanelProps {
+  currentFilters: IssueFilters;
+  onApply: (f: IssueFilters) => void;
+}
+
+function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) {
+  const [open, setOpen]       = useState(false);
+  const [saved, setSaved]     = useState<SavedFilter[]>([]);
+  const [saveName, setSaveName] = useState('');
+  const [showInput, setShowInput] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load on mount
+  useEffect(() => { setSaved(loadSavedFilters()); }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setShowInput(false);
+        setSaveName('');
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Focus input when shown
+  useEffect(() => {
+    if (showInput) inputRef.current?.focus();
+  }, [showInput]);
+
+  // Check if current filters are non-empty (excluding sort fields)
+  const hasFilters = Object.entries(currentFilters).some(
+    ([k, v]) => !['sortField', 'sortDir', 'startAt'].includes(k) && v !== undefined && (Array.isArray(v) ? v.length > 0 : true)
+  );
+
+  function saveFilter() {
+    if (!saveName.trim()) return;
+    // strip sort/pagination fields from saved filter
+    const { sortField: _sf, sortDir: _sd, startAt: _sa, ...rest } = currentFilters;
+    void _sf; void _sd; void _sa;
+    const newFilter: SavedFilter = {
+      id: Date.now().toString(),
+      name: saveName.trim(),
+      filters: rest,
+      createdAt: new Date().toISOString(),
+    };
+    const next = [newFilter, ...saved];
+    setSaved(next);
+    persistSavedFilters(next);
+    setSaveName('');
+    setShowInput(false);
+  }
+
+  function deleteFilter(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = saved.filter(f => f.id !== id);
+    setSaved(next);
+    persistSavedFilters(next);
+  }
+
+  function applyFilter(sf: SavedFilter) {
+    onApply(sf.filters);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(p => !p)}
+        className={cn(
+          'flex items-center gap-1.5 text-xs px-2.5 py-1.5 border rounded transition-colors whitespace-nowrap',
+          open || saved.length > 0
+            ? 'bg-white dark:bg-gray-800 border-[#0052CC]/40 dark:border-blue-500/40 text-[#0052CC] dark:text-blue-300 hover:border-[#0052CC]'
+            : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
+        )}
+      >
+        <Bookmark size={12} />
+        Saved
+        {saved.length > 0 && (
+          <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-[#0052CC] text-white text-[9px] font-bold w-3.5 h-3.5">
+            {saved.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-64">
+          {/* Save current */}
+          <div className="px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
+            {showInput ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={saveName}
+                  onChange={e => setSaveName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveFilter();
+                    if (e.key === 'Escape') { setShowInput(false); setSaveName(''); }
+                  }}
+                  placeholder="Filter name…"
+                  className={cn(inputClass, 'flex-1 py-1')}
+                />
+                <button
+                  onClick={saveFilter}
+                  disabled={!saveName.trim()}
+                  className="text-xs px-2 py-1 bg-[#0052CC] text-white rounded disabled:opacity-40 hover:bg-[#0747A6] transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => { setShowInput(false); setSaveName(''); }}
+                  className="text-[#5E6C84] hover:text-red-500 transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowInput(true)}
+                disabled={!hasFilters}
+                className="flex items-center gap-1.5 text-xs text-[#0052CC] dark:text-blue-400 hover:underline disabled:opacity-40 disabled:no-underline"
+              >
+                <Save size={12} />
+                Save current filters…
+              </button>
+            )}
+          </div>
+
+          {/* Saved list */}
+          {saved.length === 0 ? (
+            <div className="px-3 py-4 text-xs text-center text-[#5E6C84] dark:text-gray-500">
+              No saved filters
+            </div>
+          ) : (
+            <div className="max-h-60 overflow-y-auto py-1">
+              {saved.map(sf => (
+                <div
+                  key={sf.id}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors cursor-pointer group"
+                  onClick={() => applyFilter(sf)}
+                >
+                  <Bookmark size={12} className="text-[#5E6C84] flex-shrink-0" />
+                  <span className="text-xs text-[#172B4D] dark:text-gray-200 flex-1 truncate">
+                    {sf.name}
+                  </span>
+                  <button
+                    onClick={e => deleteFilter(sf.id, e)}
+                    className="opacity-0 group-hover:opacity-100 text-[#5E6C84] hover:text-red-500 transition-all flex-shrink-0"
+                    aria-label={`Delete ${sf.name}`}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main FilterPanel ─────────────────────────────────────────────
 
 export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
-  const [showMore, setShowMore] = useState(false);
+  const [showMore, setShowMore]   = useState(false);
   const [textInput, setTextInput] = useState(filters.text ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync text input when filters are cleared externally
+  // Sync text when filters cleared externally
   useEffect(() => {
     if (!filters.text) setTextInput('');
   }, [filters.text]);
@@ -177,24 +495,27 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     }, 400);
   }
 
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  // Fetch projects list (cached by SWR)
+  // Fetch projects
   const { data: projects } = useSWR<JiraProject[]>(
     '/project?maxResults=50',
-    (url: string) => api.get<JiraProject[]>(url).then((r) => r.data)
+    (url: string) => api.get<JiraProject[]>(url).then(r => r.data)
   );
 
-  // Dynamic data
-  const sprints = useSprints();
+  const sprints    = useSprints();
   const components = useComponents(filters.project);
   const fixVersions = useVersions(filters.project);
 
-  // Count advanced (row-2) active filters
+  // ── Apply saved filter ──
+  const applySavedFilter = useCallback((f: IssueFilters) => {
+    // Clear first, then apply all saved values
+    onClear();
+    // Need a tick for onClear to propagate
+    setTimeout(() => onUpdate(f), 0);
+  }, [onClear, onUpdate]);
+
+  // ── Advanced row active count (for badge) ──
   const advancedActiveCount = [
     filters.assignee,
     filters.reporter,
@@ -207,25 +528,31 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     filters.duedate,
     filters.component,
     filters.fixVersion,
+    filters.unassignedOnly,
   ].filter(Boolean).length;
 
-  // All active filter chips
-  const chips: { key: string; label: string }[] = [];
+  // ── Active filter chips ──
+  const chips: { key: keyof IssueFilters | string; label: string }[] = [];
+
   if (filters.text) chips.push({ key: 'text', label: `Text: "${filters.text}"` });
-  if (filters.status) {
-    const s = STATUS_OPTIONS.find((o) => o.value === filters.status);
-    chips.push({ key: 'status', label: `Status: ${s?.label ?? filters.status}` });
+
+  if (filters.statusIn?.length) {
+    const labels = filters.statusIn
+      .map(v => STATUS_OPTIONS.find(o => o.value === v)?.label ?? v)
+      .join(', ');
+    chips.push({ key: 'status', label: `Status ${filters.statusExclude ? '≠' : '='} ${labels}` });
   }
-  if (filters.priority) {
-    const p = PRIORITY_OPTIONS.find((o) => o.name === filters.priority);
-    chips.push({ key: 'priority', label: `Priority: ${p?.name ?? filters.priority}` });
+  if (filters.priorityIn?.length) {
+    const labels = filters.priorityIn.join(', ');
+    chips.push({ key: 'priority', label: `Priority ${filters.priorityExclude ? '≠' : '='} ${labels}` });
   }
-  if (filters.issuetype) {
-    const t = ISSUE_TYPES.find((o) => o.name === filters.issuetype);
-    chips.push({ key: 'issuetype', label: `Type: ${t?.name ?? filters.issuetype}` });
+  if (filters.issuetypeIn?.length) {
+    const labels = filters.issuetypeIn.join(', ');
+    chips.push({ key: 'issuetype', label: `Type ${filters.issuetypeExclude ? '≠' : '='} ${labels}` });
   }
+  if (filters.unassignedOnly) chips.push({ key: 'unassignedOnly', label: 'Unassigned only' });
   if (filters.project) {
-    const proj = projects?.find((p) => p.key === filters.project);
+    const proj = projects?.find(p => p.key === filters.project);
     chips.push({ key: 'project', label: `Project: ${proj?.name ?? filters.project}` });
   }
   if (filters.assignee === 'currentUser()') chips.push({ key: 'assignee', label: 'Assignee: Me' });
@@ -237,16 +564,16 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   if (filters.resolution === 'all') chips.push({ key: 'resolution', label: 'Resolution: All' });
   else if (filters.resolution) chips.push({ key: 'resolution', label: `Resolution: ${filters.resolution}` });
   if (filters.createdAfter) {
-    const c = CREATED_OPTIONS.find((o) => o.value === filters.createdAfter);
+    const c = CREATED_OPTIONS.find(o => o.value === filters.createdAfter);
     chips.push({ key: 'createdAfter', label: `Created: ${c?.label ?? filters.createdAfter}` });
   }
   if (filters.labels) chips.push({ key: 'labels', label: `Label: ${filters.labels}` });
   if (filters.updatedAfter) {
-    const u = UPDATED_OPTIONS.find((o) => o.value === filters.updatedAfter);
+    const u = UPDATED_OPTIONS.find(o => o.value === filters.updatedAfter);
     chips.push({ key: 'updatedAfter', label: `Updated: ${u?.label ?? filters.updatedAfter}` });
   }
   if (filters.duedate) {
-    const d = DUEDATE_OPTIONS.find((o) => o.value === filters.duedate);
+    const d = DUEDATE_OPTIONS.find(o => o.value === filters.duedate);
     chips.push({ key: 'duedate', label: `Due: ${d?.label ?? filters.duedate}` });
   }
   if (filters.component) chips.push({ key: 'component', label: `Component: ${filters.component}` });
@@ -256,141 +583,140 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
 
   function removeChip(key: string) {
     if (key === 'text') setTextInput('');
-    // Cast is safe — all chip keys are IssueFilters keys
+    if (key === 'status')    { onUpdate({ statusIn: undefined,    statusExclude: undefined }); return; }
+    if (key === 'priority')  { onUpdate({ priorityIn: undefined,  priorityExclude: undefined }); return; }
+    if (key === 'issuetype') { onUpdate({ issuetypeIn: undefined, issuetypeExclude: undefined }); return; }
     onUpdate({ [key]: undefined } as Partial<IssueFilters>);
   }
 
   return (
     <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-10">
-      {/* Row 1 — always visible */}
+
+      {/* ── Row 1 — always visible ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
+
         {/* Text search */}
         <div className="relative flex items-center flex-1 min-w-[180px] max-w-xs">
-          <Search
-            size={13}
-            className="absolute left-2 text-[#5E6C84] dark:text-gray-500 pointer-events-none"
-          />
+          <Search size={13} className="absolute left-2 text-[#5E6C84] dark:text-gray-500 pointer-events-none" />
           <input
             type="text"
             value={textInput}
-            onChange={(e) => handleTextChange(e.target.value)}
+            onChange={e => handleTextChange(e.target.value)}
             placeholder="Search issues…"
             className={cn(inputClass, 'pl-6 w-full')}
           />
         </div>
 
-        {/* Type */}
-        <div className="flex items-center gap-1.5">
-          <FilterLabel>Type</FilterLabel>
-          <select
-            className={selectClass}
-            value={filters.issuetype ?? ''}
-            onChange={(e) =>
-              onUpdate({ issuetype: e.target.value || undefined })
-            }
-          >
-            <option value="">All</option>
-            {ISSUE_TYPES.map((t) => (
-              <option key={t.id} value={t.name}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Type — multi-select */}
+        <MultiSelectFilter
+          label="Type"
+          options={ISSUE_TYPES.map(t => ({ value: t.name, label: t.name }))}
+          selectedValues={filters.issuetypeIn ?? []}
+          exclude={filters.issuetypeExclude ?? false}
+          onChange={(values, exc) => onUpdate({
+            issuetypeIn: values.length ? values : undefined,
+            issuetypeExclude: exc || undefined,
+          })}
+        />
 
-        {/* Status */}
-        <div className="flex items-center gap-1.5">
-          <FilterLabel>Status</FilterLabel>
-          <select
-            className={selectClass}
-            value={filters.status ?? ''}
-            onChange={(e) =>
-              onUpdate({ status: e.target.value || undefined })
-            }
-          >
-            <option value="">All</option>
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Status — multi-select */}
+        <MultiSelectFilter
+          label="Status"
+          options={STATUS_OPTIONS}
+          selectedValues={filters.statusIn ?? []}
+          exclude={filters.statusExclude ?? false}
+          onChange={(values, exc) => onUpdate({
+            statusIn: values.length ? values : undefined,
+            statusExclude: exc || undefined,
+          })}
+        />
 
-        {/* Priority */}
-        <div className="flex items-center gap-1.5">
-          <FilterLabel>Priority</FilterLabel>
-          <select
-            className={selectClass}
-            value={filters.priority ?? ''}
-            onChange={(e) =>
-              onUpdate({ priority: e.target.value || undefined })
-            }
-          >
-            <option value="">All</option>
-            {PRIORITY_OPTIONS.map((p) => (
-              <option key={p.id} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Priority — multi-select */}
+        <MultiSelectFilter
+          label="Priority"
+          options={PRIORITY_OPTIONS.map(p => ({ value: p.name, label: p.name }))}
+          selectedValues={filters.priorityIn ?? []}
+          exclude={filters.priorityExclude ?? false}
+          onChange={(values, exc) => onUpdate({
+            priorityIn: values.length ? values : undefined,
+            priorityExclude: exc || undefined,
+          })}
+        />
+
+        {/* Unassigned quick toggle */}
+        <button
+          onClick={() => onUpdate({ unassignedOnly: filters.unassignedOnly ? undefined : true })}
+          title="Show unassigned issues only"
+          className={cn(
+            'flex items-center gap-1.5 text-xs px-2.5 py-1.5 border rounded transition-colors whitespace-nowrap',
+            filters.unassignedOnly
+              ? 'bg-[#E6F0FF] dark:bg-blue-900/30 border-[#0052CC]/40 text-[#0052CC] dark:text-blue-300'
+              : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
+          )}
+        >
+          <UserX size={12} />
+          Unassigned
+        </button>
 
         {/* More filters toggle */}
         <button
-          onClick={() => setShowMore((prev) => !prev)}
+          onClick={() => setShowMore(prev => !prev)}
           className={cn(
             'flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border transition-colors',
             showMore || advancedActiveCount > 0
               ? 'bg-[#0052CC] border-[#0052CC] text-white'
-              : 'bg-white dark:bg-gray-700 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-300 hover:border-[#0052CC] hover:text-[#0052CC]'
+              : 'bg-white dark:bg-gray-700 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-300 hover:border-[#0052CC] hover:text-[#0052CC]',
           )}
         >
           {showMore ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          More filters
+          More
           {advancedActiveCount > 0 && (
-            <span
-              className={cn(
-                'ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold w-4 h-4',
-                showMore || advancedActiveCount > 0
-                  ? 'bg-white text-[#0052CC]'
-                  : 'bg-[#0052CC] text-white'
-              )}
-            >
+            <span className={cn(
+              'ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold w-4 h-4',
+              showMore || advancedActiveCount > 0 ? 'bg-white text-[#0052CC]' : 'bg-[#0052CC] text-white',
+            )}>
               {advancedActiveCount}
             </span>
           )}
         </button>
 
-        {hasAnyFilter && (
-          <button
-            onClick={onClear}
-            className="text-xs text-[#0052CC] dark:text-blue-400 hover:underline ml-auto"
-          >
-            Clear all
-          </button>
-        )}
+        {/* Right side: saved filters + clear */}
+        <div className="ml-auto flex items-center gap-2">
+          <SavedFiltersPanel
+            currentFilters={filters}
+            onApply={applySavedFilter}
+          />
+          {hasAnyFilter && (
+            <button
+              onClick={onClear}
+              className="text-xs text-[#0052CC] dark:text-blue-400 hover:underline whitespace-nowrap"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Row 2 — collapsible More filters */}
+      {/* ── Row 2 — More filters (collapsible) ── */}
       {showMore && (
         <div className="flex items-center gap-2 px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700 bg-white dark:bg-gray-800 flex-wrap">
-          {/* Assignee — typeahead with unassigned option */}
+
+          {/* Assignee */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Assignee</FilterLabel>
             <UserSearchInput
               value={filters.assignee}
-              onChange={(username) => onUpdate({ assignee: username })}
+              onChange={username => onUpdate({ assignee: username })}
               placeholder="Assignee..."
               includeUnassigned
               label="Assignee"
             />
           </div>
 
-          {/* Reporter — typeahead (no unassigned) */}
+          {/* Reporter */}
           <UserSearchInput
             value={filters.reporter}
-            onChange={(username) => onUpdate({ reporter: username })}
+            onChange={username => onUpdate({ reporter: username })}
             placeholder="Reporter..."
             label="Reporter"
           />
@@ -401,34 +727,26 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             <select
               className={selectClass}
               value={filters.project ?? ''}
-              onChange={(e) =>
-                onUpdate({ project: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ project: e.target.value || undefined })}
             >
               <option value="">All</option>
-              {(projects ?? []).map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.name}
-                </option>
+              {(projects ?? []).map(p => (
+                <option key={p.key} value={p.key}>{p.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Sprint — fetched from agile API */}
+          {/* Sprint */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Sprint</FilterLabel>
             <select
               className={selectClass}
               value={filters.sprint ?? ''}
-              onChange={(e) =>
-                onUpdate({ sprint: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ sprint: e.target.value || undefined })}
             >
               <option value="">All</option>
-              {sprints.map((s) => (
-                <option key={s.id} value={s.name}>
-                  {s.name}
-                </option>
+              {sprints.map(s => (
+                <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>
           </div>
@@ -439,42 +757,32 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             <select
               className={selectClass}
               value={filters.resolution === 'all' ? 'all' : (filters.resolution ?? '')}
-              onChange={(e) => {
+              onChange={e => {
                 const val = e.target.value;
-                if (val === '') {
-                  onUpdate({ resolution: undefined });
-                } else if (val === 'all') {
-                  onUpdate({ resolution: 'all' });
-                } else {
-                  onUpdate({ resolution: val });
-                }
+                if (val === '')      onUpdate({ resolution: undefined });
+                else if (val === 'all') onUpdate({ resolution: 'all' });
+                else                onUpdate({ resolution: val });
               }}
             >
               <option value="">Unresolved</option>
               <option value="all">All (including resolved)</option>
-              {RESOLUTION_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
+              {RESOLUTION_OPTIONS.map(r => (
+                <option key={r} value={r}>{r}</option>
               ))}
             </select>
           </div>
 
-          {/* Created date */}
+          {/* Created */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Created</FilterLabel>
             <select
               className={selectClass}
               value={filters.createdAfter ?? ''}
-              onChange={(e) =>
-                onUpdate({ createdAfter: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ createdAfter: e.target.value || undefined })}
             >
               <option value="">Any time</option>
-              {CREATED_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              {CREATED_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
@@ -487,9 +795,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
               placeholder="e.g. frontend"
               className={cn(inputClass, 'min-w-[120px]')}
               value={filters.labels ?? ''}
-              onChange={(e) =>
-                onUpdate({ labels: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ labels: e.target.value || undefined })}
             />
           </div>
 
@@ -499,15 +805,11 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             <select
               className={selectClass}
               value={filters.updatedAfter ?? ''}
-              onChange={(e) =>
-                onUpdate({ updatedAfter: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ updatedAfter: e.target.value || undefined })}
             >
               <option value="">Any time</option>
-              {UPDATED_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              {UPDATED_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
@@ -518,65 +820,53 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             <select
               className={selectClass}
               value={filters.duedate ?? ''}
-              onChange={(e) =>
-                onUpdate({ duedate: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ duedate: e.target.value || undefined })}
             >
               <option value="">Any</option>
-              {DUEDATE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              {DUEDATE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
 
-          {/* Components — only when project selected */}
+          {/* Component (project-scoped) */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Component</FilterLabel>
             <select
               className={cn(selectClass, !filters.project && 'opacity-50 cursor-not-allowed')}
               value={filters.component ?? ''}
               disabled={!filters.project || components.length === 0}
-              onChange={(e) =>
-                onUpdate({ component: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ component: e.target.value || undefined })}
             >
               <option value="">All</option>
-              {components.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
+              {components.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Fix Version — only when project selected */}
+          {/* Fix Version (project-scoped) */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Fix version</FilterLabel>
             <select
               className={cn(selectClass, !filters.project && 'opacity-50 cursor-not-allowed')}
               value={filters.fixVersion ?? ''}
               disabled={!filters.project || fixVersions.length === 0}
-              onChange={(e) =>
-                onUpdate({ fixVersion: e.target.value || undefined })
-              }
+              onChange={e => onUpdate({ fixVersion: e.target.value || undefined })}
             >
               <option value="">All</option>
-              {fixVersions.map((v) => (
-                <option key={v.id} value={v.name}>
-                  {v.name}
-                </option>
+              {fixVersions.map(v => (
+                <option key={v.id} value={v.name}>{v.name}</option>
               ))}
             </select>
           </div>
         </div>
       )}
 
-      {/* Active filter chips */}
+      {/* ── Active filter chips ── */}
       {chips.length > 0 && (
         <div className="flex items-center gap-1.5 px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700 flex-wrap">
-          {chips.map((chip) => (
+          {chips.map(chip => (
             <span
               key={chip.key}
               className="inline-flex items-center gap-1 text-xs bg-[#E6F0FF] dark:bg-blue-900/40 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 dark:border-blue-600/30 rounded px-2 py-0.5"

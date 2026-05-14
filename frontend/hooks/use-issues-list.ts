@@ -4,71 +4,105 @@ import type { JiraSearchResult } from '@/types/jira';
 
 export interface IssueFilters {
   text?: string;
-  status?: string;        // 'new' | 'indeterminate' | 'done'
-  priority?: string;      // priority name
-  project?: string;       // project key
-  issuetype?: string;     // issue type name
-  assignee?: string;      // 'currentUser()' | 'EMPTY' | username
-  labels?: string;        // single label string
-  updatedAfter?: string;  // '-1d' | '-7d' | '-30d' | ''
-  duedate?: string;       // 'overdue' | 'this_week' | 'next_week' | ''
+  // ── Multi-value filters (replace old single-value status/priority/issuetype) ──
+  statusIn?: string[];        // category keys: 'new' | 'indeterminate' | 'done'
+  statusExclude?: boolean;    // if true → NOT IN
+  priorityIn?: string[];      // priority names: 'High' | 'Medium' | ...
+  priorityExclude?: boolean;
+  issuetypeIn?: string[];     // type names: 'Bug' | 'Task' | ...
+  issuetypeExclude?: boolean;
+  // ── Other filters ──
+  project?: string;           // project key
+  assignee?: string;          // 'currentUser()' | 'EMPTY' | username
+  unassignedOnly?: boolean;   // quick toggle: assignee is EMPTY
+  labels?: string;            // single label string
+  updatedAfter?: string;      // '-1d' | '-7d' | '-30d' | ''
+  duedate?: string;           // 'overdue' | 'this_week' | 'next_week' | ''
   startAt?: number;
-  // ── New filter fields ──
-  reporter?: string;      // 'currentUser()' | username (no EMPTY variant)
-  resolution?: string;    // resolution name, 'all', or undefined (defaults Unresolved)
-  sprint?: string;        // sprint name
-  component?: string;     // component name
-  fixVersion?: string;    // fix version name
-  createdAfter?: string;  // '-1d' | '-7d' | '-30d' | '-90d'
+  reporter?: string;          // 'currentUser()' | username
+  resolution?: string;        // resolution name, 'all', or undefined (defaults Unresolved)
+  sprint?: string;            // sprint name
+  component?: string;         // component name
+  fixVersion?: string;        // fix version name
+  createdAfter?: string;      // '-1d' | '-7d' | '-30d' | '-90d'
   // ── Sorting ──
-  sortField?: string;     // JQL field name e.g. 'updated', 'duedate', 'priority'
+  sortField?: string;         // JQL field name e.g. 'updated', 'duedate', 'priority'
   sortDir?: 'ASC' | 'DESC';
 }
+
+// Maps UI category key → Jira JQL status category name
+const STATUS_CAT: Record<string, string> = {
+  new: '"To Do"',
+  indeterminate: '"In Progress"',
+  done: '"Done"',
+};
 
 function buildJql(filters: IssueFilters): string {
   const parts: string[] = [];
 
-  // ── Resolution logic (moved from hardcoded default) ──
+  // ── Resolution (default: Unresolved only) ──
   if (filters.resolution === 'all') {
-    // Show all — no resolution constraint
+    // no constraint
   } else if (filters.resolution && filters.resolution !== 'Unresolved') {
     parts.push(`resolution = "${filters.resolution}"`);
   } else {
-    // Default: only unresolved
     parts.push('resolution = Unresolved');
   }
 
   if (filters.text) parts.push(`text ~ "${filters.text}"`);
 
-  if (filters.status === 'new') parts.push('statusCategory = "To Do"');
-  else if (filters.status === 'indeterminate')
-    parts.push('statusCategory = "In Progress"');
-  else if (filters.status === 'done') parts.push('statusCategory = "Done"');
+  // ── Multi-value Status (IN / NOT IN) ──
+  if (filters.statusIn?.length) {
+    const cats = filters.statusIn.map(s => STATUS_CAT[s] ?? `"${s}"`).join(', ');
+    parts.push(filters.statusExclude
+      ? `statusCategory NOT IN (${cats})`
+      : `statusCategory IN (${cats})`);
+  }
 
-  if (filters.priority) parts.push(`priority = "${filters.priority}"`);
+  // ── Multi-value Priority (IN / NOT IN) ──
+  if (filters.priorityIn?.length) {
+    const vals = filters.priorityIn.map(p => `"${p}"`).join(', ');
+    parts.push(filters.priorityExclude
+      ? `priority NOT IN (${vals})`
+      : `priority IN (${vals})`);
+  }
+
+  // ── Multi-value Issue Type (IN / NOT IN) ──
+  if (filters.issuetypeIn?.length) {
+    const vals = filters.issuetypeIn.map(t => `"${t}"`).join(', ');
+    parts.push(filters.issuetypeExclude
+      ? `issuetype NOT IN (${vals})`
+      : `issuetype IN (${vals})`);
+  }
+
   if (filters.project) parts.push(`project = "${filters.project}"`);
-  if (filters.issuetype) parts.push(`issuetype = "${filters.issuetype}"`);
-  if (filters.labels) parts.push(`labels = "${filters.labels}"`);
+  if (filters.labels)  parts.push(`labels = "${filters.labels}"`);
 
-  // Assignee filter: 'currentUser()' = Me, 'EMPTY' = Unassigned, undefined = all
-  if (filters.assignee === 'currentUser()') parts.push('assignee = currentUser()');
-  else if (filters.assignee === 'EMPTY') parts.push('assignee is EMPTY');
-  else if (filters.assignee) parts.push(`assignee = "${filters.assignee}"`);
+  // ── Assignee: unassignedOnly takes priority over assignee field ──
+  if (filters.unassignedOnly) {
+    parts.push('assignee is EMPTY');
+  } else if (filters.assignee === 'currentUser()') {
+    parts.push('assignee = currentUser()');
+  } else if (filters.assignee === 'EMPTY') {
+    parts.push('assignee is EMPTY');
+  } else if (filters.assignee) {
+    parts.push(`assignee = "${filters.assignee}"`);
+  }
 
-  // Reporter filter: 'currentUser()' → no quotes, else username string
+  // ── Reporter ──
   if (filters.reporter === 'currentUser()') parts.push('reporter = currentUser()');
   else if (filters.reporter) parts.push(`reporter = "${filters.reporter}"`);
 
-  if (filters.sprint) parts.push(`sprint = "${filters.sprint}"`);
-  if (filters.component) parts.push(`component = "${filters.component}"`);
+  if (filters.sprint)     parts.push(`sprint = "${filters.sprint}"`);
+  if (filters.component)  parts.push(`component = "${filters.component}"`);
   if (filters.fixVersion) parts.push(`fixVersion = "${filters.fixVersion}"`);
 
-  if (filters.updatedAfter === '-1d') parts.push('updated >= "-1d"');
-  else if (filters.updatedAfter === '-7d') parts.push('updated >= "-7d"');
+  if (filters.updatedAfter === '-1d')  parts.push('updated >= "-1d"');
+  else if (filters.updatedAfter === '-7d')  parts.push('updated >= "-7d"');
   else if (filters.updatedAfter === '-30d') parts.push('updated >= "-30d"');
 
-  if (filters.createdAfter === '-1d') parts.push('created >= "-1d"');
-  else if (filters.createdAfter === '-7d') parts.push('created >= "-7d"');
+  if (filters.createdAfter === '-1d')  parts.push('created >= "-1d"');
+  else if (filters.createdAfter === '-7d')  parts.push('created >= "-7d"');
   else if (filters.createdAfter === '-30d') parts.push('created >= "-30d"');
   else if (filters.createdAfter === '-90d') parts.push('created >= "-90d"');
 
@@ -80,7 +114,7 @@ function buildJql(filters: IssueFilters): string {
     parts.push('duedate >= startOfWeek(1) AND duedate <= endOfWeek(1)');
 
   const orderField = filters.sortField ?? 'updated';
-  const orderDir = filters.sortDir ?? 'DESC';
+  const orderDir   = filters.sortDir   ?? 'DESC';
   return (parts.length ? parts.join(' AND ') : '') + ` ORDER BY ${orderField} ${orderDir}`;
 }
 
