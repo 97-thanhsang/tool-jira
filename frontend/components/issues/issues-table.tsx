@@ -627,19 +627,29 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }
 
   const selectedCount  = selected.size;
-  const selectedIssues = issues.filter(i => selected.has(i.id));
+  // useMemo so selectedIssues reference is stable → doesn't re-trigger effects every render
+  const selectedIssues = useMemo(
+    () => issues.filter(i => selected.has(i.id)),
+    [issues, selected],
+  );
+  // Stable primitive for the dependency array
+  const firstSelectedKey = selectedIssues[0]?.key ?? null;
 
   const loadTransitions = useCallback(async () => {
-    if (!selectedIssues.length) return;
+    if (!firstSelectedKey) return;
     setTransLoading(true);
+    setCommonTrans([]);
     try {
-      const res = await api.get<{ transitions: JiraTransition[] }>(`/issue/${selectedIssues[0].key}/transitions`);
+      const res = await api.get<{ transitions: JiraTransition[] }>(`/issue/${firstSelectedKey}/transitions`);
       setCommonTrans(res.data.transitions ?? []);
     } catch { setCommonTrans([]); }
     finally { setTransLoading(false); }
-  }, [selectedIssues]);
+  }, [firstSelectedKey]);
 
-  useEffect(() => { if (selectedCount > 0) loadTransitions(); }, [selectedCount, loadTransitions]);
+  useEffect(() => {
+    if (firstSelectedKey) loadTransitions();
+    else { setCommonTrans([]); setTransLoading(false); }
+  }, [firstSelectedKey, loadTransitions]);
 
   async function applyTransition(t: JiraTransition) {
     if (transitioning) return;
@@ -771,25 +781,36 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
           <div className="relative">
             <button
               onClick={() => setTransDropOpen(p => !p)}
-              disabled={transitionsLoading || transitioning || bulkApplying}
+              disabled={transitioning || bulkApplying}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded text-[#172B4D] dark:text-gray-100 hover:border-[#0052CC] transition-colors disabled:opacity-50"
             >
-              {transitionsLoading || transitioning
+              {transitioning
                 ? <Loader2 size={11} className="animate-spin" />
                 : <ChevronDown size={11} />}
               Transition to…
             </button>
-            {transitionDropOpen && commonTransitions.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 min-w-[160px]">
-                {commonTransitions.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => applyTransition(t)}
-                    className="w-full text-left text-xs px-3 py-2 text-[#172B4D] dark:text-gray-200 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 transition-colors"
-                  >
-                    {t.name}
-                  </button>
-                ))}
+            {transitionDropOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 min-w-[160px] py-1">
+                {transitionsLoading ? (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#5E6C84]">
+                    <Loader2 size={12} className="animate-spin" /> Loading…
+                  </div>
+                ) : commonTransitions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[#5E6C84] dark:text-gray-400">
+                    No transitions available
+                  </div>
+                ) : (
+                  commonTransitions.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => applyTransition(t)}
+                      disabled={transitioning}
+                      className="w-full text-left text-xs px-3 py-2 text-[#172B4D] dark:text-gray-200 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 transition-colors disabled:opacity-50"
+                    >
+                      {t.name}
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
