@@ -178,15 +178,18 @@ function SortableHeader({ label, field, sortField, sortDir, onSort, className }:
     <button
       onClick={() => onSort(field, active && sortDir === 'ASC' ? 'DESC' : 'ASC')}
       className={cn(
-        'flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide transition-colors flex-shrink-0',
+        // NOTE: no hardcoded flex-shrink-0 here — callers pass it via className for fixed columns
+        'flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide transition-colors',
         active ? 'text-[#0052CC] dark:text-blue-400' : 'text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200',
         className,
       )}
     >
       {label}
-      {active
-        ? sortDir === 'ASC' ? <ChevronUp size={10} /> : <ChevronDown size={10} />
-        : <ChevronsUpDown size={10} className="opacity-40" />}
+      <span className="flex-shrink-0">
+        {active
+          ? sortDir === 'ASC' ? <ChevronUp size={10} /> : <ChevronDown size={10} />
+          : <ChevronsUpDown size={10} className="opacity-40" />}
+      </span>
     </button>
   );
 }
@@ -444,7 +447,7 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors cursor-pointer',
+        'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors cursor-pointer min-w-0',
         selected && 'bg-[#E6F0FF] dark:bg-blue-900/20',
       )}
       onClick={handleRowClick}
@@ -469,11 +472,11 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
             key={col.key}
             className={cn(
               col.widthClass,
+              // summary must NOT have flex-shrink-0 so it can give space to fixed columns
               col.key !== 'summary' && 'flex-shrink-0',
+              // summary needs min-w-0 so it can shrink in flex and truncate works
+              col.key === 'summary' && 'min-w-0 overflow-hidden',
               col.align === 'right' && 'text-right',
-              // Key column: link to issue page
-              col.key === 'key' && 'flex-shrink-0',
-              // Inline-editable columns
               isEditable && !isEditing && 'group/cell relative cursor-pointer',
               isEditing && 'relative',
             )}
@@ -487,10 +490,13 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
                 {col.key === 'due'      && <InlineDueDateEdit  issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
               </>
             ) : (
-              <div className={cn('flex items-center', isEditable && 'group-hover/cell:opacity-80 transition-opacity')}>
+              <div className={cn(
+                'flex items-center min-w-0',
+                isEditable && 'group-hover/cell:opacity-80 transition-opacity',
+              )}>
                 <CellContent col={col} issue={issue} />
                 {isEditable && col.key !== 'status' && (
-                  <span className="ml-1 opacity-0 group-hover/cell:opacity-60 transition-opacity">
+                  <span className="ml-1 flex-shrink-0 opacity-0 group-hover/cell:opacity-60 transition-opacity">
                     <ChevronDown size={9} className="text-[#5E6C84]" />
                   </span>
                 )}
@@ -914,7 +920,10 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               sortField={sortField}
               sortDir={sortDir}
               onSort={onSortChange}
-              className={cn(col.widthClass, col.key !== 'summary' && 'flex-shrink-0')}
+              className={cn(
+                col.widthClass,
+                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0 overflow-hidden',
+              )}
             />
           ) : (
             <span
@@ -922,7 +931,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               className={cn(
                 'text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide',
                 col.widthClass,
-                col.key !== 'summary' && 'flex-shrink-0',
+                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0 overflow-hidden',
               )}
             >
               {col.label}
