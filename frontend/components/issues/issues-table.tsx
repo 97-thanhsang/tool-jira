@@ -11,7 +11,7 @@ import { IssueDetailPanel } from './issue-detail-panel';
 import {
   Loader2, X, ChevronDown, ChevronRight,
   ChevronUp, ChevronsUpDown, FolderOpen,
-  Columns, Download, Check, User, Calendar,
+  Columns, Download, Check, User, Calendar, GripVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -41,7 +41,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'status',   label: 'Status',   widthClass: 'w-36',  sortField: 'status',   defaultVisible: true  },
   { key: 'priority', label: 'Priority', widthClass: 'w-16',  sortField: 'priority', defaultVisible: true  },
   { key: 'assignee', label: 'Assignee', widthClass: 'w-36',  sortField: 'assignee', defaultVisible: true  },
-  { key: 'reporter', label: 'Reporter', widthClass: 'w-32',  sortField: 'reporter', defaultVisible: true  },
+  { key: 'reporter', label: 'Reporter', widthClass: 'w-40',  sortField: 'reporter', defaultVisible: true  },
   { key: 'sprint',   label: 'Sprint',   widthClass: 'w-32',                          defaultVisible: true  },
   { key: 'est',      label: 'Est',      widthClass: 'w-20',                          defaultVisible: true  },
   { key: 'logged',   label: 'Logged',   widthClass: 'w-20',                          defaultVisible: false },
@@ -53,6 +53,8 @@ const COLUMNS: ColumnDef[] = [
 const DEFAULT_VISIBLE = new Set<ColumnKey>(
   COLUMNS.filter(c => c.defaultVisible).map(c => c.key)
 );
+
+const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map(c => c.key);
 
 // Columns that support inline edit in the grid
 const INLINE_EDITABLE: ColumnKey[] = ['status', 'priority', 'due'];
@@ -528,8 +530,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [transitionsLoading, setTransLoading]   = useState(false);
   const [collapsedGroups, setCollapsedGroups]   = useState<Set<string>>(new Set());
   const [visibleColumns, setVisibleColumns]     = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
+  const [columnOrder, setColumnOrder]           = useState<ColumnKey[]>(DEFAULT_ORDER);
   const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
   const [showColumnPicker, setShowColPicker]    = useState(false);
+  const [dragOverKey, setDragOverKey]           = useState<ColumnKey | null>(null);
+  const dragSrcRef                              = useRef<ColumnKey | null>(null);
   // Panel
   const [panelKey, setPanelKey]                 = useState<string | null>(null);
   // Bulk extras
@@ -585,8 +590,10 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }
 
   const visibleCols = useMemo(
-    () => COLUMNS.filter(c => visibleColumns.has(c.key)),
-    [visibleColumns],
+    () => columnOrder
+      .map(k => COLUMNS.find(c => c.key === k))
+      .filter((c): c is ColumnDef => c !== undefined && visibleColumns.has(c.key)),
+    [visibleColumns, columnOrder],
   );
 
   const groups = useMemo(() => groupIssues(issues, groupBy), [issues, groupBy]);
@@ -624,6 +631,33 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  }
+
+  // ── Column drag-and-drop reorder ──
+  function onColDragStart(key: ColumnKey) {
+    dragSrcRef.current = key;
+  }
+  function onColDragOver(e: React.DragEvent, key: ColumnKey) {
+    e.preventDefault();
+    if (dragSrcRef.current && dragSrcRef.current !== key) setDragOverKey(key);
+  }
+  function onColDrop(targetKey: ColumnKey) {
+    const src = dragSrcRef.current;
+    if (!src || src === targetKey) { setDragOverKey(null); return; }
+    setColumnOrder(prev => {
+      const next = [...prev];
+      const si = next.indexOf(src);
+      const ti = next.indexOf(targetKey);
+      next.splice(si, 1);
+      next.splice(ti, 0, src);
+      return next;
+    });
+    dragSrcRef.current = null;
+    setDragOverKey(null);
+  }
+  function onColDragEnd() {
+    dragSrcRef.current = null;
+    setDragOverKey(null);
   }
 
   const selectedCount  = selected.size;
@@ -730,31 +764,68 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               Columns
             </button>
             {showColumnPicker && (
-              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-44">
-                <div className="px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
-                  <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">
-                    Toggle columns
-                  </span>
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-52">
+                {/* Header */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
+                  <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">Columns</span>
+                  <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">drag to reorder</span>
                 </div>
-                {COLUMNS.map(col => (
-                  <button
-                    key={col.key}
-                    onClick={() => toggleColumn(col.key)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <div className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
-                      visibleColumns.has(col.key)
-                        ? 'bg-[#0052CC] border-[#0052CC]'
-                        : 'border-[#DFE1E6] dark:border-gray-500',
-                    )}>
-                      {visibleColumns.has(col.key) && <Check size={10} className="text-white" />}
+
+                {/* Rows (ordered by columnOrder) */}
+                {columnOrder.map(key => {
+                  const col = COLUMNS.find(c => c.key === key);
+                  if (!col) return null;
+                  const isOver = dragOverKey === key;
+                  return (
+                    <div
+                      key={col.key}
+                      draggable
+                      onDragStart={() => onColDragStart(col.key)}
+                      onDragOver={e => onColDragOver(e, col.key)}
+                      onDrop={() => onColDrop(col.key)}
+                      onDragEnd={onColDragEnd}
+                      className={cn(
+                        'flex items-center gap-2 px-2 py-2 transition-colors select-none',
+                        isOver
+                          ? 'bg-[#E6F0FF] dark:bg-blue-900/30 border-t-2 border-[#0052CC]'
+                          : 'hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+                      )}
+                    >
+                      {/* Drag handle */}
+                      <span className="text-[#C1C7D0] dark:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0">
+                        <GripVertical size={13} />
+                      </span>
+
+                      {/* Checkbox toggle */}
+                      <button
+                        onClick={() => toggleColumn(col.key)}
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                      >
+                        <div className={cn(
+                          'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
+                          visibleColumns.has(col.key)
+                            ? 'bg-[#0052CC] border-[#0052CC]'
+                            : 'border-[#DFE1E6] dark:border-gray-500',
+                        )}>
+                          {visibleColumns.has(col.key) && <Check size={10} className="text-white" />}
+                        </div>
+                        <span className="text-xs text-[#172B4D] dark:text-gray-200 truncate">
+                          {col.label}
+                        </span>
+                      </button>
                     </div>
-                    <span className="text-xs text-[#172B4D] dark:text-gray-200 text-left">
-                      {col.label}
-                    </span>
+                  );
+                })}
+
+                {/* Reset order */}
+                <div className="px-3 py-2 border-t border-[#DFE1E6] dark:border-gray-700">
+                  <button
+                    onClick={() => setColumnOrder(DEFAULT_ORDER)}
+                    className="text-[11px] text-[#5E6C84] dark:text-gray-400 hover:text-[#0052CC] dark:hover:text-blue-400 transition-colors"
+                  >
+                    Reset order
                   </button>
-                ))}
+                </div>
               </div>
             )}
           </div>
