@@ -77,6 +77,7 @@ export interface JiraIssue {
     fixVersions?: Array<{ id: string; name: string; released: boolean }>;
     components?: Array<{ id: string; name: string }>;
     sprint?: JiraSprint | JiraSprint[] | null;
+    customfield_10020?: JiraSprint | JiraSprint[] | null; // Jira Server sprint field alias
   };
 }
 

@@ -4,38 +4,35 @@ import type { JiraSearchResult } from '@/types/jira';
 
 export interface IssueFilters {
   text?: string;
-  // ── Multi-value filters (replace old single-value status/priority/issuetype) ──
-  statusIn?: string[];        // category keys: 'new' | 'indeterminate' | 'done'
-  statusExclude?: boolean;    // if true → NOT IN
-  priorityIn?: string[];      // priority names: 'High' | 'Medium' | ...
+  // ── Multi-value filters ──────────────────────────────────────────
+  statusIn?: string[];          // actual status names e.g. "Open", "In Progress"
+  statusExclude?: boolean;
+  priorityIn?: string[];
   priorityExclude?: boolean;
-  issuetypeIn?: string[];     // type names: 'Bug' | 'Task' | ...
+  issuetypeIn?: string[];
   issuetypeExclude?: boolean;
-  // ── Other filters ──
-  project?: string;           // project key
-  assignee?: string;          // 'currentUser()' | 'EMPTY' | username
-  unassignedOnly?: boolean;   // quick toggle: assignee is EMPTY
-  labels?: string;            // single label string
-  updatedAfter?: string;      // '-1d' | '-7d' | '-30d' | ''
-  duedate?: string;           // 'overdue' | 'this_week' | 'next_week' | ''
+  // ── Multi-value person/sprint ────────────────────────────────────
+  assigneeIn?: string[];        // 'currentUser()' | 'EMPTY' | username
+  reporterIn?: string[];        // 'currentUser()' | username
+  sprintIn?: string[];          // sprint names
+  // ── Legacy single-value (kept for backward compat) ──────────────
+  project?: string;
+  assignee?: string;
+  unassignedOnly?: boolean;
+  labels?: string;
+  updatedAfter?: string;
+  duedate?: string;
   startAt?: number;
-  reporter?: string;          // 'currentUser()' | username
-  resolution?: string;        // resolution name, 'all', or undefined (defaults Unresolved)
-  sprint?: string;            // sprint name
-  component?: string;         // component name
-  fixVersion?: string;        // fix version name
-  createdAfter?: string;      // '-1d' | '-7d' | '-30d' | '-90d'
-  // ── Sorting ──
-  sortField?: string;         // JQL field name e.g. 'updated', 'duedate', 'priority'
+  reporter?: string;
+  resolution?: string;
+  sprint?: string;
+  component?: string;
+  fixVersion?: string;
+  createdAfter?: string;
+  // ── Sorting ──────────────────────────────────────────────────────
+  sortField?: string;
   sortDir?: 'ASC' | 'DESC';
 }
-
-// Maps UI category key → Jira JQL status category name
-const STATUS_CAT: Record<string, string> = {
-  new: '"To Do"',
-  indeterminate: '"In Progress"',
-  done: '"Done"',
-};
 
 function buildJql(filters: IssueFilters): string {
   const parts: string[] = [];
@@ -51,15 +48,15 @@ function buildJql(filters: IssueFilters): string {
 
   if (filters.text) parts.push(`text ~ "${filters.text}"`);
 
-  // ── Multi-value Status (IN / NOT IN) ──
+  // ── Multi-value Status ──
   if (filters.statusIn?.length) {
-    const cats = filters.statusIn.map(s => STATUS_CAT[s] ?? `"${s}"`).join(', ');
+    const vals = filters.statusIn.map(s => `"${s}"`).join(', ');
     parts.push(filters.statusExclude
-      ? `statusCategory NOT IN (${cats})`
-      : `statusCategory IN (${cats})`);
+      ? `status NOT IN (${vals})`
+      : `status IN (${vals})`);
   }
 
-  // ── Multi-value Priority (IN / NOT IN) ──
+  // ── Multi-value Priority ──
   if (filters.priorityIn?.length) {
     const vals = filters.priorityIn.map(p => `"${p}"`).join(', ');
     parts.push(filters.priorityExclude
@@ -67,7 +64,7 @@ function buildJql(filters: IssueFilters): string {
       : `priority IN (${vals})`);
   }
 
-  // ── Multi-value Issue Type (IN / NOT IN) ──
+  // ── Multi-value Issue Type ──
   if (filters.issuetypeIn?.length) {
     const vals = filters.issuetypeIn.map(t => `"${t}"`).join(', ');
     parts.push(filters.issuetypeExclude
@@ -78,9 +75,19 @@ function buildJql(filters: IssueFilters): string {
   if (filters.project) parts.push(`project = "${filters.project}"`);
   if (filters.labels)  parts.push(`labels = "${filters.labels}"`);
 
-  // ── Assignee: unassignedOnly takes priority over assignee field ──
+  // ── Assignee: unassignedOnly > assigneeIn > assignee ──
   if (filters.unassignedOnly) {
     parts.push('assignee is EMPTY');
+  } else if (filters.assigneeIn?.length) {
+    const empties = filters.assigneeIn.filter(a => a === 'EMPTY');
+    const users   = filters.assigneeIn.filter(a => a !== 'EMPTY');
+    const clauses: string[] = [];
+    if (empties.length) clauses.push('assignee is EMPTY');
+    if (users.length) {
+      const vals = users.map(a => a === 'currentUser()' ? 'currentUser()' : `"${a}"`).join(', ');
+      clauses.push(`assignee IN (${vals})`);
+    }
+    parts.push(clauses.length === 1 ? clauses[0] : `(${clauses.join(' OR ')})`);
   } else if (filters.assignee === 'currentUser()') {
     parts.push('assignee = currentUser()');
   } else if (filters.assignee === 'EMPTY') {
@@ -89,11 +96,26 @@ function buildJql(filters: IssueFilters): string {
     parts.push(`assignee = "${filters.assignee}"`);
   }
 
-  // ── Reporter ──
-  if (filters.reporter === 'currentUser()') parts.push('reporter = currentUser()');
-  else if (filters.reporter) parts.push(`reporter = "${filters.reporter}"`);
+  // ── Reporter: reporterIn > reporter ──
+  if (filters.reporterIn?.length) {
+    const vals = filters.reporterIn
+      .map(r => r === 'currentUser()' ? 'currentUser()' : `"${r}"`)
+      .join(', ');
+    parts.push(`reporter IN (${vals})`);
+  } else if (filters.reporter === 'currentUser()') {
+    parts.push('reporter = currentUser()');
+  } else if (filters.reporter) {
+    parts.push(`reporter = "${filters.reporter}"`);
+  }
 
-  if (filters.sprint)     parts.push(`sprint = "${filters.sprint}"`);
+  // ── Sprint: sprintIn > sprint ──
+  if (filters.sprintIn?.length) {
+    const vals = filters.sprintIn.map(s => `"${s}"`).join(', ');
+    parts.push(`sprint IN (${vals})`);
+  } else if (filters.sprint) {
+    parts.push(`sprint = "${filters.sprint}"`);
+  }
+
   if (filters.component)  parts.push(`component = "${filters.component}"`);
   if (filters.fixVersion) parts.push(`fixVersion = "${filters.fixVersion}"`);
 
@@ -130,7 +152,8 @@ export function useIssuesList(filters: IssueFilters = {}) {
             jql: buildJql(filters),
             maxResults: 500,
             fields:
-              'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components,sprint,timetracking',
+              'summary,status,priority,issuetype,project,updated,created,assignee,reporter,' +
+              'labels,duedate,resolution,fixVersions,components,sprint,customfield_10020,timetracking',
           },
         })
         .then((r) => r.data),
