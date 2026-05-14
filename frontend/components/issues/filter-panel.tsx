@@ -650,7 +650,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   }
 
   return (
-    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-10">
+    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
 
       {/* ── Row 1 — always visible ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
