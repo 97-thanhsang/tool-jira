@@ -16,6 +16,13 @@ interface SubTaskIssue {
       displayName: string;
       avatarUrls?: { '16x16': string; '24x24': string; '32x32': string; '48x48': string };
     } | null;
+    parent?: {
+      key: string;
+      fields: {
+        summary: string;
+        issuetype: { name: string; iconUrl: string };
+      };
+    };
   };
 }
 
@@ -51,7 +58,7 @@ export async function fetchTeamPlan(
     params: {
       jql,
       maxResults: 2000,
-      fields: 'summary,issuetype,project,timetracking,status,priority,duedate,assignee',
+      fields: 'summary,issuetype,project,timetracking,status,priority,duedate,assignee,parent',
     },
   });
 
@@ -95,6 +102,10 @@ export async function fetchTeamPlan(
       status: issue.fields.status?.name ?? '',
       priority: issue.fields.priority?.name ?? 'Medium',
       duedate: duedate ?? undefined,
+      parentKey: issue.fields.parent?.key,
+      parentSummary: issue.fields.parent?.fields?.summary,
+      parentIssueTypeName: issue.fields.parent?.fields?.issuetype?.name,
+      parentIssueTypeIconUrl: issue.fields.parent?.fields?.issuetype?.iconUrl,
     };
 
     user.tasks.push(task);

@@ -163,6 +163,10 @@ export interface WorklogEntry {
   status?: string;             // "Done", "In Progress", "To Do", etc.
   priority?: string;           // "High", "Medium", etc.
   duedate?: string;            // "2026-05-15" or undefined
+  parentKey?: string;          // parent issue key (e.g., PROJ-10)
+  parentSummary?: string;      // parent issue summary
+  parentIssueTypeName?: string;    // "Story", "Task", "Epic", etc.
+  parentIssueTypeIconUrl?: string; // parent issue type icon URL
 }
 
 export interface WorklogFilters {
@@ -233,6 +237,10 @@ export interface TaskReport {
   status: string;                // "Done", "In Progress", "To Do", etc.
   priority: string;              // "High", "Medium", etc.
   duedate?: string;              // "2026-05-15" or undefined
+  parentKey?: string;            // parent issue key (e.g., PROJ-10)
+  parentSummary?: string;        // parent issue summary
+  parentIssueTypeName?: string;  // "Epic", "Story", "Task", etc.
+  parentIssueTypeIconUrl?: string; // parent issue type icon URL
 }
 
 export interface UserReport {

@@ -132,7 +132,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   const [configOpen, setConfigOpen] = useState(false);
   const [showWeekends, setShowWeekends] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-    project: true, key: true, summary: true, duedate: true, status: true, est: true,
+    project: true, tasktype: false, key: true, summary: true, type: false, est: true, status: true, duedate: true,
   });
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(
     () => new Set(data.users.map(u => u.username)),
@@ -229,7 +229,16 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
               <div className="fixed inset-0 z-30" onClick={() => setConfigOpen(false)} />
               <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 p-3">
                 <p className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">Visible Columns</p>
-                {(['project', 'key', 'summary', 'duedate', 'status', 'est'] as const).map((col) => (
+                {([
+                  ['project', 'Project'],
+                  ['tasktype', 'Task Type (parent)'],
+                  ['key', 'Task Key'],
+                  ['summary', 'Summary'],
+                  ['type', 'Type'],
+                  ['est', 'Estimate'],
+                  ['status', 'Status'],
+                  ['duedate', 'Due Date'],
+                ] as const).map(([col, label]) => (
                   <label key={col} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 cursor-pointer text-xs text-[#172B4D] dark:text-gray-200">
                     <input
                       type="checkbox"
@@ -237,12 +246,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                       onChange={() => setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }))}
                       className="w-3 h-3 accent-[#0052CC]"
                     />
-                    {col === 'project' && 'Project'}
-                    {col === 'key' && 'Task Key'}
-                    {col === 'summary' && 'Summary'}
-                    {col === 'duedate' && 'Due Date'}
-                    {col === 'status' && 'Status'}
-                    {col === 'est' && 'Estimate'}
+                    {label}
                   </label>
                 ))}
                 <div className="border-t border-[#DFE1E6] dark:border-gray-700 my-1.5" />
@@ -269,10 +273,16 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
           tasks = tasks.filter(t => t.issueKey.toLowerCase().includes(q) || t.summary.toLowerCase().includes(q));
         }
 
-        // Sort tasks — always by project first
+        // Sort tasks — always by project first, then optionally by parent
         tasks = [...tasks];
         const projectThenSort = (a: TaskReport, b: TaskReport) => {
           if (a.projectKey !== b.projectKey) return a.projectKey.localeCompare(b.projectKey);
+          // When tasktype column is on, secondary sort by parentKey for visual grouping
+          if (visibleColumns.tasktype) {
+            const aP = a.parentKey ?? '';
+            const bP = b.parentKey ?? '';
+            if (aP !== bP) return aP.localeCompare(bP);
+          }
           if (sortBy === 'due-asc') {
             if (!a.duedate && !b.duedate) return 0;
             if (!a.duedate) return 1;
@@ -418,8 +428,10 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                     {/* Column headers */}
                     <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
                       {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2">Project</div>}
+                      {visibleColumns.tasktype && <div className="w-[160px] flex-shrink-0 px-2 py-2">Task Type</div>}
                       {visibleColumns.key && <div className="w-[150px] flex-shrink-0 px-3 py-2">Key</div>}
                       {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
+                      {visibleColumns.type && <div className="w-[90px] flex-shrink-0 px-1 py-2">Type</div>}
                       {visibleColumns.est && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right">Est</div>}
                       {visibleColumns.status && <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">Status</div>}
                       {visibleColumns.duedate && <div className="w-[72px] flex-shrink-0 px-2 py-2 text-center">Due</div>}
@@ -438,7 +450,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                       ))}
                     </div>
 
-                    {/* Task rows grouped by project */}
+                    {/* Task rows grouped by project (→ optionally by parent) */}
                     {(() => {
                       const groups: Array<{ projKey: string; tasks: TaskReport[] }> = [];
                       for (const task of tasks) {
@@ -474,21 +486,93 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                             </div>
                           )}
 
-                          <div className="flex-1 flex flex-col min-w-0">
-                            {group.tasks.map((task, ti) => {
-                              const isLastInGroup = ti === group.tasks.length - 1;
-                              return (
+                          {/* When tasktype column is ON → sub-group by parent; otherwise flat list */}
+                          {visibleColumns.tasktype ? (() => {
+                            // Build parent sub-groups (tasks already sorted by parentKey above)
+                            type ParentGroup = { parentKey: string; parentSummary: string; parentTypeName: string; parentTypeIcon: string; tasks: TaskReport[] };
+                            const parentGroups: ParentGroup[] = [];
+                            for (const task of group.tasks) {
+                              const pKey = task.parentKey ?? '__none__';
+                              const last2 = parentGroups[parentGroups.length - 1];
+                              if (last2 && last2.parentKey === pKey) {
+                                last2.tasks.push(task);
+                              } else {
+                                parentGroups.push({
+                                  parentKey: pKey,
+                                  parentSummary: task.parentSummary ?? '',
+                                  parentTypeName: task.parentIssueTypeName ?? '',
+                                  parentTypeIcon: task.parentIssueTypeIconUrl ?? '',
+                                  tasks: [task],
+                                });
+                              }
+                            }
+                            return (
+                              <div className="flex-1 flex flex-col min-w-0">
+                                {parentGroups.map((pg, pgi) => (
+                                  <div
+                                    key={`${pg.parentKey}-${pgi}`}
+                                    className={cn(
+                                      'flex',
+                                      pgi < parentGroups.length - 1 && 'border-b border-[#DFE1E6] dark:border-gray-700',
+                                    )}
+                                  >
+                                    {/* Tasktype cell — spans all child task rows */}
+                                    <div
+                                      className="w-[160px] flex-shrink-0 flex flex-col items-start justify-center px-2 py-1.5 border-r border-[#DFE1E6] dark:border-gray-700 gap-0.5"
+                                      style={{ minHeight: `${pg.tasks.length * 32}px` }}
+                                    >
+                                      {pg.parentKey !== '__none__' ? (
+                                        <>
+                                          <div className="flex items-center gap-1 min-w-0">
+                                            {pg.parentTypeIcon && (
+                                              <img src={pg.parentTypeIcon} alt={pg.parentTypeName} className="w-3 h-3 flex-shrink-0" />
+                                            )}
+                                            <span className="text-[11px] font-semibold text-[#0052CC] dark:text-blue-400 truncate">
+                                              {pg.parentKey}
+                                            </span>
+                                          </div>
+                                          <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 leading-tight line-clamp-2">
+                                            {pg.parentSummary}
+                                          </span>
+                                          <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 mt-0.5">
+                                            {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <span className="text-[9px] text-[#C1C7D0] dark:text-gray-600 italic">No parent</span>
+                                      )}
+                                    </div>
+                                    {/* Task rows for this parent */}
+                                    <div className="flex-1 flex flex-col min-w-0">
+                                      {pg.tasks.map((task, ti) => (
+                                        <TaskRow
+                                          key={task.issueKey}
+                                          task={task}
+                                          dayHeaders={dayHeaders}
+                                          dailyTotals={dailyTotals}
+                                          isLastInGroup={ti === pg.tasks.length - 1}
+                                          visibleColumns={visibleColumns}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })() : (
+                            <div className="flex-1 flex flex-col min-w-0">
+                              {group.tasks.map((task, ti) => (
                                 <TaskRow
                                   key={task.issueKey}
                                   task={task}
                                   dayHeaders={dayHeaders}
                                   dailyTotals={dailyTotals}
-                                  isLastInGroup={isLastInGroup}
+                                  isLastInGroup={ti === group.tasks.length - 1}
                                   visibleColumns={visibleColumns}
                                 />
-                              );
-                            })}
-                          </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ));
                     })()}
@@ -496,6 +580,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                     {/* Total row */}
                     <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
                       {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2" />}
+                      {visibleColumns.tasktype && <div className="w-[160px] flex-shrink-0 px-2 py-2" />}
                       {visibleColumns.key && (
                         <div className="w-[150px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
                       )}
@@ -504,6 +589,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                           {tasks.length} task{tasks.length !== 1 ? 's' : ''}
                         </div>
                       )}
+                      {visibleColumns.type && <div className="w-[90px] flex-shrink-0 px-1 py-2" />}
                       {visibleColumns.est && (
                         <div className="w-[72px] flex-shrink-0 px-2 py-2 text-right text-[#172B4D] dark:text-gray-100">
                           {formatCellHours(totalEst)}
@@ -583,6 +669,15 @@ function TaskRow({
       {visibleColumns.summary && (
         <div className="flex-1 px-2 py-2 text-[#172B4D] dark:text-gray-200 truncate min-w-0">
           {task.summary}
+        </div>
+      )}
+
+      {visibleColumns.type && (
+        <div className="w-[90px] flex-shrink-0 px-1 py-2 flex items-center gap-1 min-w-0 overflow-hidden">
+          {task.issueTypeIconUrl && (
+            <img src={task.issueTypeIconUrl} alt={task.issueTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
+          )}
+          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate">{task.issueTypeName}</span>
         </div>
       )}
 
