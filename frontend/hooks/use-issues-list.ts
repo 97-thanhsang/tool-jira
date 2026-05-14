@@ -20,6 +20,9 @@ export interface IssueFilters {
   component?: string;     // component name
   fixVersion?: string;    // fix version name
   createdAfter?: string;  // '-1d' | '-7d' | '-30d' | '-90d'
+  // ── Sorting ──
+  sortField?: string;     // JQL field name e.g. 'updated', 'duedate', 'priority'
+  sortDir?: 'ASC' | 'DESC';
 }
 
 function buildJql(filters: IssueFilters): string {
@@ -76,13 +79,13 @@ function buildJql(filters: IssueFilters): string {
   else if (filters.duedate === 'next_week')
     parts.push('duedate >= startOfWeek(1) AND duedate <= endOfWeek(1)');
 
-  return parts.join(' AND ') + ' ORDER BY updated DESC';
+  const orderField = filters.sortField ?? 'updated';
+  const orderDir = filters.sortDir ?? 'DESC';
+  return (parts.length ? parts.join(' AND ') : '') + ` ORDER BY ${orderField} ${orderDir}`;
 }
 
-const PAGE_SIZE = 25;
-
 export function useIssuesList(filters: IssueFilters = {}) {
-  const swrKey = JSON.stringify({ ...filters, startAt: filters.startAt ?? 0 });
+  const swrKey = JSON.stringify(filters);
 
   const { data, error, isLoading, mutate } = useSWR(
     swrKey,
@@ -91,10 +94,9 @@ export function useIssuesList(filters: IssueFilters = {}) {
         .get<JiraSearchResult>('/search', {
           params: {
             jql: buildJql(filters),
-            maxResults: PAGE_SIZE,
-            startAt: filters.startAt ?? 0,
+            maxResults: 500,
             fields:
-              'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components,sprint',
+              'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components,sprint,timetracking',
           },
         })
         .then((r) => r.data),

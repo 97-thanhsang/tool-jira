@@ -1,44 +1,279 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import type { JiraIssue, JiraTransition } from '@/types/jira';
-import { IssueRow } from './issue-row';
+import { StatusBadge } from '@/components/shared/status-badge';
+import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
-import { Loader2, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Loader2, X, ChevronDown, ChevronRight,
+  ChevronUp, ChevronsUpDown, FolderOpen,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface IssuesTableProps {
   issues: JiraIssue[];
   total: number;
   isLoading: boolean;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
+  sortField: string;
+  sortDir: 'ASC' | 'DESC';
+  onSortChange: (field: string, dir: 'ASC' | 'DESC') => void;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function isOverdue(duedate: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(duedate) < today;
+}
+
+function IssueTypeFallback({ name }: { name: string }) {
+  const colors: Record<string, string> = {
+    Bug: 'bg-red-500',
+    Task: 'bg-blue-500',
+    Story: 'bg-green-500',
+    Epic: 'bg-purple-500',
+    'Sub-task': 'bg-sky-400',
+  };
+  const bg = colors[name] ?? 'bg-gray-400';
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm ${bg} text-white text-[8px] font-bold flex-shrink-0`}
+      title={name}
+    >
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function SortableHeader({
+  label,
+  field,
+  sortField,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  field: string;
+  sortField: string;
+  sortDir: 'ASC' | 'DESC';
+  onSort: (field: string, dir: 'ASC' | 'DESC') => void;
+  className?: string;
+}) {
+  const active = sortField === field;
+  function handleClick() {
+    onSort(field, active && sortDir === 'ASC' ? 'DESC' : 'ASC');
+  }
+  return (
+    <button
+      onClick={handleClick}
+      className={cn(
+        'flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide transition-colors flex-shrink-0',
+        active
+          ? 'text-[#0052CC] dark:text-blue-400'
+          : 'text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200',
+        className
+      )}
+    >
+      {label}
+      {active ? (
+        sortDir === 'ASC'
+          ? <ChevronUp size={10} />
+          : <ChevronDown size={10} />
+      ) : (
+        <ChevronsUpDown size={10} className="opacity-40" />
+      )}
+    </button>
+  );
+}
+
+function IssueTableRow({
+  issue,
+  selected,
+  onToggle,
+}: {
+  issue: JiraIssue;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const f = issue.fields;
+  const due = f.duedate
+    ? { text: formatDate(f.duedate), overdue: isOverdue(f.duedate) }
+    : null;
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors',
+        selected && 'bg-[#E6F0FF] dark:bg-blue-900/20'
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={onToggle}
+        onClick={(e) => e.stopPropagation()}
+        className="w-3.5 h-3.5 rounded border-[#DFE1E6] cursor-pointer accent-[#0052CC] flex-shrink-0"
+        aria-label={`Select ${issue.key}`}
+      />
+      <Link
+        href={`/issues/${issue.key}`}
+        className="flex items-center gap-3 flex-1 min-w-0"
+      >
+        {/* Key */}
+        <div className="flex items-center gap-1.5 w-36 flex-shrink-0 min-w-0">
+          {f.issuetype.iconUrl ? (
+            <Image
+              src={f.issuetype.iconUrl}
+              alt={f.issuetype.name}
+              width={14}
+              height={14}
+              className="flex-shrink-0"
+              unoptimized
+            />
+          ) : (
+            <IssueTypeFallback name={f.issuetype.name} />
+          )}
+          <span className="text-xs text-[#0052CC] dark:text-blue-400 font-medium truncate">
+            {issue.key}
+          </span>
+        </div>
+
+        {/* Summary */}
+        <span className="flex-1 text-sm text-[#172B4D] dark:text-gray-100 truncate min-w-0">
+          {f.summary}
+        </span>
+
+        {/* Status */}
+        <div className="flex-shrink-0 w-36">
+          <StatusBadge status={f.status} />
+        </div>
+
+        {/* Priority */}
+        <div className="flex items-center flex-shrink-0 w-16">
+          <PriorityIcon priority={f.priority} />
+        </div>
+
+        {/* Assignee */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 w-36 min-w-0">
+          {f.assignee ? (
+            <>
+              {f.assignee.avatarUrls['24x24'] ? (
+                <Image
+                  src={f.assignee.avatarUrls['24x24']}
+                  alt={f.assignee.displayName}
+                  width={18}
+                  height={18}
+                  className="rounded-full flex-shrink-0"
+                  unoptimized
+                />
+              ) : (
+                <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0">
+                  {f.assignee.displayName.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="text-xs text-[#5E6C84] dark:text-gray-400 truncate">
+                {f.assignee.displayName}
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-[#5E6C84] dark:text-gray-500 italic">
+              Unassigned
+            </span>
+          )}
+        </div>
+
+        {/* Reporter */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 w-32 min-w-0">
+          {f.reporter.avatarUrls['24x24'] ? (
+            <Image
+              src={f.reporter.avatarUrls['24x24']}
+              alt={f.reporter.displayName}
+              width={18}
+              height={18}
+              className="rounded-full flex-shrink-0"
+              unoptimized
+            />
+          ) : (
+            <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-gray-400 text-white text-[9px] font-bold flex-shrink-0">
+              {f.reporter.displayName.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="text-xs text-[#5E6C84] dark:text-gray-400 truncate">
+            {f.reporter.displayName}
+          </span>
+        </div>
+
+        {/* Est */}
+        <span className="text-xs text-[#5E6C84] dark:text-gray-400 flex-shrink-0 w-20 truncate">
+          {f.timetracking?.originalEstimate ?? '—'}
+        </span>
+
+        {/* Due */}
+        <span
+          className={cn(
+            'text-xs flex-shrink-0 w-24',
+            due?.overdue
+              ? 'text-red-500 dark:text-red-400 font-medium'
+              : 'text-[#5E6C84] dark:text-gray-400'
+          )}
+        >
+          {due?.text ?? '—'}
+        </span>
+
+        {/* Updated */}
+        <span className="text-xs text-[#5E6C84] dark:text-gray-400 flex-shrink-0 w-24 text-right">
+          {formatDate(f.updated)}
+        </span>
+      </Link>
+    </div>
+  );
 }
 
 export function IssuesTable({
   issues,
   total,
   isLoading,
-  page,
-  pageSize,
-  onPageChange,
+  sortField,
+  sortDir,
+  onSortChange,
 }: IssuesTableProps) {
-  // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning] = useState(false);
   const [transitionDropOpen, setTransitionDropOpen] = useState(false);
   const [commonTransitions, setCommonTransitions] = useState<JiraTransition[]>([]);
   const [transitionsLoading, setTransitionsLoading] = useState(false);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
-  // Clear selection when page changes
-  useEffect(() => {
-    setSelected(new Set());
-  }, [page]);
+  // Group issues by project
+  const groups = useMemo(() => {
+    const map = new Map<string, { projectName: string; issues: JiraIssue[] }>();
+    for (const issue of issues) {
+      const key = issue.fields.project.key;
+      if (!map.has(key)) {
+        map.set(key, { projectName: issue.fields.project.name, issues: [] });
+      }
+      map.get(key)!.issues.push(issue);
+    }
+    return Array.from(map.entries()).map(([projectKey, val]) => ({
+      projectKey,
+      projectName: val.projectName,
+      issues: val.issues,
+    }));
+  }, [issues]);
 
-  const allSelected =
-    issues.length > 0 && issues.every((i) => selected.has(i.id));
+  const allSelected = issues.length > 0 && issues.every((i) => selected.has(i.id));
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -69,17 +304,24 @@ export function IssuesTable({
     setSelected(new Set());
   }
 
+  function toggleProject(projectKey: string) {
+    setCollapsedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectKey)) next.delete(projectKey);
+      else next.add(projectKey);
+      return next;
+    });
+  }
+
   const selectedCount = selected.size;
   const selectedIssues = issues.filter((i) => selected.has(i.id));
 
-  // Load transitions when selection changes
   const loadTransitions = useCallback(async () => {
     if (selectedIssues.length === 0) return;
     setTransitionsLoading(true);
     try {
-      const issueKey = selectedIssues[0].key;
       const res = await api.get<{ transitions: JiraTransition[] }>(
-        `/issue/${issueKey}/transitions`
+        `/issue/${selectedIssues[0].key}/transitions`
       );
       setCommonTransitions(res.data.transitions ?? []);
     } catch {
@@ -90,35 +332,26 @@ export function IssuesTable({
   }, [selectedIssues]);
 
   useEffect(() => {
-    if (selectedCount > 0) {
-      loadTransitions();
-    }
+    if (selectedCount > 0) loadTransitions();
   }, [selectedCount, loadTransitions]);
 
   async function applyTransition(transition: JiraTransition) {
     if (transitioning) return;
     setTransitionDropOpen(false);
     setTransitioning(true);
-
     for (const issue of selectedIssues) {
       try {
         await api.post(`/issue/${issue.key}/transitions`, {
           transition: { id: transition.id },
         });
       } catch {
-        // Continue with other issues even if one fails
+        // continue
       }
     }
-
     setTransitioning(false);
     setSelected(new Set());
     window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
   }
-
-  // Pagination
-  const totalPages = Math.ceil(total / pageSize);
-  const startItem = total === 0 ? 0 : page * pageSize + 1;
-  const endItem = Math.min((page + 1) * pageSize, total);
 
   if (isLoading) {
     return (
@@ -179,7 +412,7 @@ export function IssuesTable({
 
       {/* Table */}
       <div className="bg-white dark:bg-gray-800 rounded-sm border border-[#DFE1E6] dark:border-gray-700 overflow-hidden">
-        {/* Header row */}
+        {/* Header */}
         <div className="flex items-center gap-3 px-4 py-2 bg-[#F4F5F7] dark:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-600">
           <input
             type="checkbox"
@@ -188,27 +421,17 @@ export function IssuesTable({
             className="w-3.5 h-3.5 rounded border-[#DFE1E6] flex-shrink-0 cursor-pointer accent-[#0052CC]"
             aria-label="Select all"
           />
-          <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-28 flex-shrink-0">
-            Key
-          </span>
-          <span className="flex-1 text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide min-w-0">
-            Summary
-          </span>
-          <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-28 flex-shrink-0">
-            Status
-          </span>
+          <SortableHeader label="Key" field="key" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-36" />
+          <SortableHeader label="Summary" field="summary" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="flex-1" />
+          <SortableHeader label="Status" field="status" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-36" />
+          <SortableHeader label="Priority" field="priority" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-16" />
+          <SortableHeader label="Assignee" field="assignee" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-36" />
+          <SortableHeader label="Reporter" field="reporter" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-32" />
           <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-20 flex-shrink-0">
-            Priority
+            Est
           </span>
-          <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-28 flex-shrink-0">
-            Assignee
-          </span>
-          <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-28 flex-shrink-0">
-            Project
-          </span>
-          <span className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide w-20 flex-shrink-0 text-right">
-            Updated
-          </span>
+          <SortableHeader label="Due" field="duedate" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-24" />
+          <SortableHeader label="Updated" field="updated" sortField={sortField} sortDir={sortDir} onSort={onSortChange} className="w-24 justify-end" />
         </div>
 
         {issues.length === 0 ? (
@@ -216,57 +439,51 @@ export function IssuesTable({
             No issues found
           </div>
         ) : (
-          issues.map((issue) => (
-            <div key={issue.id} className="flex items-center">
-              <div className="flex-shrink-0 pl-4 pr-1">
-                <input
-                  type="checkbox"
-                  checked={selected.has(issue.id)}
-                  onChange={() => toggleSelect(issue.id)}
-                  className={cn(
-                    'w-3.5 h-3.5 rounded border-[#DFE1E6] cursor-pointer accent-[#0052CC]'
-                  )}
-                  aria-label={`Select ${issue.key}`}
-                  onClick={(e) => e.stopPropagation()}
-                />
+          groups.map(({ projectKey, projectName, issues: groupIssues }) => {
+            const collapsed = collapsedProjects.has(projectKey);
+            return (
+              <div key={projectKey}>
+                {/* Project group header */}
+                <button
+                  onClick={() => toggleProject(projectKey)}
+                  className="w-full flex items-center gap-2 px-4 py-2 bg-[#F4F5F7] dark:bg-gray-750 hover:bg-[#EBECF0] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-600 transition-colors"
+                >
+                  {collapsed
+                    ? <ChevronRight size={13} className="text-[#5E6C84] flex-shrink-0" />
+                    : <ChevronDown size={13} className="text-[#5E6C84] flex-shrink-0" />
+                  }
+                  <FolderOpen size={13} className="text-[#5E6C84] flex-shrink-0" />
+                  <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">
+                    {projectName}
+                  </span>
+                  <span className="text-xs text-[#5E6C84] dark:text-gray-400 font-medium">
+                    ({groupIssues.length})
+                  </span>
+                </button>
+
+                {/* Issues in this group */}
+                {!collapsed && groupIssues.map((issue) => (
+                  <IssueTableRow
+                    key={issue.id}
+                    issue={issue}
+                    selected={selected.has(issue.id)}
+                    onToggle={() => toggleSelect(issue.id)}
+                  />
+                ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <IssueRow issue={issue} />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Pagination footer */}
+      {/* Issue count footer */}
       {total > 0 && (
-        <div className="flex items-center justify-between mt-3 px-1">
+        <div className="mt-2 px-1">
           <span className="text-xs text-[#5E6C84] dark:text-gray-400">
-            {total === 0
-              ? 'No issues'
-              : `Showing ${startItem}–${endItem} of ${total} issues`}
+            {issues.length < total
+              ? `Hiển thị ${issues.length} / ${total} issues`
+              : `${total} issues`}
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 0}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-200 hover:border-[#0052CC] hover:text-[#0052CC] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={12} />
-              Prev
-            </button>
-            <span className="text-xs text-[#5E6C84] dark:text-gray-400 px-2">
-              {page + 1} / {totalPages || 1}
-            </span>
-            <button
-              onClick={() => onPageChange(page + 1)}
-              disabled={page + 1 >= totalPages}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-200 hover:border-[#0052CC] hover:text-[#0052CC] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-              <ChevronRight size={12} />
-            </button>
-          </div>
         </div>
       )}
     </div>
