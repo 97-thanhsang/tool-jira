@@ -11,7 +11,8 @@ import { IssueDetailPanel } from './issue-detail-panel';
 import {
   Loader2, X, ChevronDown, ChevronRight,
   ChevronUp, ChevronsUpDown, FolderOpen,
-  Columns, Download, Check, User, Calendar,
+  Columns, Download, Check, User, Calendar, GripVertical,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -22,12 +23,11 @@ export type ColumnKey =
   | 'assignee' | 'reporter' | 'sprint' | 'est' | 'logged'
   | 'labels' | 'due' | 'updated';
 
-export type GroupBy = 'none' | 'project' | 'status' | 'sprint' | 'assignee' | 'priority';
+export type GroupBy = 'none' | 'project' | 'status' | 'issuetype' | 'sprint' | 'assignee' | 'priority';
 
 interface ColumnDef {
   key: ColumnKey;
   label: string;
-  /** Tailwind width class — must be a complete static string for JIT */
   widthClass: string;
   sortField?: string;
   defaultVisible: boolean;
@@ -41,7 +41,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'status',   label: 'Status',   widthClass: 'w-36',  sortField: 'status',   defaultVisible: true  },
   { key: 'priority', label: 'Priority', widthClass: 'w-16',  sortField: 'priority', defaultVisible: true  },
   { key: 'assignee', label: 'Assignee', widthClass: 'w-36',  sortField: 'assignee', defaultVisible: true  },
-  { key: 'reporter', label: 'Reporter', widthClass: 'w-32',  sortField: 'reporter', defaultVisible: true  },
+  { key: 'reporter', label: 'Reporter', widthClass: 'w-40',  sortField: 'reporter', defaultVisible: true  },
   { key: 'sprint',   label: 'Sprint',   widthClass: 'w-32',                          defaultVisible: true  },
   { key: 'est',      label: 'Est',      widthClass: 'w-20',                          defaultVisible: true  },
   { key: 'logged',   label: 'Logged',   widthClass: 'w-20',                          defaultVisible: false },
@@ -54,14 +54,15 @@ const DEFAULT_VISIBLE = new Set<ColumnKey>(
   COLUMNS.filter(c => c.defaultVisible).map(c => c.key)
 );
 
-// Columns that support inline edit in the grid
+const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map(c => c.key);
+
 const INLINE_EDITABLE: ColumnKey[] = ['status', 'priority', 'due'];
 
 const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   none: 'None', project: 'Project', status: 'Status',
-  sprint: 'Sprint', assignee: 'Assignee', priority: 'Priority',
+  issuetype: 'Type', sprint: 'Sprint', assignee: 'Assignee', priority: 'Priority',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -78,11 +79,13 @@ function isOverdue(duedate: string): boolean {
   return new Date(duedate) < today;
 }
 
-function resolveSprint(raw: unknown): JiraSprint | null {
+/** Resolve sprint from both `sprint` and `customfield_10020` (Jira Server alias) */
+function resolveSprint(issue: JiraIssue): JiraSprint | null {
+  const raw = issue.fields.sprint ?? issue.fields.customfield_10020;
   if (!raw) return null;
   if (Array.isArray(raw)) {
     return (raw as JiraSprint[]).find(s => s.state === 'active')
-      ?? raw[raw.length - 1]
+      ?? (raw as JiraSprint[])[raw.length - 1]
       ?? null;
   }
   return raw as JiraSprint;
@@ -98,7 +101,7 @@ function getCellText(key: ColumnKey, issue: JiraIssue): string {
     case 'priority': return f.priority?.name ?? '';
     case 'assignee': return f.assignee?.displayName ?? 'Unassigned';
     case 'reporter': return f.reporter?.displayName ?? '';
-    case 'sprint':   return resolveSprint(f.sprint)?.name ?? '';
+    case 'sprint':   return resolveSprint(issue)?.name ?? '';
     case 'est':      return f.timetracking?.originalEstimate ?? '';
     case 'logged':   return f.timetracking?.timeSpent ?? '';
     case 'labels':   return (f.labels ?? []).join(', ');
@@ -118,14 +121,16 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
 
     switch (groupBy) {
       case 'project':
-        gKey = f.project.key; gLabel = f.project.name; break;
-      case 'status': {
-        const cat = f.status.statusCategory.key;
-        const names: Record<string, string> = { new: 'To Do', indeterminate: 'In Progress', done: 'Done' };
-        gKey = cat; gLabel = names[cat] ?? f.status.name; break;
-      }
+        gKey = f.project.key; gLabel = `${f.project.name} (${f.project.key})`; break;
+      case 'status':
+        // Group by actual status name (not just category)
+        gKey = f.status.name;
+        gLabel = f.status.name;
+        break;
+      case 'issuetype':
+        gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
       case 'sprint': {
-        const s = resolveSprint(f.sprint);
+        const s = resolveSprint(issue);
         gKey = s ? String(s.id) : '__nosprint';
         gLabel = s?.name ?? 'No Sprint'; break;
       }
@@ -144,6 +149,24 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
   }
 
   return Array.from(map.entries()).map(([key, val]) => ({ key, label: val.label, issues: val.issues }));
+}
+
+// ─── Toast ───────────────────────────────────────────────────────
+
+interface ToastInfo { msg: string; type: 'success' | 'error' }
+
+function Toast({ toast }: { toast: ToastInfo | null }) {
+  if (!toast) return null;
+  return (
+    <div className={cn(
+      'fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 text-xs px-4 py-2 rounded-full shadow-xl text-white font-medium z-[100] pointer-events-none',
+      'animate-[fadeIn_0.2s_ease-out]',
+      toast.type === 'success' ? 'bg-green-500' : 'bg-red-500',
+    )}>
+      {toast.type === 'success' ? <Check size={13} /> : <AlertTriangle size={13} />}
+      {toast.msg}
+    </div>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────
@@ -178,7 +201,6 @@ function SortableHeader({ label, field, sortField, sortDir, onSort, className }:
     <button
       onClick={() => onSort(field, active && sortDir === 'ASC' ? 'DESC' : 'ASC')}
       className={cn(
-        // NOTE: no hardcoded flex-shrink-0 here — callers pass it via className for fixed columns
         'flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide transition-colors',
         active ? 'text-[#0052CC] dark:text-blue-400' : 'text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200',
         className,
@@ -249,7 +271,7 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
       );
 
     case 'sprint': {
-      const s = resolveSprint(f.sprint);
+      const s = resolveSprint(issue);
       return (
         <span className="text-xs text-[#5E6C84] dark:text-gray-400 truncate">
           {s ? s.name : '—'}
@@ -297,8 +319,8 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
 
 // ── Inline edit cells ─────────────────────────────────────────────
 
-function InlineStatusEdit({ issue, onDone, onCancel }: {
-  issue: JiraIssue; onDone: () => void; onCancel: () => void;
+function InlineStatusEdit({ issue, onDone, onCancel, onError }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void; onError?: () => void;
 }) {
   const [transitions, setTransitions] = useState<JiraTransition[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -322,8 +344,13 @@ function InlineStatusEdit({ issue, onDone, onCancel }: {
 
   async function apply(t: JiraTransition) {
     setApplying(t.id);
-    try { await api.post(`/issue/${issue.key}/transitions`, { transition: { id: t.id } }); onDone(); }
-    catch { setApplying(null); }
+    try {
+      await api.post(`/issue/${issue.key}/transitions`, { transition: { id: t.id } });
+      onDone();
+    } catch {
+      setApplying(null);
+      onError?.();
+    }
   }
 
   return (
@@ -345,8 +372,8 @@ function InlineStatusEdit({ issue, onDone, onCancel }: {
   );
 }
 
-function InlinePriorityEdit({ issue, onDone, onCancel }: {
-  issue: JiraIssue; onDone: () => void; onCancel: () => void;
+function InlinePriorityEdit({ issue, onDone, onCancel, onError }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void; onError?: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -361,8 +388,13 @@ function InlinePriorityEdit({ issue, onDone, onCancel }: {
 
   async function save(name: string) {
     setSaving(true);
-    try { await api.put(`/issue/${issue.key}`, { fields: { priority: { name } } }); onDone(); }
-    catch { setSaving(false); }
+    try {
+      await api.put(`/issue/${issue.key}`, { fields: { priority: { name } } });
+      onDone();
+    } catch {
+      setSaving(false);
+      onError?.();
+    }
   }
 
   return (
@@ -384,16 +416,21 @@ function InlinePriorityEdit({ issue, onDone, onCancel }: {
   );
 }
 
-function InlineDueDateEdit({ issue, onDone, onCancel }: {
-  issue: JiraIssue; onDone: () => void; onCancel: () => void;
+function InlineDueDateEdit({ issue, onDone, onCancel, onError }: {
+  issue: JiraIssue; onDone: () => void; onCancel: () => void; onError?: () => void;
 }) {
   const [draft, setDraft] = useState(issue.fields.duedate ?? '');
   const [saving, setSaving] = useState(false);
 
   async function save() {
     setSaving(true);
-    try { await api.put(`/issue/${issue.key}`, { fields: { duedate: draft || null } }); onDone(); }
-    catch { setSaving(false); }
+    try {
+      await api.put(`/issue/${issue.key}`, { fields: { duedate: draft || null } });
+      onDone();
+    } catch {
+      setSaving(false);
+      onError?.();
+    }
   }
 
   return (
@@ -419,11 +456,12 @@ function InlineDueDateEdit({ issue, onDone, onCancel }: {
 
 // ─────────────────────────────────────────────────────────────────
 
-function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved }: {
+function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved, onInlineError }: {
   issue: JiraIssue; selected: boolean; onToggle: () => void;
   visibleCols: ColumnDef[];
   onOpenPanel: (key: string) => void;
-  onInlineSaved: () => void;
+  onInlineSaved: (msg: string) => void;
+  onInlineError: (msg: string) => void;
 }) {
   const [inlineEdit, setInlineEdit] = useState<ColumnKey | null>(null);
 
@@ -434,11 +472,17 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
     setInlineEdit(col.key);
   }
 
-  function handleInlineDone() { setInlineEdit(null); onInlineSaved(); }
+  function handleInlineDone(field: string) {
+    setInlineEdit(null);
+    onInlineSaved(`${field} updated`);
+  }
   function handleInlineCancel() { setInlineEdit(null); }
+  function handleInlineError(field: string) {
+    setInlineEdit(null);
+    onInlineError(`Failed to update ${field}`);
+  }
 
   function handleRowClick(e: React.MouseEvent) {
-    // Don't open panel when clicking checkbox or when an inline edit is open
     if (inlineEdit) return;
     if ((e.target as Element).closest('[data-no-panel]')) return;
     onOpenPanel(issue.key);
@@ -452,7 +496,6 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
       )}
       onClick={handleRowClick}
     >
-      {/* Checkbox */}
       <input
         type="checkbox"
         checked={selected}
@@ -463,7 +506,6 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
         aria-label={`Select ${issue.key}`}
       />
 
-      {/* Cells */}
       {visibleCols.map(col => {
         const isEditable = INLINE_EDITABLE.includes(col.key);
         const isEditing  = inlineEdit === col.key;
@@ -472,9 +514,7 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
             key={col.key}
             className={cn(
               col.widthClass,
-              // summary must NOT have flex-shrink-0 so it can give space to fixed columns
               col.key !== 'summary' && 'flex-shrink-0',
-              // summary needs min-w-0 so it can shrink in flex and truncate works
               col.key === 'summary' && 'min-w-0 overflow-hidden',
               col.align === 'right' && 'text-right',
               isEditable && !isEditing && 'group/cell relative cursor-pointer',
@@ -485,9 +525,9 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
           >
             {isEditing ? (
               <>
-                {col.key === 'status'   && <InlineStatusEdit   issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
-                {col.key === 'priority' && <InlinePriorityEdit issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
-                {col.key === 'due'      && <InlineDueDateEdit  issue={issue} onDone={handleInlineDone} onCancel={handleInlineCancel} />}
+                {col.key === 'status'   && <InlineStatusEdit   issue={issue} onDone={() => handleInlineDone('Status')}   onCancel={handleInlineCancel} onError={() => handleInlineError('status')} />}
+                {col.key === 'priority' && <InlinePriorityEdit issue={issue} onDone={() => handleInlineDone('Priority')} onCancel={handleInlineCancel} onError={() => handleInlineError('priority')} />}
+                {col.key === 'due'      && <InlineDueDateEdit  issue={issue} onDone={() => handleInlineDone('Due date')} onCancel={handleInlineCancel} onError={() => handleInlineError('due date')} />}
               </>
             ) : (
               <div className={cn(
@@ -528,8 +568,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [transitionsLoading, setTransLoading]   = useState(false);
   const [collapsedGroups, setCollapsedGroups]   = useState<Set<string>>(new Set());
   const [visibleColumns, setVisibleColumns]     = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
+  const [columnOrder, setColumnOrder]           = useState<ColumnKey[]>(DEFAULT_ORDER);
   const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
   const [showColumnPicker, setShowColPicker]    = useState(false);
+  const [dragOverKey, setDragOverKey]           = useState<ColumnKey | null>(null);
+  const dragSrcRef                              = useRef<ColumnKey | null>(null);
   // Panel
   const [panelKey, setPanelKey]                 = useState<string | null>(null);
   // Bulk extras
@@ -543,8 +586,18 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const bulkAssignRef  = useRef<HTMLDivElement>(null);
   const bulkPriorityRef = useRef<HTMLDivElement>(null);
   const bulkDueRef     = useRef<HTMLDivElement>(null);
+  const colPickerRef   = useRef<HTMLDivElement>(null);
+  // Toast
+  const [toast, setToastState]                  = useState<ToastInfo | null>(null);
+  const toastTimerRef                           = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const colPickerRef = useRef<HTMLDivElement>(null);
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToastState({ msg, type });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastState(null), 3000);
+  }
+
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
   // Close column picker on outside click
   useEffect(() => {
@@ -571,22 +624,27 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }, [bulkAssignOpen, bulkPriorityOpen, bulkDueOpen]);
 
   // Bulk apply fields
-  async function applyBulkField(fields: Record<string, unknown>) {
+  async function applyBulkField(fields: Record<string, unknown>, successMsg: string) {
     setBulkApplying(true);
+    let errors = 0;
     for (const issue of selectedIssues) {
       try { await api.put(`/issue/${issue.key}`, { fields }); }
-      catch { /* continue */ }
+      catch { errors++; }
     }
     setBulkApplying(false);
     setBulkAssignOpen(false); setBulkPriorityOpen(false); setBulkDueOpen(false);
     setBulkAssignQuery(''); setBulkPriority(''); setBulkDue('');
     setSelected(new Set());
     window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
+    if (errors === 0) showToast(successMsg);
+    else showToast(`${errors} issue(s) failed to update`, 'error');
   }
 
   const visibleCols = useMemo(
-    () => COLUMNS.filter(c => visibleColumns.has(c.key)),
-    [visibleColumns],
+    () => columnOrder
+      .map(k => COLUMNS.find(c => c.key === k))
+      .filter((c): c is ColumnDef => c !== undefined && visibleColumns.has(c.key)),
+    [visibleColumns, columnOrder],
   );
 
   const groups = useMemo(() => groupIssues(issues, groupBy), [issues, groupBy]);
@@ -626,13 +684,33 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     });
   }
 
+  // ── Column drag-and-drop reorder ──
+  function onColDragStart(key: ColumnKey) { dragSrcRef.current = key; }
+  function onColDragOver(e: React.DragEvent, key: ColumnKey) {
+    e.preventDefault();
+    if (dragSrcRef.current && dragSrcRef.current !== key) setDragOverKey(key);
+  }
+  function onColDrop(targetKey: ColumnKey) {
+    const src = dragSrcRef.current;
+    if (!src || src === targetKey) { setDragOverKey(null); return; }
+    setColumnOrder(prev => {
+      const next = [...prev];
+      const si = next.indexOf(src);
+      const ti = next.indexOf(targetKey);
+      next.splice(si, 1);
+      next.splice(ti, 0, src);
+      return next;
+    });
+    dragSrcRef.current = null;
+    setDragOverKey(null);
+  }
+  function onColDragEnd() { dragSrcRef.current = null; setDragOverKey(null); }
+
   const selectedCount  = selected.size;
-  // useMemo so selectedIssues reference is stable → doesn't re-trigger effects every render
   const selectedIssues = useMemo(
     () => issues.filter(i => selected.has(i.id)),
     [issues, selected],
   );
-  // Stable primitive for the dependency array
   const firstSelectedKey = selectedIssues[0]?.key ?? null;
 
   const loadTransitions = useCallback(async () => {
@@ -655,13 +733,16 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     if (transitioning) return;
     setTransDropOpen(false);
     setTransitioning(true);
+    let errors = 0;
     for (const issue of selectedIssues) {
       try { await api.post(`/issue/${issue.key}/transitions`, { transition: { id: t.id } }); }
-      catch { /* continue */ }
+      catch { errors++; }
     }
     setTransitioning(false);
     setSelected(new Set());
     window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
+    if (errors === 0) showToast(`Status → ${t.to?.name ?? t.name} applied to ${selectedIssues.length} issue(s)`);
+    else showToast(`${errors} issue(s) failed to transition`, 'error');
   }
 
   async function exportXlsx() {
@@ -730,31 +811,60 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               Columns
             </button>
             {showColumnPicker && (
-              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-44">
-                <div className="px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
-                  <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">
-                    Toggle columns
-                  </span>
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-52">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
+                  <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">Columns</span>
+                  <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">drag to reorder</span>
                 </div>
-                {COLUMNS.map(col => (
-                  <button
-                    key={col.key}
-                    onClick={() => toggleColumn(col.key)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <div className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
-                      visibleColumns.has(col.key)
-                        ? 'bg-[#0052CC] border-[#0052CC]'
-                        : 'border-[#DFE1E6] dark:border-gray-500',
-                    )}>
-                      {visibleColumns.has(col.key) && <Check size={10} className="text-white" />}
+                {columnOrder.map(key => {
+                  const col = COLUMNS.find(c => c.key === key);
+                  if (!col) return null;
+                  const isOver = dragOverKey === key;
+                  return (
+                    <div
+                      key={col.key}
+                      draggable
+                      onDragStart={() => onColDragStart(col.key)}
+                      onDragOver={e => onColDragOver(e, col.key)}
+                      onDrop={() => onColDrop(col.key)}
+                      onDragEnd={onColDragEnd}
+                      className={cn(
+                        'flex items-center gap-2 px-2 py-2 transition-colors select-none',
+                        isOver
+                          ? 'bg-[#E6F0FF] dark:bg-blue-900/30 border-t-2 border-[#0052CC]'
+                          : 'hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+                      )}
+                    >
+                      <span className="text-[#C1C7D0] dark:text-gray-600 cursor-grab active:cursor-grabbing flex-shrink-0">
+                        <GripVertical size={13} />
+                      </span>
+                      <button
+                        onClick={() => toggleColumn(col.key)}
+                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                      >
+                        <div className={cn(
+                          'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
+                          visibleColumns.has(col.key)
+                            ? 'bg-[#0052CC] border-[#0052CC]'
+                            : 'border-[#DFE1E6] dark:border-gray-500',
+                        )}>
+                          {visibleColumns.has(col.key) && <Check size={10} className="text-white" />}
+                        </div>
+                        <span className="text-xs text-[#172B4D] dark:text-gray-200 truncate">
+                          {col.label}
+                        </span>
+                      </button>
                     </div>
-                    <span className="text-xs text-[#172B4D] dark:text-gray-200 text-left">
-                      {col.label}
-                    </span>
+                  );
+                })}
+                <div className="px-3 py-2 border-t border-[#DFE1E6] dark:border-gray-700">
+                  <button
+                    onClick={() => setColumnOrder(DEFAULT_ORDER)}
+                    className="text-[11px] text-[#5E6C84] dark:text-gray-400 hover:text-[#0052CC] dark:hover:text-blue-400 transition-colors"
+                  >
+                    Reset order
                   </button>
-                ))}
+                </div>
               </div>
             )}
           </div>
@@ -777,7 +887,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
             {selectedCount} selected
           </span>
 
-          {/* Transition */}
+          {/* Status (transition) */}
           <div className="relative">
             <button
               onClick={() => setTransDropOpen(p => !p)}
@@ -787,10 +897,13 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               {transitioning
                 ? <Loader2 size={11} className="animate-spin" />
                 : <ChevronDown size={11} />}
-              Transition to…
+              Status
             </button>
             {transitionDropOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 min-w-[160px] py-1">
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-20 min-w-[180px] py-1">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide border-b border-[#DFE1E6] dark:border-gray-700">
+                  Change status
+                </div>
                 {transitionsLoading ? (
                   <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#5E6C84]">
                     <Loader2 size={12} className="animate-spin" /> Loading…
@@ -805,9 +918,10 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                       key={t.id}
                       onClick={() => applyTransition(t)}
                       disabled={transitioning}
-                      className="w-full text-left text-xs px-3 py-2 text-[#172B4D] dark:text-gray-200 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 transition-colors disabled:opacity-50"
+                      className="w-full text-left text-xs px-3 py-2 text-[#172B4D] dark:text-gray-200 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
-                      {t.name}
+                      <span className="w-2 h-2 rounded-full bg-current opacity-40 flex-shrink-0" />
+                      {t.to?.name ?? t.name}
                     </button>
                   ))
                 )}
@@ -838,7 +952,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                 />
                 <div className="flex gap-1.5">
                   <button
-                    onClick={() => applyBulkField({ assignee: bulkAssignQuery ? { name: bulkAssignQuery } : null })}
+                    onClick={() => applyBulkField({ assignee: bulkAssignQuery ? { name: bulkAssignQuery } : null }, `Assigned ${selectedCount} issue(s)`)}
                     disabled={bulkApplying}
                     className="flex-1 text-xs px-2 py-1.5 bg-[#0052CC] text-white rounded hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
                   >
@@ -865,7 +979,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                 {PRIORITY_NAMES.map(p => (
                   <button
                     key={p}
-                    onClick={() => { setBulkPriority(p); applyBulkField({ priority: { name: p } }); }}
+                    onClick={() => { setBulkPriority(p); applyBulkField({ priority: { name: p } }, `Priority → ${p} applied`); }}
                     disabled={bulkApplying}
                     className={cn(
                       'w-full text-left text-xs px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors disabled:opacity-50',
@@ -901,7 +1015,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                 />
                 <div className="flex gap-1.5">
                   <button
-                    onClick={() => applyBulkField({ duedate: bulkDue || null })}
+                    onClick={() => applyBulkField({ duedate: bulkDue || null }, `Due date updated for ${selectedCount} issue(s)`)}
                     disabled={bulkApplying}
                     className="flex-1 text-xs px-2 py-1.5 bg-[#0052CC] text-white rounded hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
                   >
@@ -994,7 +1108,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                     onToggle={() => toggleSelect(issue.id)}
                     visibleCols={visibleCols}
                     onOpenPanel={setPanelKey}
-                    onInlineSaved={() => window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'))}
+                    onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
+                    onInlineError={msg => showToast(msg, 'error')}
                   />
                 ))}
               </div>
@@ -1020,6 +1135,9 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         onClose={() => setPanelKey(null)}
         onUpdated={() => window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'))}
       />
+
+      {/* Global toast */}
+      <Toast toast={toast} />
     </div>
   );
 }

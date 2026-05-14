@@ -70,11 +70,7 @@ const PRIORITY_OPTIONS = [
   { id: '10001', name: 'Minor'   },
 ];
 
-const STATUS_OPTIONS = [
-  { value: 'new',           label: 'To Do'       },
-  { value: 'indeterminate', label: 'In Progress'  },
-  { value: 'done',          label: 'Done'         },
-];
+// Status options are fetched dynamically — see useStatuses() hook below
 
 const RESOLUTION_OPTIONS = [
   'Done', "Won't Do", 'Duplicate', 'Cannot Reproduce',
@@ -116,21 +112,29 @@ function persistSavedFilters(list: SavedFilter[]) {
   localStorage.setItem(LS_KEY, JSON.stringify(list));
 }
 
+// ─── MultiSelectOption ────────────────────────────────────────────
+
+interface MultiSelectOption {
+  value: string;
+  label: string;
+  group?: string;
+}
+
 // ─── MultiSelectFilter ───────────────────────────────────────────
 
 interface MultiSelectFilterProps {
   label: string;
-  options: { value: string; label: string }[];
+  options: MultiSelectOption[];
   selectedValues: string[];
   exclude: boolean;
   onChange: (values: string[], exclude: boolean) => void;
+  loading?: boolean;
 }
 
-function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }: MultiSelectFilterProps) {
+function MultiSelectFilter({ label, options, selectedValues, exclude, onChange, loading }: MultiSelectFilterProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -142,7 +146,6 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }
 
   const hasSelection = selectedValues.length > 0;
 
-  // Build button label
   let btnLabel: string;
   if (!hasSelection) {
     btnLabel = 'All';
@@ -160,14 +163,8 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }
     onChange(next, exclude);
   }
 
-  function toggleExclude() {
-    onChange(selectedValues, !exclude);
-  }
-
-  function clearAll() {
-    onChange([], false);
-    setOpen(false);
-  }
+  function toggleExclude() { onChange(selectedValues, !exclude); }
+  function clearAll() { onChange([], false); setOpen(false); }
 
   return (
     <div className="flex items-center gap-1.5">
@@ -192,9 +189,7 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }
           <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 min-w-[180px]">
             {/* Exclude toggle */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
-              <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-100">
-                {label}
-              </span>
+              <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-100">{label}</span>
               <button
                 onClick={toggleExclude}
                 disabled={!hasSelection}
@@ -211,36 +206,193 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange }
             </div>
 
             {/* Option list */}
-            <div className="py-1 max-h-56 overflow-y-auto">
-              {options.map(opt => {
-                const checked = selectedValues.includes(opt.value);
+            <div className="py-1 max-h-64 overflow-y-auto">
+              {loading ? (
+                <div className="px-3 py-3 text-xs text-[#5E6C84] dark:text-gray-400 text-center">Loading…</div>
+              ) : options.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-[#5E6C84] dark:text-gray-400 text-center">No options</div>
+              ) : (() => {
+                let lastGroup: string | undefined;
+                return options.map(opt => {
+                  const checked = selectedValues.includes(opt.value);
+                  const showGroupHeader = opt.group !== undefined && opt.group !== lastGroup;
+                  lastGroup = opt.group;
+                  return (
+                    <div key={opt.value}>
+                      {showGroupHeader && (
+                        <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold text-[#5E6C84] dark:text-gray-500 uppercase tracking-wide border-t border-[#DFE1E6] dark:border-gray-700 first:border-t-0 mt-1 first:mt-0">
+                          {opt.group}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => toggleValue(opt.value)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
+                      >
+                        <div className={cn(
+                          'w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0',
+                          checked
+                            ? exclude ? 'bg-orange-500 border-orange-500' : 'bg-[#0052CC] border-[#0052CC]'
+                            : 'border-[#DFE1E6] dark:border-gray-500',
+                        )}>
+                          {checked && <Check size={9} className="text-white" />}
+                        </div>
+                        <span className="text-xs text-[#172B4D] dark:text-gray-200">{opt.label}</span>
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {hasSelection && (
+              <div className="border-t border-[#DFE1E6] dark:border-gray-700 px-3 py-2">
+                <button onClick={clearAll} className="text-[11px] text-[#5E6C84] dark:text-gray-400 hover:text-red-500 transition-colors">
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── UserMultiFilter (assignee / reporter) ────────────────────────
+
+interface UserMultiFilterProps {
+  label: string;
+  selectedValues: string[];    // 'currentUser()' | 'EMPTY' | username
+  onChange: (values: string[]) => void;
+}
+
+const USER_PRESETS = [
+  { value: 'currentUser()', label: 'Me' },
+  { value: 'EMPTY',         label: 'Unassigned' },
+];
+
+function UserMultiFilter({ label, selectedValues, onChange }: UserMultiFilterProps) {
+  const [open, setOpen]         = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const hasSelection = selectedValues.length > 0;
+
+  const customUsers = selectedValues.filter(v => !USER_PRESETS.find(p => p.value === v));
+
+  const btnLabel = !hasSelection ? 'All'
+    : selectedValues.length === 1
+      ? USER_PRESETS.find(p => p.value === selectedValues[0])?.label ?? selectedValues[0]
+      : `${selectedValues.length} selected`;
+
+  function toggleValue(value: string) {
+    const next = selectedValues.includes(value)
+      ? selectedValues.filter(v => v !== value)
+      : [...selectedValues, value];
+    onChange(next);
+  }
+
+  function addSearch() {
+    const v = searchText.trim();
+    if (!v || selectedValues.includes(v)) { setSearchText(''); return; }
+    onChange([...selectedValues, v]);
+    setSearchText('');
+    inputRef.current?.focus();
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <FilterLabel>{label}</FilterLabel>
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen(p => !p)}
+          className={cn(
+            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px]',
+            hasSelection
+              ? 'bg-[#E6F0FF] dark:bg-blue-900/30 border-[#0052CC]/40 dark:border-blue-600/40 text-[#0052CC] dark:text-blue-300'
+              : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
+          )}
+        >
+          <span className="flex-1 text-left">{btnLabel}</span>
+          <ChevronDown size={10} className="flex-shrink-0 opacity-60" />
+        </button>
+
+        {open && (
+          <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 min-w-[210px]">
+            <div className="px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
+              <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-100">{label}</span>
+            </div>
+
+            {/* Quick presets */}
+            <div className="py-1">
+              {USER_PRESETS.map(preset => {
+                const checked = selectedValues.includes(preset.value);
                 return (
                   <button
-                    key={opt.value}
-                    onClick={() => toggleValue(opt.value)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
+                    key={preset.value}
+                    onClick={() => toggleValue(preset.value)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
                   >
                     <div className={cn(
                       'w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0',
-                      checked
-                        ? exclude
-                          ? 'bg-orange-500 border-orange-500'
-                          : 'bg-[#0052CC] border-[#0052CC]'
-                        : 'border-[#DFE1E6] dark:border-gray-500',
+                      checked ? 'bg-[#0052CC] border-[#0052CC]' : 'border-[#DFE1E6] dark:border-gray-500',
                     )}>
                       {checked && <Check size={9} className="text-white" />}
                     </div>
-                    <span className="text-xs text-[#172B4D] dark:text-gray-200">{opt.label}</span>
+                    <span className="text-xs text-[#172B4D] dark:text-gray-200">{preset.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Footer */}
+            {/* Custom user search */}
+            <div className="px-3 py-2 border-t border-[#DFE1E6] dark:border-gray-700">
+              <div className="flex items-center gap-1">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addSearch(); }}
+                  placeholder="Username + Enter…"
+                  className={cn(inputClass, 'flex-1 py-1')}
+                />
+                <button
+                  onClick={addSearch}
+                  disabled={!searchText.trim()}
+                  className="text-xs px-2 py-1 bg-[#0052CC] text-white rounded hover:bg-[#0747A6] disabled:opacity-40 transition-colors"
+                >+</button>
+              </div>
+            </div>
+
+            {/* Custom user chips */}
+            {customUsers.length > 0 && (
+              <div className="px-3 py-2 border-t border-[#DFE1E6] dark:border-gray-700 flex flex-wrap gap-1">
+                {customUsers.map(v => (
+                  <span key={v} className="inline-flex items-center gap-1 text-[10px] bg-[#E6F0FF] dark:bg-blue-900/30 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 rounded px-1.5 py-0.5">
+                    {v}
+                    <button onClick={() => toggleValue(v)} className="hover:text-red-500 transition-colors">
+                      <X size={8} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {hasSelection && (
               <div className="border-t border-[#DFE1E6] dark:border-gray-700 px-3 py-2">
                 <button
-                  onClick={clearAll}
+                  onClick={() => { onChange([]); setOpen(false); }}
                   className="text-[11px] text-[#5E6C84] dark:text-gray-400 hover:text-red-500 transition-colors"
                 >
                   Clear
@@ -304,6 +456,30 @@ function useVersions(projectKey: string | undefined) {
   return data ?? [];
 }
 
+interface JiraStatusRaw {
+  id: string;
+  name: string;
+  statusCategory: { key: string; name: string; colorName: string };
+}
+
+const CATEGORY_ORDER: Record<string, number> = { new: 0, indeterminate: 1, done: 2 };
+const CATEGORY_LABEL: Record<string, string> = {
+  new: 'To Do',
+  indeterminate: 'In Progress',
+  done: 'Done',
+};
+
+function useStatuses() {
+  const { data, isLoading } = useSWR<JiraStatusRaw[]>(
+    '/status',
+    (url: string) =>
+      api.get<JiraStatusRaw[]>(url)
+        .then(r => Array.isArray(r.data) ? r.data : [])
+        .catch(() => [])
+  );
+  return { statuses: data ?? [], loading: isLoading && !data };
+}
+
 // ─── Saved Filters Panel ──────────────────────────────────────────
 
 interface SavedFiltersPanelProps {
@@ -312,17 +488,15 @@ interface SavedFiltersPanelProps {
 }
 
 function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) {
-  const [open, setOpen]       = useState(false);
-  const [saved, setSaved]     = useState<SavedFilter[]>([]);
+  const [open, setOpen]         = useState(false);
+  const [saved, setSaved]       = useState<SavedFilter[]>([]);
   const [saveName, setSaveName] = useState('');
   const [showInput, setShowInput] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load on mount
   useEffect(() => { setSaved(loadSavedFilters()); }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -336,19 +510,16 @@ function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) 
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Focus input when shown
   useEffect(() => {
     if (showInput) inputRef.current?.focus();
   }, [showInput]);
 
-  // Check if current filters are non-empty (excluding sort fields)
   const hasFilters = Object.entries(currentFilters).some(
     ([k, v]) => !['sortField', 'sortDir', 'startAt'].includes(k) && v !== undefined && (Array.isArray(v) ? v.length > 0 : true)
   );
 
   function saveFilter() {
     if (!saveName.trim()) return;
-    // strip sort/pagination fields from saved filter
     const { sortField: _sf, sortDir: _sd, startAt: _sa, ...rest } = currentFilters;
     void _sf; void _sd; void _sa;
     const newFilter: SavedFilter = {
@@ -398,7 +569,6 @@ function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) 
 
       {open && (
         <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded shadow-lg z-30 w-64">
-          {/* Save current */}
           <div className="px-3 py-2 border-b border-[#DFE1E6] dark:border-gray-700">
             {showInput ? (
               <div className="flex items-center gap-1.5">
@@ -440,7 +610,6 @@ function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) 
             )}
           </div>
 
-          {/* Saved list */}
           {saved.length === 0 ? (
             <div className="px-3 py-4 text-xs text-center text-[#5E6C84] dark:text-gray-500">
               No saved filters
@@ -454,9 +623,7 @@ function SavedFiltersPanel({ currentFilters, onApply }: SavedFiltersPanelProps) 
                   onClick={() => applyFilter(sf)}
                 >
                   <Bookmark size={12} className="text-[#5E6C84] flex-shrink-0" />
-                  <span className="text-xs text-[#172B4D] dark:text-gray-200 flex-1 truncate">
-                    {sf.name}
-                  </span>
+                  <span className="text-xs text-[#172B4D] dark:text-gray-200 flex-1 truncate">{sf.name}</span>
                   <button
                     onClick={e => deleteFilter(sf.id, e)}
                     className="opacity-0 group-hover:opacity-100 text-[#5E6C84] hover:text-red-500 transition-all flex-shrink-0"
@@ -481,12 +648,10 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   const [textInput, setTextInput] = useState(filters.text ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync text when filters cleared externally
   useEffect(() => {
     if (!filters.text) setTextInput('');
   }, [filters.text]);
 
-  // Debounced text search
   function handleTextChange(value: string) {
     setTextInput(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -497,30 +662,43 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  // Fetch projects
   const { data: projects } = useSWR<JiraProject[]>(
     '/project?maxResults=50',
     (url: string) => api.get<JiraProject[]>(url).then(r => r.data)
   );
 
-  const sprints    = useSprints();
-  const components = useComponents(filters.project);
+  const sprints     = useSprints();
+  const components  = useComponents(filters.project);
   const fixVersions = useVersions(filters.project);
+  const { statuses, loading: statusesLoading } = useStatuses();
 
-  // ── Apply saved filter ──
+  // Build grouped status options sorted by category then name
+  const statusOptions: MultiSelectOption[] = statuses
+    .slice()
+    .sort((a, b) => {
+      const catA = CATEGORY_ORDER[a.statusCategory.key] ?? 99;
+      const catB = CATEGORY_ORDER[b.statusCategory.key] ?? 99;
+      if (catA !== catB) return catA - catB;
+      return a.name.localeCompare(b.name);
+    })
+    .map(s => ({
+      value: s.name,
+      label: s.name,
+      group: CATEGORY_LABEL[s.statusCategory.key] ?? s.statusCategory.name,
+    }));
+
+  // Sprint options for MultiSelectFilter
+  const sprintOptions: MultiSelectOption[] = sprints.map(s => ({ value: s.name, label: s.name }));
+
   const applySavedFilter = useCallback((f: IssueFilters) => {
-    // Clear first, then apply all saved values
     onClear();
-    // Need a tick for onClear to propagate
     setTimeout(() => onUpdate(f), 0);
   }, [onClear, onUpdate]);
 
-  // ── Advanced row active count (for badge) ──
+  // Advanced row active count (for badge)
   const advancedActiveCount = [
-    filters.assignee,
     filters.reporter,
-    filters.project,
-    filters.sprint,
+    filters.reporterIn?.length,
     filters.resolution,
     filters.createdAfter,
     filters.labels,
@@ -528,39 +706,50 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     filters.duedate,
     filters.component,
     filters.fixVersion,
-    filters.unassignedOnly,
   ].filter(Boolean).length;
 
   // ── Active filter chips ──
-  const chips: { key: keyof IssueFilters | string; label: string }[] = [];
+  const chips: { key: string; label: string }[] = [];
 
   if (filters.text) chips.push({ key: 'text', label: `Text: "${filters.text}"` });
 
   if (filters.statusIn?.length) {
-    const labels = filters.statusIn
-      .map(v => STATUS_OPTIONS.find(o => o.value === v)?.label ?? v)
-      .join(', ');
-    chips.push({ key: 'status', label: `Status ${filters.statusExclude ? '≠' : '='} ${labels}` });
+    chips.push({ key: 'status', label: `Status ${filters.statusExclude ? '≠' : '='} ${filters.statusIn.join(', ')}` });
   }
   if (filters.priorityIn?.length) {
-    const labels = filters.priorityIn.join(', ');
-    chips.push({ key: 'priority', label: `Priority ${filters.priorityExclude ? '≠' : '='} ${labels}` });
+    chips.push({ key: 'priority', label: `Priority ${filters.priorityExclude ? '≠' : '='} ${filters.priorityIn.join(', ')}` });
   }
   if (filters.issuetypeIn?.length) {
-    const labels = filters.issuetypeIn.join(', ');
-    chips.push({ key: 'issuetype', label: `Type ${filters.issuetypeExclude ? '≠' : '='} ${labels}` });
+    chips.push({ key: 'issuetype', label: `Type ${filters.issuetypeExclude ? '≠' : '='} ${filters.issuetypeIn.join(', ')}` });
   }
   if (filters.unassignedOnly) chips.push({ key: 'unassignedOnly', label: 'Unassigned only' });
+  if (filters.assigneeIn?.length) {
+    const labels = filters.assigneeIn.map(v =>
+      v === 'currentUser()' ? 'Me' : v === 'EMPTY' ? 'Unassigned' : v
+    ).join(', ');
+    chips.push({ key: 'assigneeIn', label: `Assignee: ${labels}` });
+  } else if (filters.assignee === 'currentUser()') {
+    chips.push({ key: 'assignee', label: 'Assignee: Me' });
+  } else if (filters.assignee) {
+    chips.push({ key: 'assignee', label: `Assignee: ${filters.assignee}` });
+  }
   if (filters.project) {
     const proj = projects?.find(p => p.key === filters.project);
     chips.push({ key: 'project', label: `Project: ${proj?.name ?? filters.project}` });
   }
-  if (filters.assignee === 'currentUser()') chips.push({ key: 'assignee', label: 'Assignee: Me' });
-  else if (filters.assignee === 'EMPTY') chips.push({ key: 'assignee', label: 'Assignee: Unassigned' });
-  else if (filters.assignee) chips.push({ key: 'assignee', label: `Assignee: ${filters.assignee}` });
-  if (filters.reporter === 'currentUser()') chips.push({ key: 'reporter', label: 'Reporter: Me' });
-  else if (filters.reporter) chips.push({ key: 'reporter', label: `Reporter: ${filters.reporter}` });
-  if (filters.sprint) chips.push({ key: 'sprint', label: `Sprint: ${filters.sprint}` });
+  if (filters.sprintIn?.length) {
+    chips.push({ key: 'sprintIn', label: `Sprint: ${filters.sprintIn.join(', ')}` });
+  } else if (filters.sprint) {
+    chips.push({ key: 'sprint', label: `Sprint: ${filters.sprint}` });
+  }
+  if (filters.reporterIn?.length) {
+    const labels = filters.reporterIn.map(v => v === 'currentUser()' ? 'Me' : v).join(', ');
+    chips.push({ key: 'reporterIn', label: `Reporter: ${labels}` });
+  } else if (filters.reporter === 'currentUser()') {
+    chips.push({ key: 'reporter', label: 'Reporter: Me' });
+  } else if (filters.reporter) {
+    chips.push({ key: 'reporter', label: `Reporter: ${filters.reporter}` });
+  }
   if (filters.resolution === 'all') chips.push({ key: 'resolution', label: 'Resolution: All' });
   else if (filters.resolution) chips.push({ key: 'resolution', label: `Resolution: ${filters.resolution}` });
   if (filters.createdAfter) {
@@ -586,17 +775,20 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     if (key === 'status')    { onUpdate({ statusIn: undefined,    statusExclude: undefined }); return; }
     if (key === 'priority')  { onUpdate({ priorityIn: undefined,  priorityExclude: undefined }); return; }
     if (key === 'issuetype') { onUpdate({ issuetypeIn: undefined, issuetypeExclude: undefined }); return; }
+    if (key === 'assigneeIn') { onUpdate({ assigneeIn: undefined }); return; }
+    if (key === 'reporterIn') { onUpdate({ reporterIn: undefined }); return; }
+    if (key === 'sprintIn')  { onUpdate({ sprintIn: undefined }); return; }
     onUpdate({ [key]: undefined } as Partial<IssueFilters>);
   }
 
   return (
-    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-10">
+    <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
 
       {/* ── Row 1 — always visible ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
 
         {/* Text search */}
-        <div className="relative flex items-center flex-1 min-w-[180px] max-w-xs">
+        <div className="relative flex items-center min-w-[180px] max-w-xs">
           <Search size={13} className="absolute left-2 text-[#5E6C84] dark:text-gray-500 pointer-events-none" />
           <input
             type="text"
@@ -619,10 +811,11 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           })}
         />
 
-        {/* Status — multi-select */}
+        {/* Status — multi-select (fetched from Jira) */}
         <MultiSelectFilter
           label="Status"
-          options={STATUS_OPTIONS}
+          options={statusOptions}
+          loading={statusesLoading}
           selectedValues={filters.statusIn ?? []}
           exclude={filters.statusExclude ?? false}
           onChange={(values, exc) => onUpdate({
@@ -643,9 +836,34 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           })}
         />
 
+        {/* Assignee — multi-user */}
+        <UserMultiFilter
+          label="Assignee"
+          selectedValues={filters.assigneeIn ?? []}
+          onChange={values => onUpdate({
+            assigneeIn: values.length ? values : undefined,
+            unassignedOnly: undefined,
+          })}
+        />
+
+        {/* Project */}
+        <div className="flex items-center gap-1.5">
+          <FilterLabel>Project</FilterLabel>
+          <select
+            className={selectClass}
+            value={filters.project ?? ''}
+            onChange={e => onUpdate({ project: e.target.value || undefined })}
+          >
+            <option value="">All</option>
+            {(projects ?? []).map(p => (
+              <option key={p.key} value={p.key}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Unassigned quick toggle */}
         <button
-          onClick={() => onUpdate({ unassignedOnly: filters.unassignedOnly ? undefined : true })}
+          onClick={() => onUpdate({ unassignedOnly: filters.unassignedOnly ? undefined : true, assigneeIn: undefined })}
           title="Show unassigned issues only"
           className={cn(
             'flex items-center gap-1.5 text-xs px-2.5 py-1.5 border rounded transition-colors whitespace-nowrap',
@@ -682,10 +900,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
 
         {/* Right side: saved filters + clear */}
         <div className="ml-auto flex items-center gap-2">
-          <SavedFiltersPanel
-            currentFilters={filters}
-            onApply={applySavedFilter}
-          />
+          <SavedFiltersPanel currentFilters={filters} onApply={applySavedFilter} />
           {hasAnyFilter && (
             <button
               onClick={onClear}
@@ -701,55 +916,27 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
       {showMore && (
         <div className="flex items-center gap-2 px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700 bg-white dark:bg-gray-800 flex-wrap">
 
-          {/* Assignee */}
-          <div className="flex items-center gap-1.5">
-            <FilterLabel>Assignee</FilterLabel>
-            <UserSearchInput
-              value={filters.assignee}
-              onChange={username => onUpdate({ assignee: username })}
-              placeholder="Assignee..."
-              includeUnassigned
-              label="Assignee"
-            />
-          </div>
-
-          {/* Reporter */}
-          <UserSearchInput
-            value={filters.reporter}
-            onChange={username => onUpdate({ reporter: username })}
-            placeholder="Reporter..."
-            label="Reporter"
+          {/* Sprint — multi-select */}
+          <MultiSelectFilter
+            label="Sprint"
+            options={sprintOptions}
+            selectedValues={filters.sprintIn ?? []}
+            exclude={false}
+            onChange={(values) => onUpdate({
+              sprintIn: values.length ? values : undefined,
+              sprint: undefined,
+            })}
           />
 
-          {/* Project */}
-          <div className="flex items-center gap-1.5">
-            <FilterLabel>Project</FilterLabel>
-            <select
-              className={selectClass}
-              value={filters.project ?? ''}
-              onChange={e => onUpdate({ project: e.target.value || undefined })}
-            >
-              <option value="">All</option>
-              {(projects ?? []).map(p => (
-                <option key={p.key} value={p.key}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sprint */}
-          <div className="flex items-center gap-1.5">
-            <FilterLabel>Sprint</FilterLabel>
-            <select
-              className={selectClass}
-              value={filters.sprint ?? ''}
-              onChange={e => onUpdate({ sprint: e.target.value || undefined })}
-            >
-              <option value="">All</option>
-              {sprints.map(s => (
-                <option key={s.id} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* Reporter — multi-user */}
+          <UserMultiFilter
+            label="Reporter"
+            selectedValues={filters.reporterIn ?? []}
+            onChange={values => onUpdate({
+              reporterIn: values.length ? values : undefined,
+              reporter: undefined,
+            })}
+          />
 
           {/* Resolution */}
           <div className="flex items-center gap-1.5">
@@ -759,9 +946,9 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
               value={filters.resolution === 'all' ? 'all' : (filters.resolution ?? '')}
               onChange={e => {
                 const val = e.target.value;
-                if (val === '')      onUpdate({ resolution: undefined });
+                if (val === '')        onUpdate({ resolution: undefined });
                 else if (val === 'all') onUpdate({ resolution: 'all' });
-                else                onUpdate({ resolution: val });
+                else                   onUpdate({ resolution: val });
               }}
             >
               <option value="">Unresolved</option>
@@ -829,7 +1016,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             </select>
           </div>
 
-          {/* Component (project-scoped) */}
+          {/* Component */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Component</FilterLabel>
             <select
@@ -845,7 +1032,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             </select>
           </div>
 
-          {/* Fix Version (project-scoped) */}
+          {/* Fix Version */}
           <div className="flex items-center gap-1.5">
             <FilterLabel>Fix version</FilterLabel>
             <select
