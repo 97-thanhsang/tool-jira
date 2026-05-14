@@ -3,14 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { api } from '@/lib/api';
-import type { JiraIssue, JiraTransition, JiraComment } from '@/types/jira';
+import { WikiRenderer } from '@/components/issue/wiki-renderer';
+import { CommentSection } from '@/components/issue/comment-section';
+import { AttachmentGallery } from '@/components/issue/attachment-gallery';
+import type { JiraIssue, JiraTransition, JiraAttachment } from '@/types/jira';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import {
-  X, ExternalLink, Edit2, Check, Loader2,
-  MessageSquare, ChevronDown, AlertTriangle, Send,
-  Calendar, Tag, User, Clock, Activity, Link2,
-  GitBranch, Layers,
+  X, ExternalLink, Edit2, Check, Loader2, ChevronDown,
+  AlertTriangle, Calendar, Tag, User, Clock, Activity,
+  Link2, GitBranch, Layers, History, Paperclip, MessageSquare,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -106,9 +109,7 @@ interface EditTextProps {
 function EditText({ value, onSave, onCancel, loading, multiline, placeholder, rows = 3 }: EditTextProps) {
   const [draft, setDraft] = useState(value);
   const Tag = multiline ? 'textarea' : 'input';
-
   function commit() { if (draft.trim() !== value) onSave(draft.trim()); else onCancel(); }
-
   return (
     <div className="flex items-start gap-1.5 w-full">
       <Tag
@@ -242,26 +243,6 @@ function TransitionPicker({ issueKey, currentStatus, transitions, onDone, onCanc
   );
 }
 
-// ─── comment card ─────────────────────────────────────────────────
-
-function CommentCard({ comment }: { comment: JiraComment }) {
-  return (
-    <div className="flex gap-2.5">
-      {comment.author.avatarUrls?.['24x24']
-        ? <Image src={comment.author.avatarUrls['24x24']} alt={comment.author.displayName} width={24} height={24} className="rounded-full flex-shrink-0 mt-0.5" unoptimized />
-        : <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0 mt-0.5">{comment.author.displayName.charAt(0)}</span>
-      }
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">{comment.author.displayName}</span>
-          <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">{fmtDateTime(comment.created)}</span>
-        </div>
-        <p className="text-xs text-[#42526E] dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{comment.body}</p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Toast ───────────────────────────────────────────────────────
 
 function PanelToast({ toast }: { toast: { msg: string; type: 'success' | 'error' } | null }) {
@@ -276,6 +257,255 @@ function PanelToast({ toast }: { toast: { msg: string; type: 'success' | 'error'
     </div>
   );
 }
+
+// ─── Wiki Editor ─────────────────────────────────────────────────
+
+interface WikiEditorProps {
+  value: string;
+  attachments?: JiraAttachment[];
+  onSave: (v: string) => void;
+  onCancel: () => void;
+  loading?: boolean;
+}
+
+function ToolBtn({ title, onMD, children }: { title: string; onMD: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onMouseDown={e => { e.preventDefault(); onMD(); }}
+      className="px-1.5 py-0.5 min-w-[22px] rounded hover:bg-[#EBECF0] dark:hover:bg-gray-700 text-[#42526E] dark:text-gray-300 hover:text-[#172B4D] dark:hover:text-gray-100 transition-colors text-[11px] font-medium leading-none select-none"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolSep() {
+  return <div className="w-px h-4 bg-[#DFE1E6] dark:bg-gray-600 mx-0.5 flex-shrink-0" />;
+}
+
+function WikiEditor({ value, attachments, onSave, onCancel, loading }: WikiEditorProps) {
+  const [draft, setDraft] = useState(value);
+  const [showPreview, setShowPreview] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  function wrapSelection(before: string, after: string) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    const selected = draft.slice(s, e);
+    const next = draft.slice(0, s) + before + selected + after + draft.slice(e);
+    setDraft(next);
+    requestAnimationFrame(() => {
+      if (!taRef.current) return;
+      taRef.current.focus();
+      const newPos = s + before.length + selected.length + after.length;
+      taRef.current.setSelectionRange(newPos, newPos);
+    });
+  }
+
+  function prependLine(prefix: string) {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart;
+    const text = draft;
+    const lineStart = text.lastIndexOf('\n', s - 1) + 1;
+    const next = text.slice(0, lineStart) + prefix + text.slice(lineStart);
+    setDraft(next);
+    requestAnimationFrame(() => {
+      if (!taRef.current) return;
+      taRef.current.focus();
+      const newPos = s + prefix.length;
+      taRef.current.setSelectionRange(newPos, newPos);
+    });
+  }
+
+  return (
+    <div className="border border-[#0052CC] rounded overflow-hidden">
+      {/* ── Toolbar ── */}
+      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[#F4F5F7] dark:bg-gray-800 border-b border-[#DFE1E6] dark:border-gray-600">
+        <ToolBtn title="Bold (*text*)" onMD={() => wrapSelection('*', '*')}>
+          <strong>B</strong>
+        </ToolBtn>
+        <ToolBtn title="Italic (_text_)" onMD={() => wrapSelection('_', '_')}>
+          <em>I</em>
+        </ToolBtn>
+        <ToolBtn title="Strikethrough (-text-)" onMD={() => wrapSelection('-', '-')}>
+          <s>S</s>
+        </ToolBtn>
+        <ToolBtn title="Underline (+text+)" onMD={() => wrapSelection('+', '+')}>
+          <u>U</u>
+        </ToolBtn>
+        <ToolSep />
+        <ToolBtn title="Heading 1 (h1. )" onMD={() => prependLine('h1. ')}>H1</ToolBtn>
+        <ToolBtn title="Heading 2 (h2. )" onMD={() => prependLine('h2. ')}>H2</ToolBtn>
+        <ToolBtn title="Heading 3 (h3. )" onMD={() => prependLine('h3. ')}>H3</ToolBtn>
+        <ToolSep />
+        <ToolBtn title="Bullet list (* item)" onMD={() => prependLine('* ')}>•</ToolBtn>
+        <ToolBtn title="Numbered list (# item)" onMD={() => prependLine('# ')}>1.</ToolBtn>
+        <ToolSep />
+        <ToolBtn title="Inline code ({{text}})" onMD={() => wrapSelection('{{', '}}')}>{`{}`}</ToolBtn>
+        <ToolBtn title="Code block ({code}...{code})" onMD={() => wrapSelection('{code}\n', '\n{code}')}>≺/≻</ToolBtn>
+        <ToolBtn title="Blockquote (bq. )" onMD={() => prependLine('bq. ')}>❝</ToolBtn>
+        <ToolSep />
+        <ToolBtn title="Link [text|url]" onMD={() => wrapSelection('[', '|url]')}>🔗</ToolBtn>
+        <ToolBtn title="Color {color:red}text{color}" onMD={() => wrapSelection('{color:red}', '{color}')}>A</ToolBtn>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onMouseDown={e => { e.preventDefault(); setShowPreview(p => !p); }}
+          className={cn(
+            'flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border transition-colors',
+            showPreview
+              ? 'bg-[#0052CC] text-white border-[#0052CC]'
+              : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] hover:bg-[#EBECF0] dark:hover:bg-gray-700',
+          )}
+        >
+          {showPreview ? 'Edit' : 'Preview'}
+        </button>
+      </div>
+
+      {/* ── Content area ── */}
+      {showPreview ? (
+        <div className="px-4 py-3 min-h-[220px] bg-white dark:bg-gray-900">
+          {draft.trim()
+            ? <WikiRenderer content={draft} attachments={attachments} />
+            : <p className="text-[#5E6C84] dark:text-gray-500 text-sm italic">No content to preview.</p>
+          }
+        </div>
+      ) : (
+        <textarea
+          ref={taRef}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
+          placeholder="Enter content using Jira Wiki Markup…"
+          disabled={loading}
+          rows={10}
+          className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 text-[#172B4D] dark:text-gray-200 font-mono focus:outline-none resize-y border-0 block leading-relaxed"
+          style={{ minHeight: 220 }}
+        />
+      )}
+
+      {/* ── Footer ── */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#F4F5F7] dark:bg-gray-800 border-t border-[#DFE1E6] dark:border-gray-600">
+        <button
+          type="button"
+          onClick={() => onSave(draft)}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#0052CC] text-white text-xs font-medium hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
+        >
+          {loading ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+          className="px-3 py-1 rounded border border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] text-xs hover:text-red-500 hover:border-red-400 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 ml-auto">Jira Wiki Markup</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Changelog / History section ──────────────────────────────────
+
+interface ChangelogHistory {
+  id: string;
+  author: { displayName: string; avatarUrls?: { '24x24': string } };
+  created: string;
+  items: Array<{
+    field: string;
+    fieldtype: string;
+    fromString: string | null;
+    toString: string | null;
+  }>;
+}
+
+function HistorySection({
+  histories,
+  loading,
+}: {
+  histories: ChangelogHistory[] | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={22} className="animate-spin text-[#0052CC]" />
+      </div>
+    );
+  }
+  if (!histories || histories.length === 0) {
+    return (
+      <div className="text-center py-10">
+        <History size={28} className="text-[#C1C7D0] dark:text-gray-600 mx-auto mb-2" />
+        <p className="text-xs text-[#5E6C84] dark:text-gray-500">No history recorded</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {histories.map(h => (
+        <div key={h.id} className="flex gap-2.5">
+          {h.author.avatarUrls?.['24x24'] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={h.author.avatarUrls['24x24']}
+              alt={h.author.displayName}
+              className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
+              width={24}
+              height={24}
+            />
+          ) : (
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0 mt-0.5">
+              {h.author.displayName.charAt(0)}
+            </span>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">{h.author.displayName}</span>
+              <span className="text-[10px] text-[#5E6C84] dark:text-gray-500">{fmtDateTime(h.created)}</span>
+            </div>
+            <div className="space-y-1.5">
+              {h.items.map((item, i) => (
+                <div key={i} className="text-xs flex items-center gap-1.5 flex-wrap">
+                  <span className="font-medium text-[#172B4D] dark:text-gray-200 capitalize">{item.field}</span>
+                  {item.fromString && (
+                    <>
+                      <span className="text-[#5E6C84] dark:text-gray-500">from</span>
+                      <span className="bg-[#FFEBE5] dark:bg-red-900/20 text-red-700 dark:text-red-400 px-1.5 py-0.5 rounded text-[10px] max-w-[160px] truncate">
+                        {item.fromString}
+                      </span>
+                    </>
+                  )}
+                  {item.toString && (
+                    <>
+                      <span className="text-[#5E6C84] dark:text-gray-500">→</span>
+                      <span className="bg-[#E3FCEF] dark:bg-green-900/20 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded text-[10px] max-w-[160px] truncate">
+                        {item.toString}
+                      </span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Tab type ─────────────────────────────────────────────────────
+
+type PanelTab = 'description' | 'comments' | 'attachments' | 'history';
 
 // ─── Main panel ───────────────────────────────────────────────────
 
@@ -305,8 +535,9 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
   const [transitions, setTransitions]   = useState<JiraTransition[]>([]);
   const [transitionsLoading, setTransLoading] = useState(false);
   const [showTransitions, setShowTransitions] = useState(false);
-  const [commentText, setCommentText]   = useState('');
-  const [commentSaving, setCommentSaving] = useState(false);
+  const [activeTab, setActiveTab]       = useState<PanelTab>('description');
+  const [changelog, setChangelog]       = useState<ChangelogHistory[] | null>(null);
+  const [changelogLoading, setChangelogLoading] = useState(false);
   const [toast, setToastState]          = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -316,6 +547,16 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastState(null), 3000);
   }
+
+  // Reset state when issueKey changes
+  useEffect(() => {
+    setIssue(null);
+    setError(null);
+    setEditingField(null);
+    setShowTransitions(false);
+    setActiveTab('description');
+    setChangelog(null);
+  }, [issueKey]);
 
   // Fetch issue
   const fetchIssue = useCallback(async () => {
@@ -334,7 +575,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
 
   useEffect(() => { fetchIssue(); }, [fetchIssue]);
 
-  // Fetch transitions when opening status picker
+  // Fetch transitions when status picker opens
   useEffect(() => {
     if (!issueKey || !showTransitions) return;
     setTransLoading(true);
@@ -344,7 +585,20 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
       .finally(() => setTransLoading(false));
   }, [issueKey, showTransitions]);
 
-  // Close on Escape
+  // Lazy-load changelog when History tab is first opened
+  useEffect(() => {
+    if (activeTab !== 'history' || !issueKey || changelog !== null) return;
+    setChangelogLoading(true);
+    api.get<{ changelog?: { histories: ChangelogHistory[] } }>(`/issue/${issueKey}?expand=changelog&fields=summary`)
+      .then(r => {
+        const histories = r.data.changelog?.histories ?? [];
+        setChangelog([...histories].reverse()); // newest first
+      })
+      .catch(() => setChangelog([]))
+      .finally(() => setChangelogLoading(false));
+  }, [activeTab, issueKey, changelog]);
+
+  // Keyboard close
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -376,23 +630,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
     }
   }
 
-  // Add comment
-  async function addComment() {
-    if (!issueKey || !commentText.trim()) return;
-    setCommentSaving(true);
-    try {
-      await api.post(`/issue/${issueKey}/comment`, { body: commentText.trim() });
-      setCommentText('');
-      await fetchIssue();
-      showToast('Comment added');
-    } catch {
-      showToast('Failed to add comment', 'error');
-    } finally {
-      setCommentSaving(false);
-    }
-  }
-
-  // Resolve sprint from both field names
+  // Sprint name resolver
   function getSprintName(): string | null {
     if (!issue) return null;
     const f = issue.fields;
@@ -408,26 +646,34 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
   if (!issueKey) return null;
 
   const f = issue?.fields;
+  const attachments = f?.attachment ?? [];
+  const comments = f?.comment?.comments ?? [];
+
+  // Tab config
+  const tabs: { key: PanelTab; icon: React.ReactNode; label: string; badge?: number }[] = [
+    { key: 'description', icon: <FileText size={12} />, label: 'Description' },
+    { key: 'comments',    icon: <MessageSquare size={12} />, label: 'Comments', badge: comments.length || undefined },
+    { key: 'attachments', icon: <Paperclip size={12} />, label: 'Attachments', badge: attachments.length || undefined },
+    { key: 'history',     icon: <History size={12} />, label: 'History' },
+  ];
 
   return (
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40" onClick={onClose} />
 
-      {/* Panel — wider, two-column */}
+      {/* Panel */}
       <div
-        className="fixed right-0 top-0 h-full w-[760px] max-w-full bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col"
+        className="fixed right-0 top-0 h-full w-[820px] max-w-full bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col"
         style={{ animation: 'slideInRight 0.2s ease-out' }}
       >
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 px-5 py-3 border-b border-[#DFE1E6] dark:border-gray-700 flex-shrink-0 bg-[#F4F5F7] dark:bg-gray-800">
           {issue && f ? (
             <>
-              {/* Type icon */}
               {f.issuetype.iconUrl && (
                 <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={16} height={16} unoptimized className="flex-shrink-0" />
               )}
-              {/* Key badge */}
               <a
                 href={`/issues/${issue.key}`}
                 className="text-xs font-mono font-semibold text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-2 py-0.5 rounded hover:underline flex-shrink-0"
@@ -437,9 +683,8 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
               <a href={`/issues/${issue.key}`} className="text-[#5E6C84] hover:text-[#0052CC] transition-colors flex-shrink-0" title="Open full issue page">
                 <ExternalLink size={13} />
               </a>
-              {/* Type label */}
               <span className="text-xs text-[#5E6C84] dark:text-gray-400 flex-shrink-0">{f.issuetype.name}</span>
-              {/* Status badge — clickable */}
+              {/* Status — clickable */}
               <div className="relative flex-shrink-0">
                 {showTransitions ? (
                   transitionsLoading ? (
@@ -449,7 +694,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                       issueKey={issue.key}
                       currentStatus={f.status.name}
                       transitions={transitions}
-                      onDone={() => { setShowTransitions(false); fetchIssue(); onUpdated(); showToast(`Status updated`); }}
+                      onDone={() => { setShowTransitions(false); fetchIssue(); onUpdated(); showToast('Status updated'); }}
                       onCancel={() => setShowTransitions(false)}
                       onError={() => showToast('Failed to transition', 'error')}
                     />
@@ -465,10 +710,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                   </button>
                 )}
               </div>
-              {/* Priority */}
-              <div className="flex-shrink-0">
-                <PriorityIcon priority={f.priority} />
-              </div>
+              <PriorityIcon priority={f.priority} />
             </>
           ) : (
             <span className="text-xs text-[#5E6C84]">{issueKey}</span>
@@ -482,7 +724,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
         </div>
 
         {/* ── Body ── */}
-        <div className="flex-1 overflow-hidden flex">
+        <div className="flex-1 overflow-hidden flex min-h-0">
           {loading && (
             <div className="flex items-center justify-center flex-1">
               <Loader2 size={28} className="animate-spin text-[#0052CC]" />
@@ -498,7 +740,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
           )}
 
           {!loading && !error && issue && f && (
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 min-w-0">
 
               {/* ── Left sidebar: metadata ── */}
               <div className="w-[260px] flex-shrink-0 border-r border-[#DFE1E6] dark:border-gray-700 overflow-y-auto">
@@ -508,7 +750,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                   {/* Status */}
                   <SideField icon={<Activity size={12} />} label="Status">
                     <div className="relative">
-                      {showTransitions ? null /* shown in header */ : (
+                      {!showTransitions && (
                         <button
                           onClick={() => setShowTransitions(true)}
                           className="group flex items-center gap-1 hover:opacity-80 transition-opacity"
@@ -683,6 +925,9 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                         title={f.parent.fields.summary}
                       >
                         {f.parent.key}
+                        {f.parent.fields.summary && (
+                          <span className="text-[#5E6C84] dark:text-gray-500 ml-1 text-[10px]">— {f.parent.fields.summary}</span>
+                        )}
                       </a>
                     </SideField>
                   )}
@@ -710,7 +955,6 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                     </SideField>
                   )}
 
-                  {/* Dates */}
                   <SideField icon={<Calendar size={12} />} label="Created">
                     <span className="text-xs text-[#5E6C84] dark:text-gray-400">{fmtDateTime(f.created)}</span>
                   </SideField>
@@ -720,134 +964,154 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
                 </div>
               </div>
 
-              {/* ── Right pane: summary / description / subtasks / comments ── */}
-              <div className="flex-1 min-w-0 overflow-y-auto">
-                <div className="px-5 py-4 space-y-5">
-
-                  {/* Summary */}
-                  <div>
-                    {editingField === 'summary' ? (
-                      <EditText
-                        value={f.summary}
-                        onSave={v => saveField({ summary: v }, 'Summary updated')}
-                        onCancel={() => setEditingField(null)}
-                        loading={fieldSaving}
-                        placeholder="Issue summary"
-                      />
-                    ) : (
-                      <div className="group flex items-start gap-2">
-                        <h2 className="text-base font-semibold text-[#172B4D] dark:text-gray-100 leading-snug flex-1">
-                          {f.summary}
-                        </h2>
-                        <button
-                          onClick={() => setEditingField('summary')}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] flex-shrink-0 transition-all"
-                          title="Edit summary"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <h3 className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">
-                      Description
-                    </h3>
-                    {editingField === 'description' ? (
-                      <EditText
-                        value={f.description ?? ''}
-                        onSave={v => saveField({ description: v || null }, 'Description updated')}
-                        onCancel={() => setEditingField(null)}
-                        loading={fieldSaving}
-                        multiline
-                        rows={6}
-                        placeholder="Add a description…"
-                      />
-                    ) : (
-                      <div
-                        onClick={() => setEditingField('description')}
-                        className="group cursor-pointer relative"
-                      >
-                        {f.description ? (
-                          <div className="text-sm text-[#42526E] dark:text-gray-300 whitespace-pre-wrap leading-relaxed bg-[#F4F5F7] dark:bg-gray-800 rounded p-3 hover:bg-[#EBECF0] dark:hover:bg-gray-750 transition-colors">
-                            {f.description}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-[#5E6C84] dark:text-gray-500 italic bg-[#F4F5F7] dark:bg-gray-800 rounded p-3 hover:bg-[#EBECF0] dark:hover:bg-gray-750 transition-colors">
-                            Click to add description…
-                          </div>
-                        )}
-                        <Edit2 size={11} className="absolute top-2 right-2 opacity-0 group-hover:opacity-60 text-[#5E6C84] transition-opacity" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Subtasks */}
-                  {(f.subtasks?.length ?? 0) > 0 && (
-                    <div>
-                      <h3 className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">
-                        Subtasks ({f.subtasks!.length})
-                      </h3>
-                      <div className="divide-y divide-[#DFE1E6] dark:divide-gray-700 border border-[#DFE1E6] dark:border-gray-700 rounded">
-                        {f.subtasks!.map(sub => (
-                          <div key={sub.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 transition-colors">
-                            <StatusBadge status={sub.fields.status} />
-                            <a
-                              href={`/issues/${sub.key}`}
-                              className="text-xs text-[#0052CC] dark:text-blue-400 hover:underline font-medium flex-shrink-0"
-                            >
-                              {sub.key}
-                            </a>
-                            <span className="text-xs text-[#172B4D] dark:text-gray-200 truncate flex-1">
-                              {sub.fields.summary}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Comments */}
-                  <div>
-                    <h3 className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                      <MessageSquare size={12} />
-                      Comments {f.comment?.comments?.length ? `(${f.comment.comments.length})` : ''}
-                    </h3>
-
-                    {(f.comment?.comments ?? []).length > 0 && (
-                      <div className="space-y-4 mb-4">
-                        {f.comment!.comments.map(c => (
-                          <CommentCard key={c.id} comment={c} />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Add comment */}
-                    <div className="flex gap-2">
-                      <textarea
-                        value={commentText}
-                        onChange={e => setCommentText(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addComment();
-                        }}
-                        placeholder="Add a comment… (Ctrl+Enter to submit)"
-                        rows={3}
-                        disabled={commentSaving}
-                        className="flex-1 text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] placeholder-[#5E6C84] dark:placeholder-gray-500 resize-none"
-                      />
+              {/* ── Right pane: summary + tabs ── */}
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                {/* Summary */}
+                <div className="px-5 pt-4 pb-3 border-b border-[#DFE1E6] dark:border-gray-700 flex-shrink-0">
+                  {editingField === 'summary' ? (
+                    <EditText
+                      value={f.summary}
+                      onSave={v => saveField({ summary: v }, 'Summary updated')}
+                      onCancel={() => setEditingField(null)}
+                      loading={fieldSaving}
+                      placeholder="Issue summary"
+                    />
+                  ) : (
+                    <div className="group flex items-start gap-2">
+                      <h2 className="text-base font-semibold text-[#172B4D] dark:text-gray-100 leading-snug flex-1">
+                        {f.summary}
+                      </h2>
                       <button
-                        onClick={addComment}
-                        disabled={!commentText.trim() || commentSaving}
-                        className="self-end p-2 rounded bg-[#0052CC] text-white hover:bg-[#0747A6] disabled:opacity-40 transition-colors"
-                        title="Submit comment (Ctrl+Enter)"
+                        onClick={() => setEditingField('summary')}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] flex-shrink-0 transition-all"
+                        title="Edit summary"
                       >
-                        {commentSaving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        <Edit2 size={12} />
                       </button>
                     </div>
-                  </div>
+                  )}
+                </div>
 
+                {/* Tabs */}
+                <div className="flex items-center border-b border-[#DFE1E6] dark:border-gray-700 px-5 flex-shrink-0 bg-white dark:bg-gray-900">
+                  {tabs.map(tab => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors',
+                        activeTab === tab.key
+                          ? 'border-[#0052CC] text-[#0052CC] dark:text-blue-400 dark:border-blue-400'
+                          : 'border-transparent text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200 hover:border-[#DFE1E6]',
+                      )}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                      {tab.badge !== undefined && tab.badge > 0 && (
+                        <span className={cn(
+                          'text-[9px] px-1.5 py-0.5 rounded-full font-semibold',
+                          activeTab === tab.key
+                            ? 'bg-[#0052CC] text-white dark:bg-blue-600'
+                            : 'bg-[#DFE1E6] dark:bg-gray-600 text-[#5E6C84] dark:text-gray-400',
+                        )}>
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="px-5 py-4">
+
+                    {/* ── Description tab ── */}
+                    {activeTab === 'description' && (
+                      <div className="space-y-4">
+                        {editingField === 'description' ? (
+                          <WikiEditor
+                            value={f.description ?? ''}
+                            attachments={attachments}
+                            onSave={v => saveField({ description: v || null }, 'Description updated')}
+                            onCancel={() => setEditingField(null)}
+                            loading={fieldSaving}
+                          />
+                        ) : (
+                          <div
+                            onClick={() => setEditingField('description')}
+                            className="group cursor-pointer relative rounded border border-transparent hover:border-[#DFE1E6] dark:hover:border-gray-700 transition-colors p-3 -mx-3"
+                          >
+                            {f.description ? (
+                              <WikiRenderer content={f.description} attachments={attachments} />
+                            ) : (
+                              <p className="text-xs text-[#5E6C84] dark:text-gray-500 italic">
+                                Click to add description…
+                              </p>
+                            )}
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditingField('description'); }}
+                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-60 p-1 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] transition-all"
+                              title="Edit description"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Sub-tasks inline in description tab */}
+                        {(f.subtasks?.length ?? 0) > 0 && (
+                          <div>
+                            <h3 className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider mb-2">
+                              Sub-tasks ({f.subtasks!.length})
+                            </h3>
+                            <div className="divide-y divide-[#DFE1E6] dark:divide-gray-700 border border-[#DFE1E6] dark:border-gray-700 rounded">
+                              {f.subtasks!.map(sub => (
+                                <div key={sub.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 transition-colors">
+                                  <StatusBadge status={sub.fields.status} />
+                                  <a
+                                    href={`/issues/${sub.key}`}
+                                    className="text-xs text-[#0052CC] dark:text-blue-400 hover:underline font-medium flex-shrink-0"
+                                  >
+                                    {sub.key}
+                                  </a>
+                                  <span className="text-xs text-[#172B4D] dark:text-gray-200 truncate flex-1">
+                                    {sub.fields.summary}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── Comments tab ── */}
+                    {activeTab === 'comments' && (
+                      <CommentSection
+                        issueKey={issue.key}
+                        issueSummary={f.summary}
+                        comments={comments}
+                        onCommentAdded={fetchIssue}
+                      />
+                    )}
+
+                    {/* ── Attachments tab ── */}
+                    {activeTab === 'attachments' && (
+                      attachments.length > 0 ? (
+                        <AttachmentGallery attachments={attachments} />
+                      ) : (
+                        <div className="text-center py-10">
+                          <Paperclip size={28} className="text-[#C1C7D0] dark:text-gray-600 mx-auto mb-2" />
+                          <p className="text-xs text-[#5E6C84] dark:text-gray-500">No attachments</p>
+                        </div>
+                      )
+                    )}
+
+                    {/* ── History tab ── */}
+                    {activeTab === 'history' && (
+                      <HistorySection histories={changelog} loading={changelogLoading} />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -858,7 +1122,7 @@ export function IssueDetailPanel({ issueKey, onClose, onUpdated }: IssueDetailPa
         <PanelToast toast={toast} />
       </div>
 
-      {/* Slide-in keyframe */}
+      {/* Slide-in animation */}
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(100%); }
