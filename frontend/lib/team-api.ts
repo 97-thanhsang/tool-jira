@@ -29,6 +29,7 @@ interface RawIssue {
       fields: {
         summary: string;
         issuetype: { name: string; iconUrl: string };
+        status?: { name: string; statusCategory?: { key: string } };
       };
     };
   };
@@ -87,6 +88,8 @@ export async function fetchTeamWorklogs(
         parentSummary: issue.fields.parent?.fields?.summary,
         parentIssueTypeName: issue.fields.parent?.fields?.issuetype?.name,
         parentIssueTypeIconUrl: issue.fields.parent?.fields?.issuetype?.iconUrl,
+        parentStatus: issue.fields.parent?.fields?.status?.name,
+        parentStatusCategory: issue.fields.parent?.fields?.status?.statusCategory?.key,
       });
       dailyHours[startedDate] = (dailyHours[startedDate] ?? 0) + wl.timeSpentSeconds / 3600;
     }

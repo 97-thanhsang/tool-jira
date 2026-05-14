@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { format, isToday } from 'date-fns';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { Settings2, ChevronDown } from 'lucide-react';
+import { Settings2, ChevronDown, ExternalLink } from 'lucide-react';
 import { TeamExport } from './team-export';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
 import type { TeamReportData, TaskReport } from '@/types/jira';
@@ -489,7 +489,13 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                           {/* When tasktype column is ON → sub-group by parent; otherwise flat list */}
                           {visibleColumns.tasktype ? (() => {
                             // Build parent sub-groups (tasks already sorted by parentKey above)
-                            type ParentGroup = { parentKey: string; parentSummary: string; parentTypeName: string; parentTypeIcon: string; tasks: TaskReport[] };
+                            type ParentGroup = {
+                              parentKey: string; parentSummary: string;
+                              parentTypeName: string; parentTypeIcon: string;
+                              parentStatus?: string; parentStatusCategory?: string;
+                              parentDuedate?: string; parentEstDisplay?: string;
+                              tasks: TaskReport[];
+                            };
                             const parentGroups: ParentGroup[] = [];
                             for (const task of group.tasks) {
                               const pKey = task.parentKey ?? '__none__';
@@ -502,13 +508,27 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                   parentSummary: task.parentSummary ?? '',
                                   parentTypeName: task.parentIssueTypeName ?? '',
                                   parentTypeIcon: task.parentIssueTypeIconUrl ?? '',
+                                  parentStatus: task.parentStatus,
+                                  parentStatusCategory: task.parentStatusCategory,
+                                  parentDuedate: task.parentDuedate,
+                                  parentEstDisplay: task.parentEstDisplay,
                                   tasks: [task],
                                 });
                               }
                             }
                             return (
                               <div className="flex-1 flex flex-col min-w-0">
-                                {parentGroups.map((pg, pgi) => (
+                                {parentGroups.map((pg, pgi) => {
+                                  const pCat = pg.parentStatusCategory;
+                                  const pStatusCls = pCat === 'done'
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                    : pCat === 'indeterminate'
+                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                      : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
+                                  const pDueToday = new Date(new Date().toDateString());
+                                  const pIsOverdue = pg.parentDuedate && pCat !== 'done'
+                                    && new Date(pg.parentDuedate) < pDueToday;
+                                  return (
                                   <div
                                     key={`${pg.parentKey}-${pgi}`}
                                     className={cn(
@@ -523,6 +543,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                     >
                                       {pg.parentKey !== '__none__' ? (
                                         <>
+                                          {/* Parent key + icon */}
                                           <div className="flex items-center gap-1 min-w-0 w-full">
                                             {pg.parentTypeIcon && (
                                               <img src={pg.parentTypeIcon} alt={pg.parentTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
@@ -535,9 +556,32 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                               {pg.parentKey}
                                             </button>
                                           </div>
+                                          {/* Parent summary */}
                                           <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 leading-tight line-clamp-2 w-full">
                                             {pg.parentSummary}
                                           </span>
+                                          {/* Parent meta: status + duedate + est */}
+                                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                            {pg.parentStatus && (
+                                              <span className={cn('text-[9px] px-1 py-0 rounded font-medium leading-tight', pStatusCls)}>
+                                                {pg.parentStatus}
+                                              </span>
+                                            )}
+                                            {pg.parentDuedate && (
+                                              <span className={cn(
+                                                'text-[9px] font-medium leading-tight',
+                                                pIsOverdue ? 'text-[#DE350B] dark:text-red-400' : 'text-[#5E6C84] dark:text-gray-400',
+                                              )}>
+                                                {pIsOverdue && <span className="mr-0.5">&#9888;</span>}{formatDueDate(pg.parentDuedate)}
+                                              </span>
+                                            )}
+                                            {pg.parentEstDisplay && (
+                                              <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 leading-tight">
+                                                {pg.parentEstDisplay}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {/* Sub-task count */}
                                           <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 mt-0.5">
                                             {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
                                           </span>
@@ -556,11 +600,13 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                           dailyTotals={dailyTotals}
                                           isLastInGroup={ti === pg.tasks.length - 1}
                                           visibleColumns={visibleColumns}
+                                          onIssueClick={setPanelIssueKey}
                                         />
                                       ))}
                                     </div>
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             );
                           })() : (
@@ -573,6 +619,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                   dailyTotals={dailyTotals}
                                   isLastInGroup={ti === group.tasks.length - 1}
                                   visibleColumns={visibleColumns}
+                                  onIssueClick={setPanelIssueKey}
                                 />
                               ))}
                             </div>
@@ -647,12 +694,14 @@ function TaskRow({
   dailyTotals,
   isLastInGroup,
   visibleColumns,
+  onIssueClick,
 }: {
   task: TaskReport;
   dayHeaders: Array<{ key: string; dayName: string; dateStr: string; isToday: boolean }>;
   dailyTotals: Record<string, number>;
   isLastInGroup: boolean;
   visibleColumns: Record<string, boolean>;
+  onIssueClick?: (key: string) => void;
 }) {
   const missingClass = getMissingInfoClass(task);
 
@@ -666,16 +715,27 @@ function TaskRow({
     >
       {visibleColumns.key && (
         <div className="w-[150px] flex-shrink-0 px-3 py-2 flex items-center gap-1.5">
-        {task.issueTypeIconUrl && (
-          <img src={task.issueTypeIconUrl} alt={task.issueTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
-        )}
-        <Link
-          href={`/issues/${task.issueKey}`}
-          className="text-[#0052CC] dark:text-blue-400 hover:underline font-medium truncate"
-        >
-          {task.issueKey}
-        </Link>
-      </div>
+          {task.issueTypeIconUrl && (
+            <img src={task.issueTypeIconUrl} alt={task.issueTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
+          )}
+          <button
+            onClick={() => onIssueClick?.(task.issueKey)}
+            className="text-[#0052CC] dark:text-blue-400 hover:underline font-medium truncate text-left"
+            title={`Open ${task.issueKey}`}
+          >
+            {task.issueKey}
+          </button>
+          <Link
+            href={`/issues/${task.issueKey}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#5E6C84] dark:text-gray-500 hover:text-[#0052CC] dark:hover:text-blue-400 flex-shrink-0"
+            title="Open full page"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink size={10} />
+          </Link>
+        </div>
       )}
 
       {visibleColumns.summary && (

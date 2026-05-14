@@ -21,9 +21,18 @@ interface SubTaskIssue {
       fields: {
         summary: string;
         issuetype: { name: string; iconUrl: string };
+        status?: { name: string; statusCategory?: { key: string } };
       };
     };
   };
+}
+
+// Shape returned by the batch parent-issue fetch
+interface ParentIssueData {
+  status: string;
+  statusCategory: string;   // 'new' | 'indeterminate' | 'done'
+  duedate: string | null;
+  est: number;
 }
 
 function formatDuration(seconds: number): string {
@@ -41,18 +50,17 @@ export async function fetchTeamPlan(
   dateTo?: string,
   allUsers: boolean = false,
 ): Promise<TeamReportData> {
-  if (usernames.length === 0 && !allUsers) return { users: [], dateRange: { from: '', to: '' }, totalEstSeconds: 0, totalLoggedSeconds: 0, userCount: 0, taskCount: 0 };
+  if (usernames.length === 0 && !allUsers) {
+    return { users: [], dateRange: { from: '', to: '' }, totalEstSeconds: 0, totalLoggedSeconds: 0, userCount: 0, taskCount: 0 };
+  }
 
-  let jql: string;
   const baseJql = allUsers
     ? 'issuetype = "Sub-task" AND resolution = Unresolved AND duedate is not EMPTY'
     : `assignee IN (${usernames.map(u => `"${u}"`).join(', ')}) AND issuetype = "Sub-task" AND resolution = Unresolved AND duedate is not EMPTY`;
 
-  if (dateFrom && dateTo) {
-    jql = `${baseJql} AND duedate >= "${dateFrom}" AND duedate <= "${dateTo}" ORDER BY duedate ASC`;
-  } else {
-    jql = `${baseJql} ORDER BY duedate ASC`;
-  }
+  const jql = (dateFrom && dateTo)
+    ? `${baseJql} AND duedate >= "${dateFrom}" AND duedate <= "${dateTo}" ORDER BY duedate ASC`
+    : `${baseJql} ORDER BY duedate ASC`;
 
   const r = await api.get<{ issues: SubTaskIssue[] }>('/search', {
     params: {
@@ -62,11 +70,53 @@ export async function fetchTeamPlan(
     },
   });
 
-  // Build UserReport[] — group by assignee → project → issue
-  // dailySeconds = estimate amount on the due date
+  const issues = r.data.issues ?? [];
+
+  // ── Batch-fetch parent issues to get duedate + timetracking + status ────
+  const parentKeySet = new Set<string>();
+  for (const issue of issues) {
+    if (issue.fields.parent?.key) parentKeySet.add(issue.fields.parent.key);
+  }
+
+  const parentDataMap = new Map<string, ParentIssueData>();
+
+  if (parentKeySet.size > 0) {
+    try {
+      const parentKeys = Array.from(parentKeySet);
+      const parentJql = `key IN (${parentKeys.map(k => `"${k}"`).join(', ')})`;
+      const pr = await api.get<{
+        issues: Array<{
+          key: string;
+          fields: {
+            status: { name: string; statusCategory: { key: string } };
+            duedate: string | null;
+            timetracking?: { originalEstimateSeconds?: number };
+          };
+        }>;
+      }>('/search', {
+        params: {
+          jql: parentJql,
+          maxResults: parentKeys.length + 20,
+          fields: 'status,duedate,timetracking',
+        },
+      });
+      for (const pi of pr.data.issues ?? []) {
+        parentDataMap.set(pi.key, {
+          status: pi.fields.status.name,
+          statusCategory: pi.fields.status.statusCategory?.key ?? 'new',
+          duedate: pi.fields.duedate,
+          est: pi.fields.timetracking?.originalEstimateSeconds ?? 0,
+        });
+      }
+    } catch {
+      // Non-critical — continue without parent details
+    }
+  }
+
+  // ── Build UserReport[] — group by assignee ───────────────────────────────
   const userMap = new Map<string, UserReport>();
 
-  for (const issue of r.data.issues ?? []) {
+  for (const issue of issues) {
     const uname = issue.fields.assignee?.name;
     if (!uname) continue;
 
@@ -87,6 +137,15 @@ export async function fetchTeamPlan(
     const est = issue.fields.timetracking?.originalEstimateSeconds ?? 0;
     const duedate = issue.fields.duedate;
 
+    const parentKey = issue.fields.parent?.key;
+    const parentInfo = parentKey ? parentDataMap.get(parentKey) : undefined;
+
+    // parentStatus: prefer the batch-fetched value (more complete), fall back to inline
+    const parentStatus = parentInfo?.status
+      ?? issue.fields.parent?.fields?.status?.name;
+    const parentStatusCategory = parentInfo?.statusCategory
+      ?? issue.fields.parent?.fields?.status?.statusCategory?.key;
+
     const task: TaskReport = {
       issueKey: issue.key,
       issueId: '',
@@ -102,10 +161,15 @@ export async function fetchTeamPlan(
       status: issue.fields.status?.name ?? '',
       priority: issue.fields.priority?.name ?? 'Medium',
       duedate: duedate ?? undefined,
-      parentKey: issue.fields.parent?.key,
+      parentKey,
       parentSummary: issue.fields.parent?.fields?.summary,
       parentIssueTypeName: issue.fields.parent?.fields?.issuetype?.name,
       parentIssueTypeIconUrl: issue.fields.parent?.fields?.issuetype?.iconUrl,
+      parentStatus,
+      parentStatusCategory,
+      parentDuedate: parentInfo?.duedate ?? undefined,
+      parentEstSeconds: parentInfo?.est,
+      parentEstDisplay: parentInfo?.est ? formatDuration(parentInfo.est) : undefined,
     };
 
     user.tasks.push(task);

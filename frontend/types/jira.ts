@@ -163,10 +163,12 @@ export interface WorklogEntry {
   status?: string;             // "Done", "In Progress", "To Do", etc.
   priority?: string;           // "High", "Medium", etc.
   duedate?: string;            // "2026-05-15" or undefined
-  parentKey?: string;          // parent issue key (e.g., PROJ-10)
-  parentSummary?: string;      // parent issue summary
+  parentKey?: string;              // parent issue key (e.g., PROJ-10)
+  parentSummary?: string;          // parent issue summary
   parentIssueTypeName?: string;    // "Story", "Task", "Epic", etc.
   parentIssueTypeIconUrl?: string; // parent issue type icon URL
+  parentStatus?: string;           // parent status name
+  parentStatusCategory?: string;   // 'new' | 'indeterminate' | 'done'
 }
 
 export interface WorklogFilters {
@@ -237,10 +239,15 @@ export interface TaskReport {
   status: string;                // "Done", "In Progress", "To Do", etc.
   priority: string;              // "High", "Medium", etc.
   duedate?: string;              // "2026-05-15" or undefined
-  parentKey?: string;            // parent issue key (e.g., PROJ-10)
-  parentSummary?: string;        // parent issue summary
-  parentIssueTypeName?: string;  // "Epic", "Story", "Task", etc.
+  parentKey?: string;              // parent issue key (e.g., PROJ-10)
+  parentSummary?: string;          // parent issue summary
+  parentIssueTypeName?: string;    // "Epic", "Story", "Task", etc.
   parentIssueTypeIconUrl?: string; // parent issue type icon URL
+  parentStatus?: string;           // parent status name e.g. "In Progress"
+  parentStatusCategory?: string;   // 'new' | 'indeterminate' | 'done'
+  parentDuedate?: string;          // parent due date "2026-05-15"
+  parentEstSeconds?: number;       // parent original estimate in seconds
+  parentEstDisplay?: string;       // parent estimate display "8h"
 }
 
 export interface UserReport {
