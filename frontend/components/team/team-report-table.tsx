@@ -423,12 +423,14 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                 for (const d of days) {
                   dailyTotals[d] = tasks.reduce((s, t) => s + (t.dailySeconds[d] ?? 0), 0);
                 }
+                const projectKeys = new Set(tasks.map(t => t.projectKey));
+                const parentKeys = new Set(tasks.map(t => t.parentKey).filter(Boolean));
 
                 return (
                   <>
                     {/* Column headers */}
                     <div className="flex bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold text-[#5E6C84] dark:text-gray-400">
-                      {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2">Project</div>}
+                      {visibleColumns.project && <div className="w-[120px] flex-shrink-0 px-3 py-2">Project</div>}
                       {visibleColumns.tasktype && <div className="w-[280px] flex-shrink-0 px-3 py-2">Parent Task</div>}
                       {visibleColumns.key && <div className="w-[150px] flex-shrink-0 px-3 py-2">Key</div>}
                       {visibleColumns.summary && <div className="flex-1 px-2 py-2 min-w-0">Summary</div>}
@@ -471,7 +473,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                         >
                           {visibleColumns.project && (
                             <div
-                              className="w-[100px] flex-shrink-0 flex flex-col items-start justify-center px-3 py-2 border-r border-[#DFE1E6] dark:border-gray-700"
+                              className="w-[120px] flex-shrink-0 flex flex-col items-start justify-center px-3 py-2 border-r border-[#DFE1E6] dark:border-gray-700"
                               style={{ minHeight: `${group.tasks.length * 32}px` }}
                             >
                               <span
@@ -543,30 +545,37 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                       >
                                         {pg.parentKey !== '__none__' ? (
                                           <>
-                                            {/* Row 1: icon + key */}
+                                            {/* Row 1: icon + key (left) | status (right) */}
                                             <div className="flex items-center gap-1.5 min-w-0">
-                                              {pg.parentTypeIcon && (
-                                                <img src={pg.parentTypeIcon} alt={pg.parentTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
-                                              )}
-                                              <button
-                                                onClick={() => setPanelIssueKey(pg.parentKey)}
-                                                className="text-[11px] font-bold text-[#0052CC] dark:text-blue-400 hover:underline truncate text-left"
-                                                title={`Open ${pg.parentKey}`}
-                                              >
-                                                {pg.parentKey}
-                                              </button>
-                                            </div>
-                                            {/* Row 2: summary */}
-                                            <p className="text-[10px] text-[#172B4D] dark:text-gray-200 line-clamp-2 leading-snug">
-                                              {pg.parentSummary}
-                                            </p>
-                                            {/* Row 3: status · duedate · est */}
-                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                {pg.parentTypeIcon && (
+                                                  <img src={pg.parentTypeIcon} alt={pg.parentTypeName} className="w-3.5 h-3.5 flex-shrink-0" />
+                                                )}
+                                                <button
+                                                  onClick={() => setPanelIssueKey(pg.parentKey)}
+                                                  className="text-[11px] font-bold text-[#0052CC] dark:text-blue-400 hover:underline truncate text-left"
+                                                  title={`Open ${pg.parentKey}`}
+                                                >
+                                                  {pg.parentKey}
+                                                </button>
+                                              </div>
                                               {pg.parentStatus && (
-                                                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-sm font-semibold leading-none', pStatusCls)}>
+                                                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-sm font-semibold leading-none flex-shrink-0', pStatusCls)}>
                                                   {pg.parentStatus}
                                                 </span>
                                               )}
+                                            </div>
+                                            {/* Row 2: summary (left) | sub-task count (right) */}
+                                            <div className="flex items-start gap-1.5 min-w-0">
+                                              <p className="text-[10px] text-[#172B4D] dark:text-gray-200 line-clamp-2 leading-snug flex-1 min-w-0">
+                                                {pg.parentSummary}
+                                              </p>
+                                              <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 leading-none flex-shrink-0 mt-0.5">
+                                                {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
+                                              </span>
+                                            </div>
+                                            {/* Row 3: duedate · est */}
+                                            <div className="flex items-center gap-1.5 flex-wrap">
                                               {pg.parentDuedate && (
                                                 <span className={cn(
                                                   'text-[9px] font-medium leading-none',
@@ -581,10 +590,6 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                                 </span>
                                               )}
                                             </div>
-                                            {/* Row 4: sub-task count */}
-                                            <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 leading-none">
-                                              {pg.tasks.length} sub-task{pg.tasks.length !== 1 ? 's' : ''}
-                                            </span>
                                           </>
                                         ) : (
                                           <span className="text-[9px] text-[#C1C7D0] dark:text-gray-600 italic">No parent</span>
@@ -630,8 +635,16 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
 
                     {/* Total row */}
                     <div className="flex border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800 text-xs font-semibold">
-                      {visibleColumns.project && <div className="w-[100px] flex-shrink-0 px-3 py-2" />}
-                      {visibleColumns.tasktype && <div className="w-[280px] flex-shrink-0 px-3 py-2" />}
+                      {visibleColumns.project && (
+                        <div className="w-[120px] flex-shrink-0 px-3 py-2 text-[#5E6C84] dark:text-gray-400">
+                          {projectKeys.size} project{projectKeys.size !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                      {visibleColumns.tasktype && (
+                        <div className="w-[280px] flex-shrink-0 px-3 py-2 text-[#5E6C84] dark:text-gray-400">
+                          {parentKeys.size} parent{parentKeys.size !== 1 ? 's' : ''}
+                        </div>
+                      )}
                       {visibleColumns.key && (
                         <div className="w-[150px] flex-shrink-0 px-3 py-2 text-[#172B4D] dark:text-gray-100">Total</div>
                       )}
