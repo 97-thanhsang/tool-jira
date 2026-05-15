@@ -1,69 +1,88 @@
 # Tool-Jira — AI Context Entry Point
 
-> **Đọc file này đầu tiên khi làm việc với repo này.**
-> Version: Phase 1 Complete | Cập nhật: 2026-05-10
+> **Generated:** 2026-05-15 | **Branch:** main | **Commit:** d2e23e3
 
 ---
 
-## Dự án là gì?
+## OVERVIEW
 
-**Tool-Jira** — Web app thay thế Jira UI cá nhân.
-Kết nối tới `https://task.ascvn.com.vn` qua proxy backend.
-Clone về → cấu hình `.env` → chạy ngay.
+Personal Jira UI replacement connecting to `https://task.ascvn.com.vn` via proxy backend.
+Stack: **Next.js 15 App Router** + **Express v5** + **Drizzle ORM** (SQLite/PG) + **@base-ui/react** + **SWR** + **Tailwind v4**.
 
 ---
 
-## Stack nhanh
+## STRUCTURE
 
 ```
-Frontend:  Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui
-Backend:   Express v5 + TypeScript + Drizzle ORM + SQLite
-Auth:      Basic Auth → localStorage → X-Jira-Auth header
-Ports:     FE :3000 | BE :3001
-Repo:      https://github.com/97-thanhsang/tool-jira
+jira/
+├── frontend/          # Next.js 15 App Router — FE port :3000
+│   ├── app/           # Pages + layouts (route groups: (app), (auth))
+│   ├── components/    # Domain components (board/, issues/, worklog/, team/, ui/, issue/, shared/, search/)
+│   ├── hooks/         # SWR-based data hooks (11 hooks)
+│   ├── lib/           # API client (axios), domain API wrappers, AI helper, utils
+│   └── types/         # jira.ts — all Jira entity types
+├── backend/           # Express v5 — BE port :3001
+│   └── src/
+│       ├── routes/    # jira.ts (proxy), ai.ts (Gemini)
+│       └── db/        # Drizzle: schema.ts (SQLite), schema-pg.ts (PG)
+├── docs/              # Project docs — READ before implementing
+└── docker-compose.yml # Starts frontend + backend + postgres
 ```
 
 ---
 
-## Đọc docs theo công việc
+## WHERE TO LOOK
 
-| Bạn sẽ làm gì? | Đọc file nào |
-|----------------|-------------|
-| Tổng quan / bắt đầu | [`docs/project-overview.md`](./docs/project-overview.md) |
-| Làm việc với `frontend/` | [`docs/frontend.md`](./docs/frontend.md) |
-| Làm việc với `backend/` | [`docs/backend.md`](./docs/backend.md) |
-| Hiểu auth / API flow | [`docs/data-flow.md`](./docs/data-flow.md) |
-| Chọn feature tiếp theo | [`docs/roadmap.md`](./docs/roadmap.md) |
-| Follow code style | [`docs/conventions.md`](./docs/conventions.md) |
-| Debug / tránh lỗi cũ | [`docs/known-issues.md`](./docs/known-issues.md) |
-| Tất cả docs | [`docs/AGENTS.md`](./docs/AGENTS.md) |
+| Task | Location |
+|------|----------|
+| Add/edit a page | `frontend/app/(app)/*/page.tsx` |
+| Add a component | `frontend/components/{domain}/` |
+| Add a data hook | `frontend/hooks/use-*.ts` |
+| Add a lib utility | `frontend/lib/` |
+| Add a BE route | `backend/src/routes/` + register in `backend/src/index.ts` |
+| Jira types | `frontend/types/jira.ts` |
+| Auth flow | `frontend/lib/api.ts` (axios interceptors) |
+| AI integration | `frontend/lib/ai.ts` → `backend/src/routes/ai.ts` |
+| DB schema | `backend/src/db/schema.ts` (SQLite) / `schema-pg.ts` (PG) |
+| Docs index | `docs/AGENTS.md` |
 
 ---
 
-## Lệnh chạy
+## CRITICAL GOTCHAS
+
+1. **Express v5 wildcard:** Routes must be `/*path` — access via `req.params['path']` (may be array — join it). NOT `/*` or `/:path*`.
+2. **localStorage is client-only:** Never read in render body or SSR. Only inside `useEffect` or event handlers.
+3. **@base-ui/react NOT Radix:** UI primitives come from `@base-ui/react/*`. Use `delay` not `delayDuration` on tooltips. No shadcn barrel imports.
+4. **No Next API routes:** `frontend/app/api/` is empty — all server logic in Express backend. Frontend calls `NEXT_PUBLIC_API_URL/api/jira/*` and `/api/ai/*`.
+5. **Auth headers:** `X-Jira-Auth` for Jira proxy, `X-AI-Key` for AI endpoints — both read from `localStorage`, injected by `lib/api.ts` (axios interceptor) and `lib/ai.ts` (fetch).
+6. **Dual DB schema:** `schema.ts` = SQLite (default local), `schema-pg.ts` = PG (when `DATABASE_URL` set). `db/index.ts` picks at runtime.
+7. **SWR is the state layer:** No Redux/Zustand. Server state = SWR. Local UI state = `useState`. Persistence = `localStorage`.
+
+---
+
+## COMMANDS
 
 ```powershell
 # Backend (Terminal 1)
-cd backend && npm run dev   # port 3001
+cd backend && npm run dev      # ts-node-dev, port 3001
 
 # Frontend (Terminal 2)
-cd frontend && npm run dev  # port 3000
+cd frontend && npm run dev     # next dev, port 3000
+
+# Build
+cd backend && npm run build    # tsc → dist/
+cd frontend && npm run build   # next build (standalone output)
 ```
 
 ---
 
-## ⚠️ Gotchas quan trọng nhất
+## DOCS UPDATE RULES
 
-1. **Express v5:** Wildcard phải là `/*path`, access qua `req.params['path']` — xem `docs/known-issues.md#BUG-001`
-2. **localStorage:** KHÔNG đọc trong render body — chỉ trong `useEffect` — xem `docs/known-issues.md#BUG-002`
-3. **shadcn/ui:** Dự án dùng `@base-ui/react` (không phải Radix) — `delay` thay vì `delayDuration` — xem `docs/known-issues.md#GOTCHA-001`
-
----
-
-## Quy tắc cập nhật docs
-
-**AI PHẢI cập nhật docs sau mỗi thay đổi lớn:**
-- Feature mới → `docs/roadmap.md` (đánh ✅) + file context liên quan
+**After every significant change:**
+- New feature → `docs/roadmap.md` (mark ✅) + relevant context file
 - Bug fix → `docs/known-issues.md`
-- Component/hook mới → `docs/frontend.md`
-- Route BE mới → `docs/backend.md`
+- New component/hook → `docs/frontend.md`
+- New BE route → `docs/backend.md`
+- Auth/flow change → `docs/data-flow.md`
+
+**See also:** `frontend/AGENTS.md` | `backend/AGENTS.md` | `docs/AGENTS.md`

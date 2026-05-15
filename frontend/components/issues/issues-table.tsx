@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import { IssueDetailPanel } from './issue-detail-panel';
 import {
   Loader2, X, ChevronDown, ChevronRight,
-  ChevronUp, ChevronsUpDown, FolderOpen,
+  ChevronUp, ChevronsUpDown,
   Columns, Download, Check, User, Calendar, GripVertical,
   AlertTriangle,
 } from 'lucide-react';
@@ -23,7 +23,17 @@ export type ColumnKey =
   | 'assignee' | 'reporter' | 'sprint' | 'est' | 'logged'
   | 'labels' | 'due' | 'updated';
 
-export type GroupBy = 'none' | 'project' | 'status' | 'issuetype' | 'sprint' | 'assignee' | 'priority';
+export type GroupBy = 'none' | 'project' | 'status' | 'issuetype' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter';
+
+export type SubGroupBy =
+  | 'none'
+  | 'issuetype'
+  | 'status'
+  | 'statusCategory'
+  | 'assignee'
+  | 'priority'
+  | 'sprint'
+  | 'reporter';
 
 interface ColumnDef {
   key: ColumnKey;
@@ -63,7 +73,35 @@ const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker',
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   none: 'None', project: 'Project', status: 'Status',
   issuetype: 'Type', sprint: 'Sprint', assignee: 'Assignee', priority: 'Priority',
+  statusCategory: 'Status Category', reporter: 'Reporter',
 };
+
+const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
+  none: 'None',
+  issuetype: 'Type',
+  status: 'Status',
+  statusCategory: 'Status Category',
+  assignee: 'Assignee',
+  priority: 'Priority',
+  sprint: 'Sprint',
+  reporter: 'Reporter',
+};
+
+/** SubGroupBy options that are compatible with a given GroupBy (excludes the same field) */
+function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
+  const all: SubGroupBy[] = ['none', 'issuetype', 'status', 'statusCategory', 'assignee', 'priority', 'sprint', 'reporter'];
+  // Map groupBy → SubGroupBy keys that overlap (to exclude)
+  const exclude: Partial<Record<GroupBy, SubGroupBy[]>> = {
+    status:    ['status', 'statusCategory'],
+    issuetype: ['issuetype'],
+    assignee:  ['assignee'],
+    priority:  ['priority'],
+    sprint:    ['sprint'],
+    reporter:  ['reporter'],
+  };
+  const blocked = new Set<SubGroupBy>(exclude[groupBy] ?? []);
+  return all.filter(s => !blocked.has(s));
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -79,16 +117,37 @@ function isOverdue(duedate: string): boolean {
   return new Date(duedate) < today;
 }
 
-/** Resolve sprint from both `sprint` and `customfield_10020` (Jira Server alias) */
+/** Resolve sprint from both `sprint` and `customfield_10020` (Jira Server alias),
+ *  and fallback to scanning all issue fields for sprint-like data */
 function resolveSprint(issue: JiraIssue): JiraSprint | null {
+  // Try known field names first
   const raw = issue.fields.sprint ?? issue.fields.customfield_10020;
-  if (!raw) return null;
-  if (Array.isArray(raw)) {
-    return (raw as JiraSprint[]).find(s => s.state === 'active')
-      ?? (raw as JiraSprint[])[raw.length - 1]
-      ?? null;
+  if (raw) {
+    if (Array.isArray(raw)) {
+      return (raw as JiraSprint[]).find(s => s.state === 'active')
+        ?? (raw as JiraSprint[])[raw.length - 1]
+        ?? null;
+    }
+    return raw as JiraSprint;
   }
-  return raw as JiraSprint;
+
+  // Fallback: scan ALL fields for any sprint-shaped data (handles customfield_XXXXX)
+  for (const value of Object.values(issue.fields)) {
+    if (!value) continue;
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      if (
+        typeof item === 'object' &&
+        typeof item.id === 'number' &&
+        typeof item.name === 'string' &&
+        typeof item.state === 'string'
+      ) {
+        return item as JiraSprint;
+      }
+    }
+  }
+
+  return null;
 }
 
 function getCellText(key: ColumnKey, issue: JiraIssue): string {
@@ -140,6 +199,61 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
       case 'priority':
         gKey = f.priority?.name ?? 'None';
         gLabel = f.priority?.name ?? 'None'; break;
+      case 'reporter':
+        gKey = f.reporter?.name ?? '__noreporter';
+        gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
+      case 'statusCategory': {
+        const cat = f.status.statusCategory.key;
+        const catLabels: Record<string, string> = { new: 'To Do', indeterminate: 'In Progress', done: 'Done' };
+        gKey = cat; gLabel = catLabels[cat] ?? cat; break;
+      }
+      default:
+        gKey = '__all'; gLabel = '';
+    }
+
+    if (!map.has(gKey)) map.set(gKey, { label: gLabel, issues: [] });
+    map.get(gKey)!.issues.push(issue);
+  }
+
+  return Array.from(map.entries()).map(([key, val]) => ({ key, label: val.label, issues: val.issues }));
+}
+
+function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: string; label: string; issues: JiraIssue[] }[] {
+  if (subGroupBy === 'none') return [{ key: '__all', label: '', issues }];
+  const map = new Map<string, { label: string; issues: JiraIssue[] }>();
+
+  for (const issue of issues) {
+    const f = issue.fields;
+    let gKey: string, gLabel: string;
+
+    switch (subGroupBy) {
+      case 'issuetype':
+        gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
+      case 'status':
+        gKey = f.status.name; gLabel = f.status.name; break;
+      case 'statusCategory': {
+        const cat = f.status.statusCategory.key;
+        const catLabels: Record<string, string> = {
+          new: 'To Do',
+          indeterminate: 'In Progress',
+          done: 'Done',
+        };
+        gKey = cat; gLabel = catLabels[cat] ?? cat; break;
+      }
+      case 'assignee':
+        gKey = f.assignee?.name ?? '__unassigned';
+        gLabel = f.assignee?.displayName ?? 'Unassigned'; break;
+      case 'priority':
+        gKey = f.priority?.name ?? 'None';
+        gLabel = f.priority?.name ?? 'None'; break;
+      case 'sprint': {
+        const s = resolveSprint(issue);
+        gKey = s ? String(s.id) : '__nosprint';
+        gLabel = s?.name ?? 'No Sprint'; break;
+      }
+      case 'reporter':
+        gKey = f.reporter?.name ?? '__noreporter';
+        gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -560,6 +674,172 @@ interface IssuesTableProps {
   onSortChange: (field: string, dir: 'ASC' | 'DESC') => void;
 }
 
+// ─── Group header helpers ──────────────────────────────────────────
+
+/** Return border-left color for a group-header based on groupBy value */
+function getGroupBorderColor(groupBy: GroupBy, issue?: JiraIssue): string {
+  if (!issue) return '#0052CC';
+  const f = issue.fields;
+  switch (groupBy) {
+    case 'status': {
+      const cat = f.status.statusCategory.key;
+      return cat === 'new' ? '#DFE1E6' : cat === 'indeterminate' ? '#0052CC' : '#006644';
+    }
+    case 'issuetype': {
+      const colors: Record<string, string> = {
+        Bug: '#EF4444', Task: '#3B82F6', Story: '#22C55E',
+        Epic: '#A855F7', 'Sub-task': '#38BDF8',
+      };
+      return colors[f.issuetype.name] ?? '#6B7280';
+    }
+    case 'priority': {
+      const colors: Record<string, string> = {
+        Highest: '#DE350B', High: '#FF5630', Medium: '#FFAB00',
+        Low: '#2684FF', Lowest: '#2684FF', Blocker: '#DE350B', Minor: '#6B778C',
+      };
+      return f.priority ? (colors[f.priority.name] ?? '#DFE1E6') : '#DFE1E6';
+    }
+    case 'statusCategory': {
+      const cat = f.status.statusCategory.key;
+      return cat === 'new' ? '#DFE1E6' : cat === 'indeterminate' ? '#0052CC' : '#006644';
+    }
+    default:
+      return '#0052CC';
+  }
+}
+
+/** Render content inside a group-header button */
+function GroupHeaderContent({ groupBy, group, firstIssue }: {
+  groupBy: GroupBy;
+  group: { key: string; label: string; issues: JiraIssue[] };
+  firstIssue?: JiraIssue;
+}) {
+  if (!firstIssue) {
+    return <span className="text-sm font-bold text-[#172B4D] dark:text-gray-100 tracking-tight">{group.label}</span>;
+  }
+  const f = firstIssue.fields;
+
+  switch (groupBy) {
+    case 'issuetype':
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          {f.issuetype.iconUrl
+            ? <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={16} height={16} className="flex-shrink-0" unoptimized />
+            : <IssueTypeFallback name={f.issuetype.name} />}
+          <span className="text-sm font-bold text-[#172B4D] dark:text-gray-100 tracking-tight truncate">{group.label}</span>
+        </div>
+      );
+
+    case 'assignee':
+    case 'reporter': {
+      const user = groupBy === 'assignee' ? f.assignee : f.reporter;
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          {user
+            ? <UserAvatar user={user} />
+            : <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#DFE1E6] dark:bg-gray-600 flex-shrink-0"><User size={11} className="text-[#5E6C84]" /></span>}
+          <span className="text-sm font-bold text-[#172B4D] dark:text-gray-100 tracking-tight truncate">{group.label}</span>
+        </div>
+      );
+    }
+
+    case 'status':
+    case 'statusCategory': {
+      const catColors: Record<string, string> = {
+        new: 'bg-[#DFE1E6] text-[#42526E]',
+        indeterminate: 'bg-[#DEEBFF] text-[#0052CC]',
+        done: 'bg-[#E3FCEF] text-[#006644]',
+      };
+      const catKey = groupBy === 'status' ? f.status.statusCategory.key : f.status.statusCategory.key;
+      return (
+        <span className={cn(
+          'inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-semibold uppercase tracking-wide',
+          catColors[catKey] ?? catColors['new'],
+        )}>
+          {group.label}
+        </span>
+      );
+    }
+
+    case 'priority':
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          <PriorityIcon priority={f.priority} />
+          <span className="text-sm font-bold text-[#172B4D] dark:text-gray-100 tracking-tight truncate">{group.label}</span>
+        </div>
+      );
+
+    default:
+      return <span className="text-sm font-bold text-[#172B4D] dark:text-gray-100 tracking-tight truncate">{group.label}</span>;
+  }
+}
+
+/** Render content inside a sub-group-header button (smaller, indented) */
+function SubGroupHeaderContent({ subGroupBy, sub, firstIssue }: {
+  subGroupBy: SubGroupBy;
+  sub: { key: string; label: string; issues: JiraIssue[] };
+  firstIssue?: JiraIssue;
+}) {
+  if (!firstIssue) {
+    return <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">{sub.label}</span>;
+  }
+  const f = firstIssue.fields;
+
+  switch (subGroupBy) {
+    case 'issuetype':
+      return (
+        <div className="flex items-center gap-1.5 min-w-0">
+          {f.issuetype.iconUrl
+            ? <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={13} height={13} className="flex-shrink-0" unoptimized />
+            : <IssueTypeFallback name={f.issuetype.name} />}
+          <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100 truncate">{sub.label}</span>
+        </div>
+      );
+
+    case 'assignee':
+    case 'reporter': {
+      const user = subGroupBy === 'assignee' ? f.assignee : f.reporter;
+      return (
+        <div className="flex items-center gap-1.5 min-w-0">
+          {user
+            ? <UserAvatar user={user} />
+            : <span className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full bg-[#DFE1E6] dark:bg-gray-600 flex-shrink-0"><User size={9} className="text-[#5E6C84]" /></span>}
+          <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100 truncate">{sub.label}</span>
+        </div>
+      );
+    }
+
+    case 'status':
+    case 'statusCategory': {
+      const catColors: Record<string, string> = {
+        new: 'bg-[#DFE1E6] text-[#42526E]',
+        indeterminate: 'bg-[#DEEBFF] text-[#0052CC]',
+        done: 'bg-[#E3FCEF] text-[#006644]',
+      };
+      const catKey = firstIssue.fields.status.statusCategory.key;
+      return (
+        <span className={cn(
+          'inline-flex items-center px-1.5 py-0.5 rounded-sm text-[11px] font-semibold uppercase tracking-wide',
+          catColors[catKey] ?? catColors['new'],
+        )}>
+          {sub.label}
+        </span>
+      );
+    }
+
+    case 'priority':
+      return (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <PriorityIcon priority={f.priority} />
+          <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100 truncate">{sub.label}</span>
+        </div>
+      );
+
+    default:
+      return <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100 truncate">{sub.label}</span>;
+  }
+}
+
 export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
@@ -570,6 +850,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [visibleColumns, setVisibleColumns]     = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
   const [columnOrder, setColumnOrder]           = useState<ColumnKey[]>(DEFAULT_ORDER);
   const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
+  const [subGroupBy, setSubGroupBy]             = useState<SubGroupBy>('none');
   const [showColumnPicker, setShowColPicker]    = useState(false);
   const [dragOverKey, setDragOverKey]           = useState<ColumnKey | null>(null);
   const dragSrcRef                              = useRef<ColumnKey | null>(null);
@@ -666,6 +947,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }
+
+  function handleGroupByChange(g: GroupBy) {
+    setGroupBy(g);
+    setSubGroupBy('none'); // always reset sub-group when primary group changes
   }
 
   function toggleGroup(key: string) {
@@ -777,27 +1063,70 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     <div>
       {/* ── Toolbar ───────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
-        {/* Group by */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[#5E6C84] dark:text-gray-400 font-medium whitespace-nowrap">
-            Group by:
-          </span>
-          <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden">
-            {(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map(g => (
-              <button
-                key={g}
-                onClick={() => setGroupBy(g)}
-                className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
-                  groupBy === g
-                    ? 'bg-[#0052CC] text-white'
-                    : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
-                )}
-              >
-                {GROUP_BY_LABELS[g]}
-              </button>
-            ))}
+        {/* Group by + Sub group by */}
+        <div className="flex flex-col gap-2 p-2.5 bg-[#F4F5F7] dark:bg-gray-700/40 rounded-md border border-[#DFE1E6] dark:border-gray-600">
+          {/* Group by row */}
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-semibold text-[#0052CC] dark:text-blue-400 uppercase tracking-wide whitespace-nowrap w-[72px] select-none">
+              Group by
+            </span>
+            <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shadow-sm">
+              {(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map(g => (
+                <button
+                  key={g}
+                  onClick={() => handleGroupByChange(g)}
+                  className={cn(
+                    'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
+                    groupBy === g
+                      ? 'bg-[#0052CC] text-white shadow-inner'
+                      : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#DEEBFF] dark:hover:bg-gray-700 hover:text-[#0052CC] dark:hover:text-blue-400',
+                  )}
+                >
+                  {GROUP_BY_LABELS[g]}
+                </button>
+              ))}
+            </div>
+            {groupBy !== 'none' && (
+              <span className="text-[10px] font-medium text-[#0052CC] dark:text-blue-400 bg-[#DEEBFF] dark:bg-blue-900/30 px-1.5 py-0.5 rounded select-none">
+                {GROUP_BY_LABELS[groupBy]}
+              </span>
+            )}
           </div>
+
+          {/* Sub group by — only shown when Group By ≠ none */}
+          {groupBy !== 'none' && (
+            <>
+              {/* Separator */}
+              <div className="border-t border-[#DFE1E6] dark:border-gray-600" />
+
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-semibold text-[#6554C0] dark:text-purple-400 uppercase tracking-wide whitespace-nowrap w-[72px] select-none">
+                  Sub group
+                </span>
+                <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shadow-sm">
+                  {getSubGroupOptions(groupBy).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setSubGroupBy(s)}
+                      className={cn(
+                        'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
+                        subGroupBy === s
+                          ? 'bg-[#6554C0] text-white shadow-inner'
+                          : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#EAE6FF] dark:hover:bg-purple-900/30 hover:text-[#6554C0] dark:hover:text-purple-400',
+                      )}
+                    >
+                      {SUB_GROUP_BY_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+                {subGroupBy !== 'none' && (
+                  <span className="text-[10px] font-medium text-[#6554C0] dark:text-purple-400 bg-[#EAE6FF] dark:bg-purple-900/30 px-1.5 py-0.5 rounded select-none">
+                    {SUB_GROUP_BY_LABELS[subGroupBy]}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -1081,37 +1410,73 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         ) : (
           groups.map(group => {
             const collapsed = collapsedGroups.has(group.key);
+            const subGroups = subGroupIssues(group.issues, subGroupBy);
             return (
               <div key={group.key}>
                 {groupBy !== 'none' && (
                   <button
                     onClick={() => toggleGroup(group.key)}
-                    className="w-full flex items-center gap-2 px-4 py-2 bg-[#F4F5F7] dark:bg-gray-750 hover:bg-[#EBECF0] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-600 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-[#EBECF0] dark:bg-gray-700 hover:bg-[#DFE1E6] dark:hover:bg-gray-600 border-b-2 border-[#DFE1E6] dark:border-gray-600 border-l-4 transition-colors text-left"
+                    style={{ borderLeftColor: getGroupBorderColor(groupBy, group.issues[0]) }}
                   >
                     {collapsed
-                      ? <ChevronRight size={13} className="text-[#5E6C84] flex-shrink-0" />
-                      : <ChevronDown  size={13} className="text-[#5E6C84] flex-shrink-0" />}
-                    <FolderOpen size={13} className="text-[#5E6C84] flex-shrink-0" />
-                    <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">
-                      {group.label}
-                    </span>
-                    <span className="text-xs text-[#5E6C84] dark:text-gray-400 font-medium">
-                      ({group.issues.length})
+                      ? <ChevronRight size={14} className="text-[#0052CC] dark:text-blue-400 flex-shrink-0" />
+                      : <ChevronDown  size={14} className="text-[#0052CC] dark:text-blue-400 flex-shrink-0" />}
+                    <GroupHeaderContent groupBy={groupBy} group={group} firstIssue={group.issues[0]} />
+                    <span className="inline-flex items-center justify-center min-w-[22px] h-[18px] text-[11px] font-bold text-white bg-[#0052CC] dark:bg-blue-600 rounded-full px-1.5 leading-none">
+                      {group.issues.length}
                     </span>
                   </button>
                 )}
-                {!collapsed && group.issues.map(issue => (
-                  <IssueTableRow
-                    key={issue.id}
-                    issue={issue}
-                    selected={selected.has(issue.id)}
-                    onToggle={() => toggleSelect(issue.id)}
-                    visibleCols={visibleCols}
-                    onOpenPanel={setPanelKey}
-                    onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
-                    onInlineError={msg => showToast(msg, 'error')}
-                  />
-                ))}
+
+                {!collapsed && subGroupBy === 'none'
+                  ? group.issues.map(issue => (
+                    <IssueTableRow
+                      key={issue.id}
+                      issue={issue}
+                      selected={selected.has(issue.id)}
+                      onToggle={() => toggleSelect(issue.id)}
+                      visibleCols={visibleCols}
+                      onOpenPanel={setPanelKey}
+                      onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
+                      onInlineError={msg => showToast(msg, 'error')}
+                    />
+                  ))
+                  : !collapsed && subGroups.map(sub => {
+                    const subCollapsed = collapsedGroups.has(`${group.key}::${sub.key}`);
+                    return (
+                      <div key={sub.key}>
+                        {/* Sub-group header */}
+                        <button
+                          onClick={() => toggleGroup(`${group.key}::${sub.key}`)}
+                          className="w-full flex items-center gap-2 pl-10 pr-4 py-2 bg-[#F4F5F7] dark:bg-gray-750/80 hover:bg-[#EBECF0] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 border-l-[3px] transition-colors text-left"
+                          style={{ borderLeftColor: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }}
+                        >
+                          {subCollapsed
+                            ? <ChevronRight size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }} />
+                            : <ChevronDown  size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }} />}
+                          <SubGroupHeaderContent subGroupBy={subGroupBy} sub={sub} firstIssue={sub.issues[0]} />
+                          <span className="inline-flex items-center justify-center min-w-[20px] h-[16px] text-[10px] font-bold text-white rounded-full px-1.5 leading-none"
+                            style={{ backgroundColor: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }}>
+                            {sub.issues.length}
+                          </span>
+                        </button>
+                        {!subCollapsed && sub.issues.map(issue => (
+                          <IssueTableRow
+                            key={issue.id}
+                            issue={issue}
+                            selected={selected.has(issue.id)}
+                            onToggle={() => toggleSelect(issue.id)}
+                            visibleCols={visibleCols}
+                            onOpenPanel={setPanelKey}
+                            onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
+                            onInlineError={msg => showToast(msg, 'error')}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })
+                }
               </div>
             );
           })
