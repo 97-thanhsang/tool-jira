@@ -133,12 +133,10 @@ function FilterChip({
 }
 
 export function BoardFilterBar({ filters, onChange, allIssues }: BoardFilterBarProps) {
-  const projects   = Array.from(new Set(allIssues.filter(i => i.fields.project).map((i) => i.fields.project.key)));
   const issueTypes = Array.from(new Set(allIssues.filter(i => i.fields.issuetype).map((i) => i.fields.issuetype.name)));
   const priorities = Array.from(new Set(allIssues.filter(i => i.fields.priority).map((i) => i.fields.priority.name)));
 
   const hasFilters =
-    filters.projects.length > 0 ||
     filters.issueTypes.length > 0 ||
     filters.priorities.length > 0;
 
@@ -154,21 +152,6 @@ export function BoardFilterBar({ filters, onChange, allIssues }: BoardFilterBarP
 
   return (
     <div className="flex items-center gap-3 flex-wrap pb-3 border-b border-[#DFE1E6] dark:border-gray-700 mb-4 flex-shrink-0">
-      {/* Project */}
-      {projects.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400">Project:</span>
-          {projects.map((p) => (
-            <FilterChip
-              key={p}
-              label={p}
-              active={filters.projects.includes(p)}
-              onClick={() => toggle('projects', p)}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Type */}
       {issueTypes.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">

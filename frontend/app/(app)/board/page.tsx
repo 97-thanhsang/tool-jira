@@ -1,22 +1,15 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
-import useSWR from 'swr';
-import { api, getStoredUser } from '@/lib/api';
+import { useState, useMemo } from 'react';
+import { getStoredUser } from '@/lib/api';
 import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
-import { useBoardState, type ColumnMapEntry } from '@/hooks/use-board-state';
+import { useBoardState } from '@/hooks/use-board-state';
+import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn } from '@/components/board/kanban-board';
 import { BoardFilterBar, EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { JiraBoard, JiraBoardConfig, JiraIssue } from '@/types/jira';
-
-// ─── Color palette ───────────────────────────────────────────────────────────
-
-const COLUMN_COLORS = [
-  '#5E6C84', '#0052CC', '#36B37E', '#DE350B',
-  '#FF8B00', '#6554C0', '#008DA6', '#E774BB',
-];
+import type { JiraIssue } from '@/types/jira';
 
 // ─── Page component ──────────────────────────────────────────────────────────
 
@@ -25,67 +18,11 @@ export default function BoardPage() {
   const currentUser = getStoredUser() as { name?: string } | null;
   const currentUsername = currentUser?.name;
 
-  // Board selection
-  const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
-
-  const { data: boards } = useSWR<JiraBoard[]>(
-    '/agile/board?maxResults=50&type=kanban',
-    (url: string) => api.get<{ values: JiraBoard[] }>(url).then(r => r.data.values),
-  );
-
-  // Auto-select first board when boards load
-  useEffect(() => {
-    if (boards && boards.length > 0 && selectedBoardId === null) {
-      setSelectedBoardId(boards[0].id);
-    }
-  }, [boards, selectedBoardId]);
-
-  const { data: boardConfig } = useSWR<JiraBoardConfig>(
-    selectedBoardId ? `/agile/board/${selectedBoardId}/configuration` : null,
-    (url: string) => api.get<JiraBoardConfig>(url).then(r => r.data),
-  );
-
-  // Fetch the board's saved filter JQL (only when board selected)
-  const { data: boardFilterJql } = useSWR<string>(
-    boardConfig?.filter?.id ? `/filter/${boardConfig.filter.id}` : null,
-    (url: string) =>
-      api.get<{ jql: string }>(url).then(r => r.data.jql),
-    { revalidateOnFocus: false, dedupingInterval: 60_000 },
-  );
-
-  // Build combined JQL: filter JQL + sub-query (if any)
-  const customJql = useMemo<string | undefined>(() => {
-    if (!boardFilterJql) return undefined;
-    let jql = boardFilterJql;
-    if (boardConfig?.subQuery?.query) {
-      jql = `(${boardFilterJql}) AND (${boardConfig.subQuery.query})`;
-    }
-    // Append ordering if not already present
-    if (!jql.toLowerCase().includes('order by')) {
-      jql += ' ORDER BY updated DESC';
-    }
-    return jql;
-  }, [boardFilterJql, boardConfig]);
-
-  // Build statusId → ColumnMapEntry from board config
-  const statusColumnMap = useMemo<Record<string, ColumnMapEntry> | null>(() => {
-    if (!boardConfig?.columnConfig?.columns) return null;
-    const map: Record<string, ColumnMapEntry> = {};
-    boardConfig.columnConfig.columns.forEach((col, idx) => {
-      col.statuses.forEach(s => {
-        map[s.id] = {
-          name: col.name,
-          wipMin: col.min,
-          wipMax: col.max,
-          color: COLUMN_COLORS[idx % COLUMN_COLORS.length],
-        };
-      });
-    });
-    return map;
-  }, [boardConfig]);
+  // Status-based 5-column mapping from Jira statuses
+  const { statusColumnMap } = useStatusColumns();
 
   const { grouped, dynamicColumns, isLoading, error, mutate, moveCard, toast } =
-    useBoardState(statusColumnMap, customJql);
+    useBoardState(statusColumnMap);
 
   // Filter state
   const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
@@ -134,27 +71,15 @@ export default function BoardPage() {
     <div className="flex flex-col h-screen p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100 shrink-0">
-            {boardConfig?.name || 'My Board'}
-          </h1>
-          {/* Board selector */}
-          <select
-            className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] max-w-[200px] truncate shrink-0"
-            value={selectedBoardId ?? ''}
-            onChange={(e) => setSelectedBoardId(e.target.value ? Number(e.target.value) : null)}
-          >
-            {(boards ?? []).map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
+        <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
+          My Board
+        </h1>
         <Button
           variant="outline"
           size="sm"
           onClick={() => mutate()}
           disabled={isLoading}
-          className="border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 ml-3 shrink-0"
+          className="border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 shrink-0"
         >
           <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           <span className="ml-1.5">Refresh</span>
