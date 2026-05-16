@@ -121,7 +121,7 @@ export default function AppLayout({
 
   return (
     <div className="flex min-h-screen bg-[#F4F5F7] dark:bg-gray-900">
-      <Sidebar onCreateClick={() => setCreateOpen(true)} />
+      <Sidebar />
       <main className="flex-1 overflow-auto min-w-0">{children}</main>
       <CommandPalette />
 
