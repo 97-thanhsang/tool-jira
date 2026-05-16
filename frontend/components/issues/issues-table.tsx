@@ -12,9 +12,43 @@ import {
   Loader2, X, ChevronDown, ChevronRight,
   ChevronUp, ChevronsUpDown,
   Columns, Download, Check, User, Calendar, GripVertical,
-  AlertTriangle,
+  AlertTriangle, Pencil, Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { StatusEditor, InlineTextEditor, DateEditor, EstEditor } from '../team/inline-editors';
+import { SaveConfirmModal, type EditEntry } from '../team/save-confirm-modal';
+
+// ─── Edit mode helpers ────────────────────────────────────────────
+
+interface AssigneeEdit {
+  issueKey: string;
+  oldValue: string;
+  newValue: string;
+  newDisplayName: string;
+}
+
+/** Map IssuesTable column key → EditEntry field */
+function colToField(col: ColumnKey): EditEntry['field'] | null {
+  switch (col) {
+    case 'summary': return 'summary';
+    case 'status':  return 'status';
+    case 'due':     return 'duedate';
+    case 'est':     return 'est';
+    default:        return null;
+  }
+}
+
+/** Get the current value for a column as displayed */
+function getColValue(col: ColumnKey, issue: JiraIssue): string {
+  switch (col) {
+    case 'summary': return issue.fields.summary;
+    case 'status':  return issue.fields.status.name;
+    case 'due':     return issue.fields.duedate ?? '';
+    case 'est':     return issue.fields.timetracking?.originalEstimate ?? '';
+    case 'assignee': return issue.fields.assignee?.name ?? '';
+    default:        return '';
+  }
+}
 
 // ─── Column config ────────────────────────────────────────────────
 
@@ -67,6 +101,8 @@ const DEFAULT_VISIBLE = new Set<ColumnKey>(
 const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map(c => c.key);
 
 const INLINE_EDITABLE: ColumnKey[] = ['status', 'priority', 'due'];
+
+const EDIT_MODE_EDITABLE: ColumnKey[] = ['summary', 'status', 'due', 'assignee', 'est'];
 
 const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
@@ -568,22 +604,143 @@ function InlineDueDateEdit({ issue, onDone, onCancel, onError }: {
   );
 }
 
+// ── Inline Assignee Editor (EDIT mode) ──────────────────────────────
+
+function InlineAssigneeEdit({ issue, onSave, onCancel }: {
+  issue: JiraIssue; onSave: (username: string, displayName: string) => void; onCancel: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Array<{ name: string; displayName: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.length < 1) { setResults([]); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const r = await api.get<Array<{ name: string; displayName: string }>>('/user/search', {
+          params: { username: query, maxResults: 8 },
+        });
+        setResults(Array.isArray(r.data) ? r.data : []);
+      } catch { setResults([]); }
+      setLoading(false);
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onCancel]);
+
+  function select(name: string, displayName: string) {
+    onSave(name, displayName);
+  }
+
+  return (
+    <div ref={ref} className="absolute left-0 top-full mt-0.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-30 min-w-[200px] py-1" onClick={e => e.stopPropagation()}>
+      <div className="px-2 pb-1">
+        <input
+          autoFocus
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search username…"
+          className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+        />
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#5E6C84]"><Loader2 size={12} className="animate-spin" /> Searching…</div>
+      ) : results.length === 0 ? (
+        query.length > 0
+          ? <div className="px-3 py-2 text-xs text-[#5E6C84] dark:text-gray-400">No users found</div>
+          : <div className="px-3 py-2 text-xs text-[#5E6C84] dark:text-gray-400">Type to search</div>
+      ) : (
+        results.map(u => (
+          <button
+            key={u.name}
+            onClick={() => select(u.name, u.displayName)}
+            className="w-full text-left text-xs px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+          >
+            <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0">
+              {u.displayName.charAt(0)}
+            </span>
+            <span className="text-[#172B4D] dark:text-gray-200">{u.displayName}</span>
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-500 ml-auto">{u.name}</span>
+          </button>
+        ))
+      )}
+      <button
+        onClick={onCancel}
+        className="w-full text-left text-xs px-3 py-2 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-t border-[#DFE1E6] dark:border-gray-700"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+// ── Edit mode props interface ──────────────────────────────────────
+
+interface RowEditProps {
+  editMode: boolean;
+  editingKey: string | null;
+  edits: EditEntry[];
+  startEdit: (key: string) => void;
+  cancelEdit: () => void;
+  addEdit: (entry: EditEntry) => void;
+  hasEdit: (issueKey: string, field: string) => boolean;
+  getEditClass: (issueKey: string, field: string) => string;
+  addAssigneeEdit: (entry: AssigneeEdit) => void;
+  hasAssigneeEdit: (issueKey: string) => boolean;
+  /** Get new value for an assignee edit (for display in cell) */
+  getAssigneeEditValue: (issueKey: string) => string | null;
+}
+
+// ── Helper: get new value for an edited field ──────────────────────
+
+function editValue(edits: EditEntry[], issueKey: string, field: string): string {
+  return edits.find(e => e.issueKey === issueKey && e.field === field)?.newValue ?? '';
+}
+
+function editDisplayValue(edits: EditEntry[], issueKey: string, field: string, original: string): string | null {
+  const entry = edits.find(e => e.issueKey === issueKey && e.field === field);
+  return entry ? entry.newValue : null;
+}
+
 // ─────────────────────────────────────────────────────────────────
 
-function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved, onInlineError }: {
+function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved, onInlineError, editProps }: {
   issue: JiraIssue; selected: boolean; onToggle: () => void;
   visibleCols: ColumnDef[];
   onOpenPanel: (key: string) => void;
   onInlineSaved: (msg: string) => void;
   onInlineError: (msg: string) => void;
+  editProps?: RowEditProps;
 }) {
   const [inlineEdit, setInlineEdit] = useState<ColumnKey | null>(null);
+  const ed = editProps;
 
   function handleCellClick(e: React.MouseEvent, col: ColumnDef) {
-    if (!INLINE_EDITABLE.includes(col.key)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setInlineEdit(col.key);
+    if (ed) {
+      // EDIT mode: only EDIT_MODE_EDITABLE columns are clickable
+      if (!EDIT_MODE_EDITABLE.includes(col.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      ed.startEdit(`${issue.key}:${col.key}`);
+    } else {
+      // VIEW mode: only INLINE_EDITABLE columns are clickable (existing behavior)
+      if (!INLINE_EDITABLE.includes(col.key)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setInlineEdit(col.key);
+    }
   }
 
   function handleInlineDone(field: string) {
@@ -598,6 +755,7 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
 
   function handleRowClick(e: React.MouseEvent) {
     if (inlineEdit) return;
+    if (ed?.editingKey) return;
     if ((e.target as Element).closest('[data-no-panel]')) return;
     onOpenPanel(issue.key);
   }
@@ -621,8 +779,11 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
       />
 
       {visibleCols.map(col => {
-        const isEditable = INLINE_EDITABLE.includes(col.key);
-        const isEditing  = inlineEdit === col.key;
+        const isViewEditable = !ed && INLINE_EDITABLE.includes(col.key);
+        const isEditingView = !ed && inlineEdit === col.key;
+        const isEditModeEditable = ed && EDIT_MODE_EDITABLE.includes(col.key);
+        const isEditingEditMode = ed && ed.editingKey === `${issue.key}:${col.key}`;
+
         return (
           <div
             key={col.key}
@@ -631,13 +792,67 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
               col.key !== 'summary' && 'flex-shrink-0',
               col.key === 'summary' && 'min-w-0 overflow-hidden',
               col.align === 'right' && 'text-right',
-              isEditable && !isEditing && 'group/cell relative cursor-pointer',
-              isEditing && 'relative',
+              isViewEditable && !isEditingView && 'group/cell relative cursor-pointer',
+              isEditingView && 'relative',
+              isEditingEditMode && 'relative',
+              isEditModeEditable && !isEditingEditMode && 'relative cursor-pointer',
+              ed && col.key !== 'summary' && isEditModeEditable && 'hover:ring-1 hover:ring-[#0052CC]',
+              ed && col.key === 'summary' && isEditModeEditable && 'hover:bg-blue-50 dark:hover:bg-blue-900/10',
+              ed && ed.getEditClass(issue.key, colToField(col.key) ?? ''),
+              ed && col.key === 'assignee' && ed.hasAssigneeEdit(issue.key) && 'bg-amber-50 dark:bg-amber-900/20 ring-1 ring-inset ring-amber-400',
             )}
-            onClick={isEditable ? e => handleCellClick(e, col) : undefined}
-            data-no-panel={isEditable ? '' : undefined}
+            onClick={isEditModeEditable ? e => handleCellClick(e, col) : isViewEditable ? e => handleCellClick(e, col) : undefined}
+            data-no-panel={isViewEditable || isEditModeEditable ? '' : undefined}
           >
-            {isEditing ? (
+            {isEditingEditMode ? (
+              // ── EDIT mode inline editors ──
+              <>
+                {col.key === 'summary' && (
+                  <InlineTextEditor
+                    currentValue={issue.fields.summary}
+                    onSave={(newVal) => ed!.addEdit({ issueKey: issue.key, field: 'summary', oldValue: issue.fields.summary, newValue: newVal })}
+                    onCancel={ed!.cancelEdit}
+                  />
+                )}
+                {col.key === 'status' && (
+                  <StatusEditor
+                    issueKey={issue.key}
+                    currentStatus={issue.fields.status.name}
+                    onSave={(newStatus, transitionId) =>
+                      ed!.addEdit({ issueKey: issue.key, field: 'status', oldValue: issue.fields.status.name, newValue: newStatus, transitionId })
+                    }
+                    onCancel={ed!.cancelEdit}
+                  />
+                )}
+                {col.key === 'due' && (
+                  <DateEditor
+                    currentValue={issue.fields.duedate ?? ''}
+                    onSave={(newVal) => ed!.addEdit({ issueKey: issue.key, field: 'duedate', oldValue: issue.fields.duedate ?? '', newValue: newVal })}
+                    onCancel={ed!.cancelEdit}
+                  />
+                )}
+                {col.key === 'est' && (
+                  <EstEditor
+                    currentValue={issue.fields.timetracking?.originalEstimate ?? ''}
+                    onSave={(newVal) => ed!.addEdit({ issueKey: issue.key, field: 'est', oldValue: issue.fields.timetracking?.originalEstimate ?? '', newValue: newVal })}
+                    onCancel={ed!.cancelEdit}
+                  />
+                )}
+                {col.key === 'assignee' && (
+                  <InlineAssigneeEdit
+                    issue={issue}
+                    onSave={(username, displayName) => ed!.addAssigneeEdit({
+                      issueKey: issue.key,
+                      oldValue: issue.fields.assignee?.name ?? '',
+                      newValue: username,
+                      newDisplayName: displayName,
+                    })}
+                    onCancel={ed!.cancelEdit}
+                  />
+                )}
+              </>
+            ) : isEditingView ? (
+              // ── VIEW mode inline editors (existing) ──
               <>
                 {col.key === 'status'   && <InlineStatusEdit   issue={issue} onDone={() => handleInlineDone('Status')}   onCancel={handleInlineCancel} onError={() => handleInlineError('status')} />}
                 {col.key === 'priority' && <InlinePriorityEdit issue={issue} onDone={() => handleInlineDone('Priority')} onCancel={handleInlineCancel} onError={() => handleInlineError('priority')} />}
@@ -646,10 +861,28 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
             ) : (
               <div className={cn(
                 'flex items-center min-w-0',
-                isEditable && 'group-hover/cell:opacity-80 transition-opacity',
+                isViewEditable && 'group-hover/cell:opacity-80 transition-opacity',
               )}>
-                <CellContent col={col} issue={issue} />
-                {isEditable && col.key !== 'status' && (
+                {/* Show edited value for EDIT mode cells with pending edits */}
+                {ed && col.key === 'summary' && ed.hasEdit(issue.key, 'summary') ? (
+                  <span className="text-sm text-[#B45309] dark:text-amber-400 truncate">{editValue(ed.edits, issue.key, 'summary')}</span>
+                ) : ed && col.key === 'status' && ed.hasEdit(issue.key, 'status') ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-amber-100 dark:bg-amber-900/30 text-[#B45309] dark:text-amber-400">{editValue(ed.edits, issue.key, 'status')}</span>
+                ) : ed && col.key === 'due' && ed.hasEdit(issue.key, 'duedate') ? (
+                  <span className="text-xs text-[#B45309] dark:text-amber-400 font-medium">{editValue(ed.edits, issue.key, 'duedate')}</span>
+                ) : ed && col.key === 'est' && ed.hasEdit(issue.key, 'est') ? (
+                  <span className="text-xs text-[#B45309] dark:text-amber-400 font-medium">{editValue(ed.edits, issue.key, 'est') || '—'}</span>
+                ) : ed && col.key === 'assignee' && ed.hasAssigneeEdit(issue.key) ? (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0">
+                      {(ed.getAssigneeEditValue(issue.key) ?? '').charAt(0)}
+                    </span>
+                    <span className="text-xs text-[#B45309] dark:text-amber-400 truncate">{ed.getAssigneeEditValue(issue.key)}</span>
+                  </div>
+                ) : (
+                  <CellContent col={col} issue={issue} />
+                )}
+                {isViewEditable && col.key !== 'status' && (
                   <span className="ml-1 flex-shrink-0 opacity-0 group-hover/cell:opacity-60 transition-opacity">
                     <ChevronDown size={9} className="text-[#5E6C84]" />
                   </span>
@@ -672,6 +905,7 @@ interface IssuesTableProps {
   sortField: string;
   sortDir: 'ASC' | 'DESC';
   onSortChange: (field: string, dir: 'ASC' | 'DESC') => void;
+  onIssueUpdate?: () => void;
 }
 
 // ─── Group header helpers ──────────────────────────────────────────
@@ -840,7 +1074,7 @@ function SubGroupHeaderContent({ subGroupBy, sub, firstIssue }: {
   }
 }
 
-export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange }: IssuesTableProps) {
+export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
   const [transitionDropOpen, setTransDropOpen]  = useState(false);
@@ -879,6 +1113,99 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }
 
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
+
+  // ── Inline Edit State (batch edit system) ──────────────────────
+  const [editMode, setEditMode] = useState(false);
+  const [edits, setEdits] = useState<EditEntry[]>([]);
+  const [editingKey, setEditingKey] = useState<string | null>(null); // "ISSUE-KEY:columnKey"
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [assigneeEdits, setAssigneeEdits] = useState<AssigneeEdit[]>([]);
+
+  /** Check if a cell has a pending edit (by EditEntry field) */
+  function hasEdit(issueKey: string, field: string) {
+    return edits.some(e => e.issueKey === issueKey && e.field === field);
+  }
+
+  /** Get amber highlight class for an edited cell */
+  function getEditClass(issueKey: string, field: string) {
+    return hasEdit(issueKey, field)
+      ? 'bg-amber-50 dark:bg-amber-900/20 ring-1 ring-inset ring-amber-400'
+      : '';
+  }
+
+  /** Add or update an edit entry */
+  function addEdit(entry: EditEntry) {
+    setEdits(prev => {
+      const filtered = prev.filter(
+        e => !(e.issueKey === entry.issueKey && e.field === entry.field),
+      );
+      return [...filtered, entry];
+    });
+    setEditingKey(null);
+  }
+
+  /** Add/replace an assignee edit */
+  function addAssigneeEdit(entry: AssigneeEdit) {
+    setAssigneeEdits(prev => {
+      const filtered = prev.filter(e => e.issueKey !== entry.issueKey);
+      return [...filtered, entry];
+    });
+    setEditingKey(null);
+  }
+
+  /** Start editing a cell */
+  function startEdit(key: string) {
+    setEditingKey(key);
+  }
+
+  /** Cancel current inline edit */
+  function cancelEdit() {
+    setEditingKey(null);
+  }
+
+  /** Save all assignee edits via API */
+  async function saveAssigneeEdits(): Promise<number> {
+    let errors = 0;
+    for (const ae of assigneeEdits) {
+      try {
+        await api.put(`/issue/${ae.issueKey}`, {
+          fields: { assignee: ae.newValue ? { name: ae.newValue } : null },
+        });
+      } catch {
+        errors++;
+      }
+    }
+    return errors;
+  }
+
+  /** Called after all saves complete — clear edits and refresh */
+  function handleSaved() {
+    setEdits([]);
+    setAssigneeEdits([]);
+    setEditMode(false);
+    setShowConfirm(false);
+    onIssueUpdate?.();
+    window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
+  }
+
+  function handleOpenSave() {
+    if (assigneeEdits.length > 0 && edits.length === 0) {
+      // Only assignee edits — save directly
+      saveAssigneeEdits().then((errCount) => {
+        if (errCount === 0) showToast(`Updated ${assigneeEdits.length} assignee(s)`);
+        else showToast(`${errCount} assignee update(s) failed`, 'error');
+        handleSaved();
+      });
+    } else if (edits.length > 0) {
+      // Save assignee edits first, then show confirm modal for remaining
+      if (assigneeEdits.length > 0) {
+        saveAssigneeEdits().then((errCount) => {
+          if (errCount > 0) showToast(`${errCount} assignee update(s) failed`, 'error');
+        });
+      }
+      setShowConfirm(true);
+    }
+  }
 
   // Close column picker on outside click
   useEffect(() => {
@@ -929,6 +1256,26 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   );
 
   const groups = useMemo(() => groupIssues(issues, groupBy), [issues, groupBy]);
+
+  const rowEditProps = useMemo((): RowEditProps | undefined => {
+    if (!editMode) return undefined;
+    return {
+      editMode,
+      editingKey,
+      edits,
+      startEdit,
+      cancelEdit,
+      addEdit,
+      hasEdit,
+      getEditClass,
+      addAssigneeEdit,
+      hasAssigneeEdit: (key: string) => assigneeEdits.some(e => e.issueKey === key),
+      getAssigneeEditValue: (key: string) => {
+        const ae = assigneeEdits.find(e => e.issueKey === key);
+        return ae ? ae.newDisplayName : null;
+      },
+    };
+  }, [editMode, editingKey, edits, assigneeEdits, startEdit, cancelEdit, addEdit, hasEdit, getEditClass, addAssigneeEdit]);
 
   const allSelected = issues.length > 0 && issues.every(i => selected.has(i.id));
 
@@ -1130,6 +1477,46 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         </div>
 
         <div className="flex items-center gap-2">
+          {/* VIEW / EDIT toggle */}
+          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden">
+            <button
+              onClick={() => { setEditMode(false); setEditingKey(null); }}
+              className={cn(
+                'text-xs px-3 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                !editMode
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              VIEW
+            </button>
+            <button
+              onClick={() => setEditMode(true)}
+              className={cn(
+                'text-xs px-3 py-1.5 font-medium transition-colors',
+                editMode
+                  ? 'bg-[#DE350B] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              <span className="flex items-center gap-1">
+                <Pencil size={10} />
+                EDIT
+              </span>
+            </button>
+          </div>
+
+          {/* Save button — only visible in edit mode with pending edits */}
+          {editMode && (edits.length + assigneeEdits.length) > 0 && (
+            <button
+              onClick={handleOpenSave}
+              className="text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1 bg-[#36B37E] text-white border-[#36B37E] hover:bg-green-600"
+            >
+              <Save size={12} />
+              Save ({edits.length + assigneeEdits.length})
+            </button>
+          )}
+
           {/* Column picker */}
           <div className="relative" ref={colPickerRef}>
             <button
@@ -1440,6 +1827,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                       onOpenPanel={setPanelKey}
                       onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
                       onInlineError={msg => showToast(msg, 'error')}
+                      editProps={rowEditProps}
                     />
                   ))
                   : !collapsed && subGroups.map(sub => {
@@ -1471,6 +1859,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                             onOpenPanel={setPanelKey}
                             onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
                             onInlineError={msg => showToast(msg, 'error')}
+                            editProps={rowEditProps}
                           />
                         ))}
                       </div>
@@ -1492,6 +1881,15 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               : `${total} issues`}
           </span>
         </div>
+      )}
+
+      {/* Save Confirmation Modal */}
+      {showConfirm && (
+        <SaveConfirmModal
+          edits={edits}
+          onClose={() => setShowConfirm(false)}
+          onSaved={handleSaved}
+        />
       )}
 
       {/* Issue detail panel */}
