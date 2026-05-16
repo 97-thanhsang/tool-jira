@@ -30,7 +30,7 @@ interface FilterPanelProps {
 // ─── Style constants ──────────────────────────────────────────────
 
 const selectClass =
-  'text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] dark:focus:border-blue-400 min-w-[110px]';
+  'text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] dark:focus:border-blue-400 min-w-[110px] max-w-[200px]';
 
 const inputClass =
   'text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC] dark:focus:border-blue-400 placeholder-[#5E6C84] dark:placeholder-gray-500';
@@ -173,7 +173,7 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange, 
         <button
           onClick={() => setOpen(p => !p)}
           className={cn(
-            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px]',
+            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px] max-w-[180px]',
             hasSelection
               ? exclude
                 ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-500 text-orange-700 dark:text-orange-300'
@@ -181,7 +181,7 @@ function MultiSelectFilter({ label, options, selectedValues, exclude, onChange, 
               : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
           )}
         >
-          <span className="flex-1 text-left">{btnLabel}</span>
+          <span className="flex-1 text-left truncate">{btnLabel}</span>
           <ChevronDown size={10} className="flex-shrink-0 opacity-60" />
         </button>
 
@@ -317,13 +317,13 @@ function UserMultiFilter({ label, selectedValues, onChange }: UserMultiFilterPro
         <button
           onClick={() => setOpen(p => !p)}
           className={cn(
-            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px]',
+            'flex items-center gap-1 text-xs px-2.5 py-1.5 border rounded whitespace-nowrap transition-colors min-w-[80px] max-w-[180px]',
             hasSelection
               ? 'bg-[#E6F0FF] dark:bg-blue-900/30 border-[#0052CC]/40 dark:border-blue-600/40 text-[#0052CC] dark:text-blue-300'
               : 'bg-white dark:bg-gray-800 border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:border-[#0052CC] hover:text-[#0052CC]',
           )}
         >
-          <span className="flex-1 text-left">{btnLabel}</span>
+          <span className="flex-1 text-left truncate">{btnLabel}</span>
           <ChevronDown size={10} className="flex-shrink-0 opacity-60" />
         </button>
 
@@ -668,8 +668,9 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   );
 
   const sprints     = useSprints();
-  const components  = useComponents(filters.project);
-  const fixVersions = useVersions(filters.project);
+  const activeProject = filters.projectIn?.[0] ?? filters.project;
+  const components  = useComponents(activeProject);
+  const fixVersions = useVersions(activeProject);
   const { statuses, loading: statusesLoading } = useStatuses();
 
   // Build grouped status options sorted by category then name
@@ -733,7 +734,13 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
   } else if (filters.assignee) {
     chips.push({ key: 'assignee', label: `Assignee: ${filters.assignee}` });
   }
-  if (filters.project) {
+  if (filters.projectIn?.length) {
+    const names = filters.projectIn.map(key => {
+      const proj = projects?.find(p => p.key === key);
+      return proj?.name ?? key;
+    }).join(', ');
+    chips.push({ key: 'projectIn', label: `Project: ${names}` });
+  } else if (filters.project) {
     const proj = projects?.find(p => p.key === filters.project);
     chips.push({ key: 'project', label: `Project: ${proj?.name ?? filters.project}` });
   }
@@ -778,6 +785,7 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
     if (key === 'assigneeIn') { onUpdate({ assigneeIn: undefined }); return; }
     if (key === 'reporterIn') { onUpdate({ reporterIn: undefined }); return; }
     if (key === 'sprintIn')  { onUpdate({ sprintIn: undefined }); return; }
+    if (key === 'projectIn') { onUpdate({ projectIn: undefined }); return; }
     onUpdate({ [key]: undefined } as Partial<IssueFilters>);
   }
 
@@ -798,6 +806,15 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
             className={cn(inputClass, 'pl-6 w-full')}
           />
         </div>
+
+        {/* Project — multi-select */}
+        <MultiSelectFilter
+          label="Project"
+          options={(projects ?? []).map(p => ({ value: p.key, label: p.name }))}
+          selectedValues={filters.projectIn ?? []}
+          exclude={false}
+          onChange={(values) => onUpdate({ projectIn: values.length ? values : undefined, project: undefined })}
+        />
 
         {/* Type — multi-select */}
         <MultiSelectFilter
@@ -846,20 +863,17 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
           })}
         />
 
-        {/* Project */}
-        <div className="flex items-center gap-1.5">
-          <FilterLabel>Project</FilterLabel>
-          <select
-            className={selectClass}
-            value={filters.project ?? ''}
-            onChange={e => onUpdate({ project: e.target.value || undefined })}
-          >
-            <option value="">All</option>
-            {(projects ?? []).map(p => (
-              <option key={p.key} value={p.key}>{p.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* Sprint — multi-select */}
+        <MultiSelectFilter
+          label="Sprint"
+          options={sprintOptions}
+          selectedValues={filters.sprintIn ?? []}
+          exclude={false}
+          onChange={(values) => onUpdate({
+            sprintIn: values.length ? values : undefined,
+            sprint: undefined,
+          })}
+        />
 
         {/* Unassigned quick toggle */}
         <button
@@ -915,18 +929,6 @@ export function FilterPanel({ filters, onUpdate, onClear }: FilterPanelProps) {
       {/* ── Row 2 — More filters (collapsible) ── */}
       {showMore && (
         <div className="flex items-center gap-2 px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700 bg-white dark:bg-gray-800 flex-wrap">
-
-          {/* Sprint — multi-select */}
-          <MultiSelectFilter
-            label="Sprint"
-            options={sprintOptions}
-            selectedValues={filters.sprintIn ?? []}
-            exclude={false}
-            onChange={(values) => onUpdate({
-              sprintIn: values.length ? values : undefined,
-              sprint: undefined,
-            })}
-          />
 
           {/* Reporter — multi-user */}
           <UserMultiFilter

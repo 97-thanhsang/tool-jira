@@ -15,6 +15,8 @@ export interface IssueFilters {
   assigneeIn?: string[];        // 'currentUser()' | 'EMPTY' | username
   reporterIn?: string[];        // 'currentUser()' | username
   sprintIn?: string[];          // sprint names
+  // ── Multi-value project ──────────────────────────────────────────
+  projectIn?: string[];
   // ── Legacy single-value (kept for backward compat) ──────────────
   project?: string;
   assignee?: string;
@@ -72,7 +74,13 @@ function buildJql(filters: IssueFilters): string {
       : `issuetype IN (${vals})`);
   }
 
-  if (filters.project) parts.push(`project = "${filters.project}"`);
+  // ── Project: projectIn takes priority over project ──
+  if (filters.projectIn?.length) {
+    const vals = filters.projectIn.map(p => `"${p}"`).join(', ');
+    parts.push(`project IN (${vals})`);
+  } else if (filters.project) {
+    parts.push(`project = "${filters.project}"`);
+  }
   if (filters.labels)  parts.push(`labels = "${filters.labels}"`);
 
   // ── Assignee: unassignedOnly > assigneeIn > assignee ──

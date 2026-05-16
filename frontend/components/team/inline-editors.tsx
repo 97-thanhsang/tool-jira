@@ -3,6 +3,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 
 interface Transition {
   id: string;
@@ -24,6 +31,7 @@ export function StatusEditor({
 }) {
   const [transitions, setTransitions] = useState<Transition[]>([]);
   const [loading, setLoading] = useState(true);
+  const selectedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,25 +66,31 @@ export function StatusEditor({
   }
 
   return (
-    <select
-      autoFocus
-      value=""
-      onChange={(e) => {
-        const t = transitions.find((t) => t.id === e.target.value);
-        if (t) onSave(t.name, t.id);
+    <Select
+      defaultOpen
+      onOpenChange={(open: boolean) => {
+        if (!open && !selectedRef.current) onCancel();
+        selectedRef.current = false;
       }}
-      onBlur={onCancel}
-      className="text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none max-w-[110px]"
+      onValueChange={(transitionId: unknown) => {
+        const t = transitions.find((t) => t.id === String(transitionId));
+        if (t) {
+          selectedRef.current = true;
+          onSave(t.name, t.id);
+        }
+      }}
     >
-      <option value="" disabled>
-        {currentStatus}
-      </option>
-      {transitions.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.name}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger className="text-[10px] border-[#0052CC] bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 max-w-[110px] h-auto py-0.5 px-1">
+        <SelectValue placeholder={currentStatus} />
+      </SelectTrigger>
+      <SelectContent>
+        {transitions.map((t) => (
+          <SelectItem key={t.id} value={t.id} className="text-xs">
+            {t.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

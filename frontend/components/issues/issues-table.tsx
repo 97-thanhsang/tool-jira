@@ -6,6 +6,7 @@ import type { JiraIssue, JiraTransition, JiraSprint } from '@/types/jira';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { api } from '@/lib/api';
 import { IssueDetailPanel } from './issue-detail-panel';
 import {
@@ -69,6 +70,8 @@ export type SubGroupBy =
   | 'sprint'
   | 'reporter';
 
+export type SubSubGroupBy = 'none' | 'issuetype' | 'status' | 'priority' | 'assignee' | 'sprint' | 'reporter';
+
 interface ColumnDef {
   key: ColumnKey;
   label: string;
@@ -107,20 +110,15 @@ const EDIT_MODE_EDITABLE: ColumnKey[] = ['summary', 'status', 'due', 'assignee',
 const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
-  none: 'None', project: 'Project', status: 'Status',
-  issuetype: 'Type', sprint: 'Sprint', assignee: 'Assignee', priority: 'Priority',
-  statusCategory: 'Status Category', reporter: 'Reporter',
+  none: 'None', status: 'Status', priority: 'Priority',
+  issuetype: 'Type', assignee: 'Assignee', reporter: 'Reporter',
+  sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
 };
 
 const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
-  none: 'None',
-  issuetype: 'Type',
-  status: 'Status',
-  statusCategory: 'Status Category',
-  assignee: 'Assignee',
-  priority: 'Priority',
-  sprint: 'Sprint',
-  reporter: 'Reporter',
+  none: 'None', status: 'Status', priority: 'Priority',
+  issuetype: 'Type', assignee: 'Assignee', reporter: 'Reporter',
+  sprint: 'Sprint', statusCategory: 'Status Category',
 };
 
 /** SubGroupBy options that are compatible with a given GroupBy (excludes the same field) */
@@ -136,6 +134,32 @@ function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
     reporter:  ['reporter'],
   };
   const blocked = new Set<SubGroupBy>(exclude[groupBy] ?? []);
+  return all.filter(s => !blocked.has(s));
+}
+
+const SUB_SUB_GROUP_BY_LABELS: Record<SubSubGroupBy, string> = {
+  none: 'None', issuetype: 'Type', status: 'Status',
+  priority: 'Priority', assignee: 'Assignee', sprint: 'Sprint',
+  reporter: 'Reporter',
+};
+
+/** SubSubGroupBy options compatible with a given GroupBy and SubGroupBy (excludes overlapping fields) */
+function getSubSubGroupOptions(groupBy: GroupBy, subGroupBy: SubGroupBy): SubSubGroupBy[] {
+  const all: SubSubGroupBy[] = ['none', 'issuetype', 'status', 'priority', 'assignee', 'sprint', 'reporter'];
+  // Map field → SubSubGroupBy keys that overlap (to exclude)
+  const exclude: Partial<Record<GroupBy | SubGroupBy, SubSubGroupBy[]>> = {
+    status:         ['status'],
+    statusCategory: ['status'],
+    issuetype:      ['issuetype'],
+    assignee:       ['assignee'],
+    priority:       ['priority'],
+    sprint:         ['sprint'],
+    reporter:       ['reporter'],
+  };
+  const blocked = new Set<SubSubGroupBy>([
+    ...(exclude[groupBy] ?? []),
+    ...(exclude[subGroupBy] ?? []),
+  ]);
   return all.filter(s => !blocked.has(s));
 }
 
@@ -276,6 +300,44 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
         };
         gKey = cat; gLabel = catLabels[cat] ?? cat; break;
       }
+      case 'assignee':
+        gKey = f.assignee?.name ?? '__unassigned';
+        gLabel = f.assignee?.displayName ?? 'Unassigned'; break;
+      case 'priority':
+        gKey = f.priority?.name ?? 'None';
+        gLabel = f.priority?.name ?? 'None'; break;
+      case 'sprint': {
+        const s = resolveSprint(issue);
+        gKey = s ? String(s.id) : '__nosprint';
+        gLabel = s?.name ?? 'No Sprint'; break;
+      }
+      case 'reporter':
+        gKey = f.reporter?.name ?? '__noreporter';
+        gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
+      default:
+        gKey = '__all'; gLabel = '';
+    }
+
+    if (!map.has(gKey)) map.set(gKey, { label: gLabel, issues: [] });
+    map.get(gKey)!.issues.push(issue);
+  }
+
+  return Array.from(map.entries()).map(([key, val]) => ({ key, label: val.label, issues: val.issues }));
+}
+
+function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): { key: string; label: string; issues: JiraIssue[] }[] {
+  if (subSubGroupBy === 'none') return [{ key: '__all', label: '', issues }];
+  const map = new Map<string, { label: string; issues: JiraIssue[] }>();
+
+  for (const issue of issues) {
+    const f = issue.fields;
+    let gKey: string, gLabel: string;
+
+    switch (subSubGroupBy) {
+      case 'issuetype':
+        gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
+      case 'status':
+        gKey = f.status.name; gLabel = f.status.name; break;
       case 'assignee':
         gKey = f.assignee?.name ?? '__unassigned';
         gLabel = f.assignee?.displayName ?? 'Unassigned'; break;
@@ -1074,6 +1136,71 @@ function SubGroupHeaderContent({ subGroupBy, sub, firstIssue }: {
   }
 }
 
+/** Render content inside a sub-sub-group-header button (smallest, most indented) */
+function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
+  subSubGroupBy: SubSubGroupBy;
+  subSub: { key: string; label: string; issues: JiraIssue[] };
+  firstIssue?: JiraIssue;
+}) {
+  if (!firstIssue) {
+    return <span className="text-[10px] font-medium text-[#172B4D] dark:text-gray-100">{subSub.label}</span>;
+  }
+  const f = firstIssue.fields;
+
+  switch (subSubGroupBy) {
+    case 'issuetype':
+      return (
+        <div className="flex items-center gap-1 min-w-0">
+          {f.issuetype.iconUrl
+            ? <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={11} height={11} className="flex-shrink-0" unoptimized />
+            : <IssueTypeFallback name={f.issuetype.name} />}
+          <span className="text-[10px] font-medium text-[#172B4D] dark:text-gray-100 truncate">{subSub.label}</span>
+        </div>
+      );
+
+    case 'assignee':
+    case 'reporter': {
+      const user = subSubGroupBy === 'assignee' ? f.assignee : f.reporter;
+      return (
+        <div className="flex items-center gap-1 min-w-0">
+          {user
+            ? <UserAvatar user={user} />
+            : <span className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full bg-[#DFE1E6] dark:bg-gray-600 flex-shrink-0"><User size={8} className="text-[#5E6C84]" /></span>}
+          <span className="text-[10px] font-medium text-[#172B4D] dark:text-gray-100 truncate">{subSub.label}</span>
+        </div>
+      );
+    }
+
+    case 'status': {
+      const catColors: Record<string, string> = {
+        new: 'bg-[#DFE1E6] text-[#42526E]',
+        indeterminate: 'bg-[#DEEBFF] text-[#0052CC]',
+        done: 'bg-[#E3FCEF] text-[#006644]',
+      };
+      const catKey = firstIssue.fields.status.statusCategory.key;
+      return (
+        <span className={cn(
+          'inline-flex items-center px-1 py-0.5 rounded-sm text-[9px] font-semibold uppercase tracking-wide',
+          catColors[catKey] ?? catColors['new'],
+        )}>
+          {subSub.label}
+        </span>
+      );
+    }
+
+    case 'priority':
+      return (
+        <div className="flex items-center gap-1 min-w-0">
+          <PriorityIcon priority={f.priority} />
+          <span className="text-[10px] font-medium text-[#172B4D] dark:text-gray-100 truncate">{subSub.label}</span>
+        </div>
+      );
+
+    default:
+      return <span className="text-[10px] font-medium text-[#172B4D] dark:text-gray-100 truncate">{subSub.label}</span>;
+  }
+}
+
 export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
@@ -1085,6 +1212,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [columnOrder, setColumnOrder]           = useState<ColumnKey[]>(DEFAULT_ORDER);
   const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
   const [subGroupBy, setSubGroupBy]             = useState<SubGroupBy>('none');
+  const [subSubGroupBy, setSubSubGroupBy]       = useState<SubSubGroupBy>('none');
   const [showColumnPicker, setShowColPicker]    = useState(false);
   const [dragOverKey, setDragOverKey]           = useState<ColumnKey | null>(null);
   const dragSrcRef                              = useRef<ColumnKey | null>(null);
@@ -1298,7 +1426,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
 
   function handleGroupByChange(g: GroupBy) {
     setGroupBy(g);
-    setSubGroupBy('none'); // always reset sub-group when primary group changes
+    setSubGroupBy('none');    // always reset sub-group when primary group changes
+    setSubSubGroupBy('none'); // always reset sub-sub-group when primary group changes
   }
 
   function toggleGroup(key: string) {
@@ -1400,7 +1529,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
 
   if (isLoading) {
     return (
-      <div className="space-y-2 mt-4">
+      <div className="space-y-3 mt-4">
+        <Spinner size="md" className="py-4" />
         {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
       </div>
     );
@@ -1469,6 +1599,41 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                 {subGroupBy !== 'none' && (
                   <span className="text-[10px] font-medium text-[#6554C0] dark:text-purple-400 bg-[#EAE6FF] dark:bg-purple-900/30 px-1.5 py-0.5 rounded select-none">
                     {SUB_GROUP_BY_LABELS[subGroupBy]}
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Sub sub group by — only shown when Sub Group By ≠ none */}
+          {subGroupBy !== 'none' && (
+            <>
+              {/* Separator */}
+              <div className="border-t border-[#DFE1E6] dark:border-gray-600" />
+
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-semibold text-[#998DD9] dark:text-purple-300 uppercase tracking-wide whitespace-nowrap w-[72px] select-none">
+                  Sub sub
+                </span>
+                <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shadow-sm">
+                  {getSubSubGroupOptions(groupBy, subGroupBy).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setSubSubGroupBy(s)}
+                      className={cn(
+                        'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
+                        subSubGroupBy === s
+                          ? 'bg-[#998DD9] text-white shadow-inner'
+                          : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#F3F0FF] dark:hover:bg-purple-900/20 hover:text-[#998DD9] dark:hover:text-purple-300',
+                      )}
+                    >
+                      {SUB_SUB_GROUP_BY_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+                {subSubGroupBy !== 'none' && (
+                  <span className="text-[10px] font-medium text-[#998DD9] dark:text-purple-300 bg-[#F3F0FF] dark:bg-purple-900/20 px-1.5 py-0.5 rounded select-none">
+                    {SUB_SUB_GROUP_BY_LABELS[subSubGroupBy]}
                   </span>
                 )}
               </div>
@@ -1832,6 +1997,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   ))
                   : !collapsed && subGroups.map(sub => {
                     const subCollapsed = collapsedGroups.has(`${group.key}::${sub.key}`);
+                    const subSubGroups = subSubGroupIssues(sub.issues, subSubGroupBy);
                     return (
                       <div key={sub.key}>
                         {/* Sub-group header */}
@@ -1849,19 +2015,56 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                             {sub.issues.length}
                           </span>
                         </button>
-                        {!subCollapsed && sub.issues.map(issue => (
-                          <IssueTableRow
-                            key={issue.id}
-                            issue={issue}
-                            selected={selected.has(issue.id)}
-                            onToggle={() => toggleSelect(issue.id)}
-                            visibleCols={visibleCols}
-                            onOpenPanel={setPanelKey}
-                            onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
-                            onInlineError={msg => showToast(msg, 'error')}
-                            editProps={rowEditProps}
-                          />
-                        ))}
+                        {!subCollapsed && subSubGroupBy === 'none'
+                          ? sub.issues.map(issue => (
+                            <IssueTableRow
+                              key={issue.id}
+                              issue={issue}
+                              selected={selected.has(issue.id)}
+                              onToggle={() => toggleSelect(issue.id)}
+                              visibleCols={visibleCols}
+                              onOpenPanel={setPanelKey}
+                              onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
+                              onInlineError={msg => showToast(msg, 'error')}
+                              editProps={rowEditProps}
+                            />
+                          ))
+                          : !subCollapsed && subSubGroups.map(subSub => {
+                            const subSubCollapsed = collapsedGroups.has(`${group.key}::${sub.key}::${subSub.key}`);
+                            return (
+                              <div key={subSub.key}>
+                                {/* Sub-sub-group header */}
+                                <button
+                                  onClick={() => toggleGroup(`${group.key}::${sub.key}::${subSub.key}`)}
+                                  className="w-full flex items-center gap-1.5 pl-16 pr-4 py-1.5 bg-[#FAFBFC] dark:bg-gray-750/60 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 border-l-[2px] transition-colors text-left"
+                                  style={{ borderLeftColor: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}
+                                >
+                                  {subSubCollapsed
+                                    ? <ChevronRight size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />
+                                    : <ChevronDown size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />}
+                                  <SubSubGroupHeaderContent subSubGroupBy={subSubGroupBy} subSub={subSub} firstIssue={subSub.issues[0]} />
+                                  <span className="inline-flex items-center justify-center min-w-[18px] h-[14px] text-[9px] font-bold text-white rounded-full px-1 leading-none"
+                                    style={{ backgroundColor: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}>
+                                    {subSub.issues.length}
+                                  </span>
+                                </button>
+                                {!subSubCollapsed && subSub.issues.map(issue => (
+                                  <IssueTableRow
+                                    key={issue.id}
+                                    issue={issue}
+                                    selected={selected.has(issue.id)}
+                                    onToggle={() => toggleSelect(issue.id)}
+                                    visibleCols={visibleCols}
+                                    onOpenPanel={setPanelKey}
+                                    onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
+                                    onInlineError={msg => showToast(msg, 'error')}
+                                    editProps={rowEditProps}
+                                  />
+                                ))}
+                              </div>
+                            );
+                          })
+                        }
                       </div>
                     );
                   })
