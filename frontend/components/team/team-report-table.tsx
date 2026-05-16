@@ -4,8 +4,11 @@ import { format, isToday } from 'date-fns';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Settings2, ChevronDown, ExternalLink } from 'lucide-react';
+import { Pencil, Save } from 'lucide-react';
 import { TeamExport } from './team-export';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
+import { StatusEditor, InlineTextEditor, DateEditor, EstEditor } from './inline-editors';
+import { SaveConfirmModal, type EditEntry } from './save-confirm-modal';
 import type { TeamReportData, TaskReport } from '@/types/jira';
 import type { TeamFiltersState } from '@/components/team/team-filters';
 
@@ -142,6 +145,53 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
   const [sortBy, setSortBy] = useState<SortBy>('default');
   const [localSearch, setLocalSearch] = useState('');
 
+  // ── Inline Edit State ──────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false);
+  const [edits, setEdits] = useState<EditEntry[]>([]);
+  const [editingKey, setEditingKey] = useState<string | null>(null); // "ISSUE-KEY:field"
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  /** Check if a cell has a pending edit */
+  function hasEdit(issueKey: string, field: EditEntry['field']) {
+    return edits.some((e) => e.issueKey === issueKey && e.field === field);
+  }
+
+  /** Get CSS class for an edited cell */
+  function getEditClass(issueKey: string, field: EditEntry['field']) {
+    return hasEdit(issueKey, field)
+      ? 'bg-amber-50 dark:bg-amber-900/20 ring-1 ring-inset ring-amber-400'
+      : '';
+  }
+
+  /** Add or update an edit entry */
+  function addEdit(entry: EditEntry) {
+    setEdits((prev) => {
+      const filtered = prev.filter(
+        (e) => !(e.issueKey === entry.issueKey && e.field === entry.field),
+      );
+      return [...filtered, entry];
+    });
+    setEditingKey(null);
+  }
+
+  /** Start editing a cell */
+  function startEdit(key: string) {
+    setEditingKey(key);
+  }
+
+  /** Cancel current edit */
+  function cancelEdit() {
+    setEditingKey(null);
+  }
+
+  /** Called after save completes — clear edits and refresh */
+  function handleSaved() {
+    setEdits([]);
+    setEditMode(false);
+    setShowConfirm(false);
+    // SWR will revalidate automatically on focus, or we can trigger manually
+  }
+
   const days = useMemo(() => {
     const result: string[] = [];
     const from = new Date(data.dateRange.from);
@@ -206,6 +256,47 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
           className={cn(selectClass, 'flex-1 max-w-xs placeholder:text-[#C1C7D0] dark:placeholder:text-gray-600')}
         />
         <div className="flex-1" />
+
+        {/* VIEW / EDIT toggle */}
+        <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden">
+          <button
+            onClick={() => setEditMode(false)}
+            className={cn(
+              'text-xs px-3 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+              !editMode
+                ? 'bg-[#0052CC] text-white'
+                : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+            )}
+          >
+            VIEW
+          </button>
+          <button
+            onClick={() => setEditMode(true)}
+            className={cn(
+              'text-xs px-3 py-1.5 font-medium transition-colors',
+              editMode
+                ? 'bg-[#DE350B] text-white'
+                : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+            )}
+          >
+            <span className="flex items-center gap-1">
+              <Pencil size={10} />
+              EDIT
+            </span>
+          </button>
+        </div>
+
+        {/* Save button — only visible in edit mode with pending edits */}
+        {editMode && edits.length > 0 && (
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1 bg-[#36B37E] text-white border-[#36B37E] hover:bg-green-600"
+          >
+            <Save size={12} />
+            Save ({edits.length})
+          </button>
+        )}
+
         <TeamExport
           data={data}
           dayHeaders={dayHeaders}
@@ -426,6 +517,10 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                 const projectKeys = new Set(tasks.map(t => t.projectKey));
                 const parentKeys = new Set(tasks.map(t => t.parentKey).filter(Boolean));
 
+                const editProps: TaskRowEditProps | undefined = editMode
+                  ? { editMode, editingKey, edits, startEdit, cancelEdit, addEdit, hasEdit, getEditClass }
+                  : undefined;
+
                 return (
                   <>
                     {/* Column headers */}
@@ -559,11 +654,44 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                                   {pg.parentKey}
                                                 </button>
                                               </div>
-                                              {pg.parentStatus && (
-                                                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-sm font-semibold leading-none flex-shrink-0', pStatusCls)}>
-                                                  {pg.parentStatus}
+                                              {editMode && editingKey === `${pg.parentKey}:parentStatus` ? (
+                                                <StatusEditor
+                                                  issueKey={pg.parentKey}
+                                                  currentStatus={pg.parentStatus ?? ''}
+                                                  onSave={(newStatus, transitionId) =>
+                                                    addEdit({
+                                                      issueKey: pg.parentKey,
+                                                      field: 'parentStatus',
+                                                      oldValue: pg.parentStatus ?? '',
+                                                      newValue: newStatus,
+                                                      transitionId,
+                                                      parentKey: pg.parentKey,
+                                                    })
+                                                  }
+                                                  onCancel={cancelEdit}
+                                                />
+                                              ) : pg.parentStatus ? (
+                                                <span
+                                                  onClick={() => editMode && startEdit(`${pg.parentKey}:parentStatus`)}
+                                                  className={cn(
+                                                    'text-[9px] px-1.5 py-0.5 rounded-sm font-semibold leading-none flex-shrink-0',
+                                                    pStatusCls,
+                                                    editMode && 'cursor-pointer hover:ring-1 hover:ring-[#0052CC]',
+                                                    getEditClass(pg.parentKey, 'parentStatus'),
+                                                  )}
+                                                >
+                                                  {hasEdit(pg.parentKey, 'parentStatus')
+                                                    ? edits.find(e => e.issueKey === pg.parentKey && e.field === 'parentStatus')!.newValue
+                                                    : pg.parentStatus}
                                                 </span>
-                                              )}
+                                              ) : editMode ? (
+                                                <span
+                                                  onClick={() => startEdit(`${pg.parentKey}:parentStatus`)}
+                                                  className="text-[9px] px-1 py-0.5 rounded-sm text-[#C1C7D0] dark:text-gray-600 italic cursor-pointer hover:ring-1 hover:ring-[#0052CC]"
+                                                >
+                                                  set
+                                                </span>
+                                              ) : null}
                                             </div>
                                             {/* Row 2: summary (left) | sub-task count (right) */}
                                             <div className="flex items-start gap-1.5 min-w-0">
@@ -606,6 +734,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                             isLastInGroup={ti === pg.tasks.length - 1}
                                             visibleColumns={visibleColumns}
                                             onIssueClick={setPanelIssueKey}
+                                            edit={editProps}
                                           />
                                         ))}
                                       </div>
@@ -625,6 +754,7 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
                                   isLastInGroup={ti === group.tasks.length - 1}
                                   visibleColumns={visibleColumns}
                                   onIssueClick={setPanelIssueKey}
+                                  edit={editProps}
                                 />
                               ))}
                             </div>
@@ -695,11 +825,31 @@ export function TeamReportTable({ data, filters }: TeamReportTableProps) {
           onUpdated={() => {}}
         />
       )}
+
+      {/* Save Confirmation Modal */}
+      {showConfirm && (
+        <SaveConfirmModal
+          edits={edits}
+          onClose={() => setShowConfirm(false)}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   );
 }
 
 // ── Task Row sub-component ─────────────────────────────────────────────
+
+interface TaskRowEditProps {
+  editMode: boolean;
+  editingKey: string | null;
+  edits: EditEntry[];
+  startEdit: (key: string) => void;
+  cancelEdit: () => void;
+  addEdit: (entry: EditEntry) => void;
+  hasEdit: (issueKey: string, field: EditEntry['field']) => boolean;
+  getEditClass: (issueKey: string, field: EditEntry['field']) => string;
+}
 
 function TaskRow({
   task,
@@ -708,6 +858,7 @@ function TaskRow({
   isLastInGroup,
   visibleColumns,
   onIssueClick,
+  edit,
 }: {
   task: TaskReport;
   dayHeaders: Array<{ key: string; dayName: string; dateStr: string; isToday: boolean }>;
@@ -715,8 +866,20 @@ function TaskRow({
   isLastInGroup: boolean;
   visibleColumns: Record<string, boolean>;
   onIssueClick?: (key: string) => void;
+  edit?: TaskRowEditProps;
 }) {
   const missingClass = getMissingInfoClass(task);
+  const ed = edit;
+
+  const summaryCls = ed && ed.editMode
+    ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10'
+    : '';
+  const estCls = ed && ed.editMode
+    ? 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10'
+    : '';
+  const statusCls = ed && ed.editMode
+    ? 'cursor-pointer hover:ring-1 hover:ring-[#0052CC]'
+    : '';
 
   return (
     <div
@@ -751,48 +914,154 @@ function TaskRow({
         </div>
       )}
 
+      {/* ── Summary (editable) ── */}
       {visibleColumns.summary && (
-        <div className="flex-1 px-2 py-2 text-[#172B4D] dark:text-gray-200 truncate min-w-0">
-          {task.summary}
+        <div
+          onClick={() => ed?.editMode && ed.startEdit(`${task.issueKey}:summary`)}
+          className={cn(
+            'flex-1 px-2 py-2 text-[#172B4D] dark:text-gray-200 truncate min-w-0',
+            summaryCls,
+            ed && ed.getEditClass(task.issueKey, 'summary'),
+          )}
+        >
+          {ed && ed.editMode && ed.editingKey === `${task.issueKey}:summary` ? (
+            <InlineTextEditor
+              currentValue={task.summary}
+              onSave={(newVal) =>
+                ed.addEdit({
+                  issueKey: task.issueKey,
+                  field: 'summary',
+                  oldValue: task.summary,
+                  newValue: newVal,
+                })
+              }
+              onCancel={ed.cancelEdit}
+            />
+          ) : ed && ed.hasEdit(task.issueKey, 'summary') ? (
+            <span className="text-[#B45309] dark:text-amber-400">
+              {editsFromContext(ed, task.issueKey, 'summary')}
+            </span>
+          ) : (
+            task.summary
+          )}
         </div>
       )}
 
+      {/* ── Estimate (editable) ── */}
       {visibleColumns.est && (
-        <div className={cn(
-          'w-[72px] flex-shrink-0 px-2 py-2 text-right',
-          task.estSeconds === 0 ? 'text-[#C1C7D0] dark:text-gray-600 italic text-[10px]' : 'text-[#5E6C84] dark:text-gray-400',
-        )}>
-          {task.estSeconds === 0 ? '—' : task.estDisplay}
+        <div
+          onClick={() => ed?.editMode && ed.startEdit(`${task.issueKey}:est`)}
+          className={cn(
+            'w-[72px] flex-shrink-0 px-2 py-2 text-right',
+            task.estSeconds === 0 ? 'text-[#C1C7D0] dark:text-gray-600 italic text-[10px]' : 'text-[#5E6C84] dark:text-gray-400',
+            estCls,
+            ed && ed.getEditClass(task.issueKey, 'est'),
+          )}
+        >
+          {ed && ed.editMode && ed.editingKey === `${task.issueKey}:est` ? (
+            <EstEditor
+              currentValue={task.estSeconds === 0 ? '' : task.estDisplay}
+              onSave={(newVal) =>
+                ed.addEdit({
+                  issueKey: task.issueKey,
+                  field: 'est',
+                  oldValue: task.estSeconds === 0 ? '' : task.estDisplay,
+                  newValue: newVal,
+                })
+              }
+              onCancel={ed.cancelEdit}
+            />
+          ) : ed && ed.hasEdit(task.issueKey, 'est') ? (
+            <span className="text-[#B45309] dark:text-amber-400 font-medium">
+              {editsFromContext(ed, task.issueKey, 'est')}
+            </span>
+          ) : task.estSeconds === 0 ? (
+            ed?.editMode ? <span className="italic text-[10px]">—</span> : '—'
+          ) : (
+            task.estDisplay
+          )}
         </div>
       )}
 
+      {/* ── Status (editable) ── */}
       {visibleColumns.status && (
         <div className="w-[80px] flex-shrink-0 px-1 py-2 text-center">
-          <span className={cn(
-            'text-[10px] px-1.5 py-0.5 rounded font-medium',
-            classifyStatus(task.status) === 'done'
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : classifyStatus(task.status) === 'in-progress'
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-          )}>
-            {task.status || '-'}
-          </span>
+          {ed && ed.editMode && ed.editingKey === `${task.issueKey}:status` ? (
+            <StatusEditor
+              issueKey={task.issueKey}
+              currentStatus={task.status ?? ''}
+              onSave={(newStatus, transitionId) =>
+                ed.addEdit({
+                  issueKey: task.issueKey,
+                  field: 'status',
+                  oldValue: task.status ?? '',
+                  newValue: newStatus,
+                  transitionId,
+                })
+              }
+              onCancel={ed.cancelEdit}
+            />
+          ) : (
+            <span
+              onClick={() => ed?.editMode && ed.startEdit(`${task.issueKey}:status`)}
+              className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded font-medium',
+                classifyStatus(task.status) === 'done'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : classifyStatus(task.status) === 'in-progress'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+                statusCls,
+                ed && ed.getEditClass(task.issueKey, 'status'),
+              )}
+            >
+              {ed && ed.hasEdit(task.issueKey, 'status')
+                ? editsFromContext(ed, task.issueKey, 'status')
+                : task.status || '-'}
+            </span>
+          )}
         </div>
       )}
 
-      {/* Due date — after Status, with overdue highlight */}
+      {/* ── Due date (editable) ── */}
       {visibleColumns.duedate && (
         <div className={cn(
           'w-[72px] flex-shrink-0 px-2 py-2 text-center text-xs font-medium',
-          isOverdue(task)
-            ? 'bg-red-100 dark:bg-red-900/30 text-[#DE350B] dark:text-red-400 rounded'
-            : !task.duedate
-              ? 'text-[#C1C7D0] dark:text-gray-600 italic text-[10px]'
-              : 'text-[#172B4D] dark:text-gray-200',
+          ed && ed.editMode && 'cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/10',
+          ed && ed.getEditClass(task.issueKey, 'duedate'),
         )}>
-          {isOverdue(task) && <span className="mr-0.5">⚠</span>}
-          {task.duedate ? formatDueDate(task.duedate) : '—'}
+          {ed && ed.editMode && ed.editingKey === `${task.issueKey}:duedate` ? (
+            <DateEditor
+              currentValue={task.duedate ?? ''}
+              onSave={(newVal) =>
+                ed.addEdit({
+                  issueKey: task.issueKey,
+                  field: 'duedate',
+                  oldValue: task.duedate ?? '',
+                  newValue: newVal,
+                })
+              }
+              onCancel={ed.cancelEdit}
+            />
+          ) : ed && ed.hasEdit(task.issueKey, 'duedate') ? (
+            <span className="text-[#B45309] dark:text-amber-400 font-medium">
+              {formatDueDate(editsFromContext(ed, task.issueKey, 'duedate'))}
+            </span>
+          ) : (
+            <span
+              onClick={() => ed?.editMode && ed.startEdit(`${task.issueKey}:duedate`)}
+              className={cn(
+                isOverdue(task)
+                  ? 'bg-red-100 dark:bg-red-900/30 text-[#DE350B] dark:text-red-400 rounded'
+                  : !task.duedate
+                    ? 'text-[#C1C7D0] dark:text-gray-600 italic text-[10px]'
+                    : 'text-[#172B4D] dark:text-gray-200',
+              )}
+            >
+              {isOverdue(task) && <span className="mr-0.5">⚠</span>}
+              {task.duedate ? formatDueDate(task.duedate) : '—'}
+            </span>
+          )}
         </div>
       )}
 
@@ -814,4 +1083,14 @@ function TaskRow({
       })}
     </div>
   );
+}
+
+/** Helper: get the new value from edits for display in the cell */
+function editsFromContext(
+  ed: TaskRowEditProps,
+  issueKey: string,
+  field: EditEntry['field'],
+): string {
+  const entry = ed.edits.find((e) => e.issueKey === issueKey && e.field === field);
+  return entry?.newValue ?? '';
 }
