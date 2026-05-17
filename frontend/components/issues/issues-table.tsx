@@ -208,13 +208,14 @@ function resolveSprint(issue: JiraIssue): JiraSprint | null {
     if (!value) continue;
     const items = Array.isArray(value) ? value : [value];
     for (const item of items) {
+      const it = item as Record<string, unknown>;
       if (
-        typeof item === 'object' &&
-        typeof item.id === 'number' &&
-        typeof item.name === 'string' &&
-        typeof item.state === 'string'
+        typeof it === 'object' &&
+        typeof it.id === 'number' &&
+        typeof it.name === 'string' &&
+        typeof it.state === 'string'
       ) {
-        return item as JiraSprint;
+        return it as unknown as JiraSprint;
       }
     }
   }

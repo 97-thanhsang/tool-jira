@@ -3,18 +3,21 @@ import { useMemo, useState } from 'react';
 import { startOfWeek, addDays, format } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { DndContext, DragOverlay, closestCenter, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core';
+import { cn } from '@/lib/utils';
 import type { WorklogEntry } from '@/types/jira';
-import { WorklogDayCell } from './worklog-day-cell';
+import { WorklogDayCell, type GroupByField } from './worklog-day-cell';
 import { WorklogEntryCard } from './worklog-entry-card';
 import { Button } from '@/components/ui/button';
 
 interface WorklogCalendarProps {
-  mode: 'week' | 'month';
+  mode: 'day' | 'week' | 'month';
   baseDate: Date;
   entriesByDate: Record<string, WorklogEntry[]>;
   dailyHours: Record<string, number>;
+  groupBy?: GroupByField;
+  subGroupBy?: GroupByField;
   onNavigate: (direction: 'prev' | 'next') => void;
-  onModeChange: (mode: 'week' | 'month') => void;
+  onModeChange: (mode: 'day' | 'week' | 'month') => void;
   onEntryClick?: (entry: WorklogEntry) => void;
   onDayClick?: (date: Date) => void;
   onDragEnd?: (entryId: string, newDate: string) => void;
@@ -25,6 +28,8 @@ export function WorklogCalendar({
   baseDate,
   entriesByDate,
   dailyHours,
+  groupBy,
+  subGroupBy,
   onNavigate,
   onModeChange,
   onEntryClick,
@@ -36,7 +41,9 @@ export function WorklogCalendar({
 
   const days = useMemo(() => {
     const result: Date[] = [];
-    if (mode === 'week') {
+    if (mode === 'day') {
+      result.push(baseDate);
+    } else if (mode === 'week') {
       const start = startOfWeek(baseDate, { weekStartsOn: 1 });
       for (let i = 0; i < 7; i++) result.push(addDays(start, i));
     } else {
@@ -74,9 +81,11 @@ export function WorklogCalendar({
             <ChevronLeft size={14} />
           </Button>
           <h2 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100 w-40 text-center">
-            {mode === 'week'
-              ? `${format(days[0], 'MMM d')} – ${format(days[6], 'MMM d, yyyy')}`
-              : format(baseDate, 'MMMM yyyy')}
+            {mode === 'day'
+              ? format(baseDate, 'EEEE, MMM d, yyyy')
+              : mode === 'week'
+                ? `${format(days[0], 'MMM d')} – ${format(days[6], 'MMM d, yyyy')}`
+                : format(baseDate, 'MMMM yyyy')}
           </h2>
           <Button
             variant="outline"
@@ -89,8 +98,18 @@ export function WorklogCalendar({
         </div>
         <div className="flex rounded-sm border border-[#DFE1E6] dark:border-gray-700 overflow-hidden">
           <button
-            onClick={() => onModeChange('week')}
+            onClick={() => onModeChange('day')}
             className={`text-xs px-3 py-1 ${
+              mode === 'day'
+                ? 'bg-[#0052CC] text-white'
+                : 'bg-white dark:bg-gray-800 text-[#5E6C84] hover:bg-[#F4F5F7] dark:hover:bg-gray-700'
+            }`}
+          >
+            Day
+          </button>
+          <button
+            onClick={() => onModeChange('week')}
+            className={`text-xs px-3 py-1 border-l border-[#DFE1E6] dark:border-gray-700 ${
               mode === 'week'
                 ? 'bg-[#0052CC] text-white'
                 : 'bg-white dark:bg-gray-800 text-[#5E6C84] hover:bg-[#F4F5F7] dark:hover:bg-gray-700'
@@ -111,7 +130,8 @@ export function WorklogCalendar({
         </div>
       </div>
 
-      {/* Day headers */}
+      {/* Day headers (skip for day mode) */}
+      {mode !== 'day' && (
       <div className="grid grid-cols-7 gap-px mb-1 flex-shrink-0">
         {dayHeaders.map((d) => (
           <div
@@ -122,6 +142,7 @@ export function WorklogCalendar({
           </div>
         ))}
       </div>
+      )}
 
       {/* Calendar grid */}
       <DndContext
@@ -144,8 +165,11 @@ export function WorklogCalendar({
         }}
       >
         <div
-          className="grid grid-cols-7 gap-px flex-1 min-h-0 bg-[#DFE1E6] dark:bg-gray-700 rounded-sm overflow-hidden"
-          style={{ gridTemplateRows: mode === 'week' ? '1fr' : undefined }}
+          className={cn(
+            'grid gap-px flex-1 min-h-0 bg-[#DFE1E6] dark:bg-gray-700 rounded-sm overflow-hidden',
+            mode === 'day' ? 'grid-cols-1' : 'grid-cols-7',
+          )}
+          style={{ gridTemplateRows: mode === 'week' || mode === 'day' ? '1fr' : undefined }}
         >
           {days.map((day) => {
             const key = format(day, 'yyyy-MM-dd');
@@ -158,10 +182,12 @@ export function WorklogCalendar({
                 dailyHours={dailyHours[key] ?? 0}
                 compact={mode === 'month'}
                 isCurrentMonth={
-                  mode === 'week' || day.getMonth() === baseDate.getMonth()
+                  mode === 'day' || mode === 'week' || day.getMonth() === baseDate.getMonth()
                 }
                 isDragActive={activeId !== null}
                 isDragSource={isDragSource}
+                groupBy={groupBy}
+                subGroupBy={subGroupBy}
                 onEntryClick={onEntryClick}
                 onDayClick={onDayClick}
               />

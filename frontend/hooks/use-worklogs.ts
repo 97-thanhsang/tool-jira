@@ -2,19 +2,37 @@
 import useSWR from 'swr';
 import { useMemo } from 'react';
 import { fetchWorklogs } from '@/lib/worklog-api';
-import type { WorklogFilters, WorklogEntry } from '@/types/jira';
+import { fetchTeamWorklogs } from '@/lib/team-api';
+import type { WorklogEntry } from '@/types/jira';
 
-export function useWorklogs(filters: WorklogFilters | null) {
+interface UseWorklogsFilters {
+  usernames?: string[];
+  dateFrom: string;
+  dateTo: string;
+  project?: string;
+}
+
+export function useWorklogs(filters: UseWorklogsFilters | null) {
   const key = filters
-    ? ['worklogs', filters.username, filters.dateFrom, filters.dateTo, filters.project]
+    ? ['worklogs', filters.dateFrom, filters.dateTo, filters.project, ...(filters.usernames ?? [])]
     : null;
 
   const { data, error, isLoading, mutate } = useSWR(
     key,
-    async ([, username, dateFrom, dateTo]: string[]) => {
-      const result = await fetchWorklogs(username, dateFrom, dateTo);
-      if (filters?.project) {
-        result.entries = result.entries.filter(e => e.projectKey === filters.project);
+    async () => {
+      if (!filters) return null;
+      const { usernames, dateFrom, dateTo, project } = filters;
+      
+      let result;
+      if (usernames && usernames.length > 1) {
+        result = await fetchTeamWorklogs(usernames, dateFrom, dateTo, false);
+      } else {
+        const username = usernames?.[0] || '';
+        result = await fetchWorklogs(username, dateFrom, dateTo);
+      }
+
+      if (project) {
+        result.entries = result.entries.filter(e => e.projectKey === project);
         result.total = result.entries.length;
         result.totalHours = result.entries.reduce((s, e) => s + e.timeSpentSeconds / 3600, 0);
         result.dailyHours = {};
