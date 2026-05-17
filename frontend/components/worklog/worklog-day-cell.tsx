@@ -38,10 +38,20 @@ function typeAbbr(name: string): string {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  Story: '#36B37E', 'Sub-task': '#0052CC', Bug: '#DE350B', Task: '#4BADE8',
-  Epic: '#904EE2', Support: '#FF8B00', Enhancement: '#008DA6', Improvement: '#6554C0',
-  'New Feature': '#E774BB', 'Build Release': '#7A869A', 'Bug after release': '#BF2600', WBS: '#505F79',
+  'Task': '#0052CC', 'Sub-task': '#008DA6', 'Story': '#36B37E',
+  'Bug': '#DE350B', 'Epic': '#6554C0', 'Improvement': '#FF8B00',
+  'Support': '#E774BB', 'Enhancement': '#00B8D9', 'New Feature': '#5243AA',
+  'Build Release': '#FF5630', 'Bug after release': '#BF2600', 'WBS': '#403294',
 };
+
+// 20+ distinct colors for group-by lanes (no adjacent similarity)
+export const SWIMLANE_PALETTE = [
+  '#0052CC', '#36B37E', '#DE350B', '#FF8B00', '#6554C0',
+  '#008DA6', '#E774BB', '#FF5630', '#00B8D9', '#5243AA',
+  '#BF2600', '#403294', '#006644', '#FF991F', '#172B4D',
+  '#505F79', '#253858', '#0065FF', '#FFAB00', '#57D9A3',
+  '#FF7452', '#998DD9', '#79E2F2', '#B3BAC5',
+];
 
 function TypeBadge({ typeName, iconUrl }: { typeName: string; iconUrl?: string }) {
   if (iconUrl) {
@@ -110,7 +120,7 @@ function layoutEntries(entries: WorklogEntry[]): LayoutEntry[] {
 
 // ── Group-by helpers ──
 
-function getGroupKey(entry: WorklogEntry, field: GroupByField): string {
+export function getGroupKey(entry: WorklogEntry, field: GroupByField): string {
   switch (field) {
     case 'project': return entry.projectKey || 'No Project';
     case 'type': return entry.issueTypeName || 'No Type';
@@ -120,7 +130,7 @@ function getGroupKey(entry: WorklogEntry, field: GroupByField): string {
   }
 }
 
-function getGroupColor(entry: WorklogEntry, field: GroupByField): string {
+export function getGroupColor(entry: WorklogEntry, field: GroupByField): string {
   switch (field) {
     case 'project': return PROJECT_COLORS[entry.projectKey] ?? '#5E6C84';
     case 'type': return TYPE_COLORS[entry.issueTypeName] ?? '#5E6C84';
@@ -164,14 +174,14 @@ function groupEntries(entries: WorklogEntry[], field: GroupByField): EntryGroup[
     }
   }
   return Array.from(map.entries())
-    .map(([key, val]) => ({
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, val], idx) => ({
       key,
       label: key,
       entries: val.entries,
       totalHours: val.totalHours,
-      color: getGroupColor(val.entries[0], field),
-    }))
-    .sort((a, b) => b.totalHours - a.totalHours);
+      color: SWIMLANE_PALETTE[idx % SWIMLANE_PALETTE.length],
+    }));
 }
 
 // ── Draggable timeline entry ──
@@ -564,7 +574,7 @@ export function WorklogDayCell({
         </div>
       )}
 
-      {/* Timeline — fixed height, no scroll */}
+      {/* Timeline */}
       <div className="flex-1 relative" style={{ minHeight: TIMELINE_HEIGHT }}>
         <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
           {/* Slot backgrounds */}
