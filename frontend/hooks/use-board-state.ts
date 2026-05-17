@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import type { JiraIssue, JiraSearchResult } from '@/types/jira';
 
 const BOARD_SEARCH_FIELDS =
-  'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components';
+  'summary,status,priority,issuetype,project,updated,created,assignee,reporter,labels,duedate,resolution,fixVersions,components,timetracking,sprint,customfield_10020';
 
 export interface BoardToast {
   message: string;

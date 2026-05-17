@@ -244,26 +244,28 @@ function DroppableColumn({
   return (
     <div className="flex flex-col min-h-0">
       {/* Column header */}
-      <div className="flex items-center gap-2 mb-3 px-1 flex-shrink-0">
-        <div
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: color }}
-        />
-        <h3 className="text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+      <div
+        className="flex items-center gap-2 mb-3 px-3 py-2 rounded-sm flex-shrink-0"
+        style={{ backgroundColor: `${color}15`, borderLeft: `3px solid ${color}` }}
+      >
+        <h3
+          className="text-sm font-bold uppercase tracking-wide"
+          style={{ color }}
+        >
           {label}
         </h3>
         <span
           className={cn(
-            'ml-auto text-xs px-1.5 py-0.5 rounded-full flex items-center gap-0.5',
+            'ml-auto text-xs px-2 py-0.5 rounded-full font-semibold',
             overMax
-              ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-semibold'
+              ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
               : underMin
-                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-semibold'
-                : 'text-[#5E6C84] dark:text-gray-400 bg-[#DFE1E6] dark:bg-gray-700',
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 border border-[#DFE1E6] dark:border-gray-600',
           )}
         >
-          {overMax && <AlertCircle size={10} />}
-          {underMin && <TrendingDown size={10} />}
+          {overMax && <AlertCircle size={10} className="mr-0.5" />}
+          {underMin && <TrendingDown size={10} className="mr-0.5" />}
           {count}
           {wipMax != null ? `/${wipMax}` : ''}
         </span>

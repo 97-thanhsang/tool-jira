@@ -46,7 +46,7 @@ function issueTypeLabel(name: string): string {
 }
 
 function getDueDateStatus(duedate?: string): 'overdue' | 'due-soon' | null {
-  if (!duedate) return null;
+  if (!duedate) return 'overdue'; // no duedate = red
   const now = new Date();
   const due = new Date(duedate);
   if (due < now) return 'overdue';
@@ -56,13 +56,27 @@ function getDueDateStatus(duedate?: string): 'overdue' | 'due-soon' | null {
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}`;
 }
 
 function formatHours(seconds: number): string {
   if (!seconds) return '0h';
   const h = seconds / 3600;
   return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
+}
+
+/** Parse Jira duration string like "2h 30m" or "1d 4h" to seconds. */
+function parseJiraDuration(dur: string): number {
+  let total = 0;
+  const dayMatch = dur.match(/(\d+(?:\.\d+)?)d/);
+  if (dayMatch) total += parseFloat(dayMatch[1]) * 8 * 3600; // 1d = 8h
+  const hourMatch = dur.match(/(\d+(?:\.\d+)?)h/);
+  if (hourMatch) total += parseFloat(hourMatch[1]) * 3600;
+  const minMatch = dur.match(/(\d+(?:\.\d+)?)m/);
+  if (minMatch) total += parseFloat(minMatch[1]) * 60;
+  return total;
 }
 
 function labelColor(name: string): string {
@@ -138,15 +152,17 @@ const POPOVER_ITEM = 'w-full flex items-center gap-2 text-left px-3 py-1.5 text-
 
 export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps) {
   const typeColor = issueTypeColors[issue.fields.issuetype?.name ?? ''] ?? 'bg-gray-400 text-white';
-  const dueDateStatus = getDueDateStatus(issue.fields.duedate);
+  const statusCat = issue.fields.status.statusCategory.key;
+  const dueDateStatus = statusCat === 'done' ? null : getDueDateStatus(issue.fields.duedate);
   const components = issue.fields.components ?? [];
   const storyPoints = getStoryPoints(issue);
   const sprintName = getSprintName(issue);
-  const statusCat = issue.fields.status.statusCategory.key;
   const tt = issue.fields.timetracking;
-  const hasTimeTracking = !!(tt?.originalEstimateSeconds || tt?.timeSpentSeconds);
-  const logged = tt?.timeSpentSeconds ?? 0;
-  const estimated = tt?.originalEstimateSeconds ?? 0;
+  const loggedStr = tt?.timeSpent;
+  const estimatedStr = tt?.originalEstimate;
+  const logged = tt?.timeSpentSeconds ?? (loggedStr ? parseJiraDuration(loggedStr) : 0);
+  const estimated = tt?.originalEstimateSeconds ?? (estimatedStr ? parseJiraDuration(estimatedStr) : 0);
+  const hasTimeTracking = !!(estimated || logged);
   const progress = estimated > 0 ? Math.min(logged / estimated, 1) : 0;
 
   const [optAssignee, setOptAssignee] = useState<JiraUser | null | undefined>(undefined);
@@ -231,9 +247,12 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
   return (
     <div
       className={cn(
-        'group relative p-3 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm hover:shadow-md transition-shadow',
-        dueDateStatus === 'overdue' && 'border-l-2 border-l-red-500',
-        dueDateStatus === 'due-soon' && 'border-l-2 border-l-orange-400',
+        'group relative p-3 rounded-sm hover:shadow-md transition-all border border-[#DFE1E6] dark:border-gray-700',
+        (dueDateStatus === 'overdue' || (statusCat !== 'done' && !estimated))
+          ? 'bg-red-50 dark:bg-red-950/20 border-l-2 border-l-red-500'
+          : dueDateStatus === 'due-soon'
+            ? 'bg-orange-50 dark:bg-orange-950/20 border-l-2 border-l-orange-400'
+            : 'bg-white dark:bg-gray-800',
       )}
     >
       {/* Row 1: Status + Type badge + Key + External link */}
@@ -269,7 +288,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
           </div>
           <div className="w-full h-1 bg-[#DFE1E6] dark:bg-gray-700 rounded-full overflow-hidden">
             <div
-              className={cn('h-full rounded-full transition-all', progress >= 1 ? 'bg-red-500' : 'bg-[#0052CC]')}
+              className={cn('h-full rounded-full transition-all', progress >= 1 ? 'bg-[#36B37E]' : 'bg-[#0052CC]')}
               style={{ width: `${Math.min(progress * 100, 100)}%` }}
             />
           </div>
@@ -284,10 +303,11 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
         </div>
       )}
 
-      {/* Row 5: Labels + Components */}
+      {/* Row 5: Labels + Components (only when has tags or popover open) */}
+      {(hasTags || openPopover === 'labels') && (
       <div className="relative mb-2">
         <button type="button" className="w-full text-left cursor-pointer" onClick={(e) => handleTogglePopover('labels', e)} onPointerDown={e => e.stopPropagation()}>
-          {hasTags ? (
+          {hasTags && (
             <div className="flex items-center gap-1 flex-wrap">
               {components.map(c => (
                 <span key={c.id} className="text-[10px] px-1.5 py-0.5 rounded-sm bg-[#DFE1E6] dark:bg-gray-700 text-[#5E6C84] dark:text-gray-400">{c.name}</span>
@@ -296,8 +316,6 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
                 <span key={label} className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm text-white" style={{ backgroundColor: labelColor(label) }}>{label}</span>
               ))}
             </div>
-          ) : (
-            <div className="text-[10px] text-[#8993A4] dark:text-gray-500 hover:text-[#5E6C84] dark:hover:text-gray-400 transition-colors">+ Add labels</div>
           )}
         </button>
         {openPopover === 'labels' && (
@@ -320,16 +338,9 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
           </div>
         )}
       </div>
-
-      {/* Row 6: Due date badge */}
-      {dueDateStatus && (
-        <div className="mb-2">
-          {dueDateStatus === 'overdue' && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400">Overdue</span>}
-          {dueDateStatus === 'due-soon' && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">Due soon</span>}
-        </div>
       )}
 
-      {/* Row 7: Footer — Priority + Story Points + Project + Assignee */}
+      {/* Row 6: Footer */}
       <div className="flex items-center gap-2">
         <div className="relative">
           <button type="button" onClick={e => handleTogglePopover('priority', e)} onPointerDown={e => e.stopPropagation()} className="flex-shrink-0 cursor-pointer" title={displayPriority?.name ?? 'No priority'}>
@@ -354,18 +365,44 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
           </span>
         )}
 
+        {estimated > 0 && (
+          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 flex-shrink-0">est {formatHours(estimated)}</span>
+        )}
+        {logged > 0 && (
+          <span className="text-[10px] text-[#36B37E] dark:text-green-400 flex-shrink-0">log {formatHours(logged)}</span>
+        )}
+
         <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate flex-1">
           {issue.fields.project?.name}
         </span>
 
-        <div className="relative">
-          <button type="button" onClick={e => handleTogglePopover('assignee', e)} onPointerDown={e => e.stopPropagation()} className="flex-shrink-0 cursor-pointer">
+        {/* Reporter: avatar + name */}
+        <div className="flex items-center gap-1 flex-shrink-0" title={`Reporter: ${issue.fields.reporter?.displayName}`}>
+          {issue.fields.reporter?.avatarUrls?.['24x24'] ? (
+            <img src={issue.fields.reporter.avatarUrls['24x24']} alt="" className="w-4 h-4 rounded-full" />
+          ) : (
+            <span className="w-4 h-4 rounded-full bg-[#DFE1E6] dark:bg-gray-600 flex items-center justify-center text-[7px] text-[#5E6C84]">
+              {issue.fields.reporter?.displayName?.charAt(0) ?? '?'}
+            </span>
+          )}
+          <span className="text-[9px] text-[#8993A4] dark:text-gray-500">
+            {issue.fields.reporter?.displayName}
+          </span>
+        </div>
+
+        <span className="text-[#DFE1E6] dark:text-gray-600 select-none">·</span>
+
+        {/* Assignee: avatar + name (clickable to edit) */}
+        <div className="relative flex-shrink-0">
+          <button type="button" onClick={e => handleTogglePopover('assignee', e)} onPointerDown={e => e.stopPropagation()} className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity">
             {displayAssignee ? (
-              <img src={displayAssignee.avatarUrls['24x24']} alt={displayAssignee.displayName} title={displayAssignee.displayName}
-                className="w-5 h-5 rounded-full border border-[#DFE1E6] dark:border-gray-600 hover:opacity-80 transition-opacity" />
+              <img src={displayAssignee.avatarUrls['24x24']} alt="" className="w-4 h-4 rounded-full border border-[#DFE1E6] dark:border-gray-600" />
             ) : (
-              <div className="w-5 h-5 rounded-full bg-[#DFE1E6] dark:bg-gray-700 flex items-center justify-center text-[10px] text-[#5E6C84] dark:text-gray-400 hover:opacity-80 transition-opacity" title="Unassigned">?</div>
+              <span className="w-4 h-4 rounded-full bg-[#DFE1E6] dark:bg-gray-700 flex items-center justify-center text-[7px] text-[#5E6C84]">?</span>
             )}
+            <span className="text-[9px] text-[#5E6C84] dark:text-gray-400">
+              {displayAssignee?.displayName ?? 'Unassigned'}
+            </span>
           </button>
           {openPopover === 'assignee' && (
             <div ref={popoverRef} className={cn(POPOVER_BASE, 'w-60')} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
