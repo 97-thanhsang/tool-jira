@@ -324,34 +324,32 @@ export default function BoardPage() {
       }
     }
 
-    // Add stats for assignee grouping
-    if (groupBy === 'assignee') {
-      for (const lane of result) {
-        const allIssues = Object.values(lane.columns).flat();
-        let totalEstSeconds = 0;
-        let totalLoggedSeconds = 0;
-        let todoCount = 0;
-        let inProgressCount = 0;
-        let doneCount = 0;
+    // Add stats for all group-by types
+    for (const lane of result) {
+      const allIssues = Object.values(lane.columns).flat();
+      let totalEstSeconds = 0;
+      let totalLoggedSeconds = 0;
+      let todoCount = 0;
+      let inProgressCount = 0;
+      let doneCount = 0;
 
-        for (const issue of allIssues) {
-          totalEstSeconds += issue.fields.timetracking?.originalEstimateSeconds ?? 0;
-          totalLoggedSeconds += issue.fields.timetracking?.timeSpentSeconds ?? 0;
-          const cat = issue.fields.status.statusCategory.key;
-          if (cat === 'new') todoCount++;
-          else if (cat === 'indeterminate') inProgressCount++;
-          else if (cat === 'done') doneCount++;
-        }
-
-        lane.stats = {
-          taskCount: allIssues.length,
-          totalEstSeconds,
-          totalLoggedSeconds,
-          todoCount,
-          inProgressCount,
-          doneCount,
-        };
+      for (const issue of allIssues) {
+        totalEstSeconds += issue.fields.timetracking?.originalEstimateSeconds ?? 0;
+        totalLoggedSeconds += issue.fields.timetracking?.timeSpentSeconds ?? 0;
+        const cat = issue.fields.status.statusCategory.key;
+        if (cat === 'new') todoCount++;
+        else if (cat === 'indeterminate') inProgressCount++;
+        else if (cat === 'done') doneCount++;
       }
+
+      lane.stats = {
+        taskCount: allIssues.length,
+        totalEstSeconds,
+        totalLoggedSeconds,
+        todoCount,
+        inProgressCount,
+        doneCount,
+      };
     }
 
     return result;
@@ -598,6 +596,9 @@ export default function BoardPage() {
           </>
         )}
       </div>
+
+      {/* ── Filter bar ── */}
+      <BoardFilterBar filters={filters} onChange={setFilters} />
 
       {/* Board */}
       <div className="flex-1 min-h-0">

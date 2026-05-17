@@ -31,9 +31,12 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  Bug: '#EF4444', Task: '#3B82F6', Story: '#22C55E',
-  Epic: '#A855F7', 'Sub-task': '#38BDF8', Support: '#F59E0B',
-  Enhancement: '#10B981', Improvement: '#6366F1', 'New Feature': '#EC4899',
+  Bug: '#EF4444', 'Bug after release': '#DC2626',
+  Task: '#3B82F6', 'Sub-task': '#38BDF8',
+  Story: '#22C55E', Epic: '#A855F7',
+  Support: '#F59E0B', Enhancement: '#10B981',
+  Improvement: '#6366F1', 'New Feature': '#EC4899',
+  'Build Release': '#84CC16', WBS: '#78716C',
 };
 
 /** Deterministic color from a string (for project keys). */
@@ -483,7 +486,7 @@ export function KanbanBoard({
                     ? (PRIORITY_COLORS[firstIssue.fields.priority.name] ?? '#DFE1E6')
                     : '#DFE1E6';
                   break;
-                case 'issuetype':
+                case 'type':
                   accentColor = TYPE_COLORS[firstIssue.fields.issuetype.name] ?? '#6B7280';
                   break;
                 case 'assignee':
@@ -523,7 +526,7 @@ export function KanbanBoard({
                     {firstIssue && groupBy === 'priority' && (
                       <PriorityIcon priority={firstIssue.fields.priority} />
                     )}
-                    {firstIssue && groupBy === 'issuetype' && (
+                    {firstIssue && groupBy === 'type' && (
                       firstIssue.fields.issuetype.iconUrl
                         ? <Image src={firstIssue.fields.issuetype.iconUrl} alt={firstIssue.fields.issuetype.name} width={16} height={16} className="flex-shrink-0" unoptimized />
                         : <span className="text-xs font-bold text-[#5E6C84] w-4 h-4 flex items-center justify-center">{firstIssue.fields.issuetype.name.charAt(0)}</span>
@@ -552,17 +555,25 @@ export function KanbanBoard({
                     </span>
                   </button>
 
-                  {/* Row 2: Stats grid (assignee only, team dashboard style) */}
-                  {groupBy === 'assignee' && lane.stats && (
+                  {/* Row 2: Stats grid (team dashboard style) */}
+                  {lane.stats && (
                     <div className="flex items-stretch border-t border-[#DFE1E6] dark:border-gray-700">
-                      {([
-                        { key: 'taskCount', label: 'Tasks', value: lane.stats.taskCount, color: '#5E6C84' },
-                        { key: 'totalEst', label: 'Est', value: formatHours(lane.stats.totalEstSeconds), color: '#172B4D' },
-                        { key: 'totalLogged', label: 'Logged', value: formatHours(lane.stats.totalLoggedSeconds), color: '#36B37E' },
-                        { key: 'todo', label: 'Todo', value: lane.stats.todoCount, color: '#5E6C84' },
-                        { key: 'inProgress', label: 'WIP', value: lane.stats.inProgressCount, color: '#0052CC' },
-                        { key: 'done', label: 'Done', value: lane.stats.doneCount, color: '#36B37E' },
-                      ] as const).map((col, i, arr) => (
+                      {(groupBy === 'assignee'
+                        ? ([
+                            { key: 'taskCount', label: 'Tasks', value: lane.stats.taskCount, color: '#5E6C84' },
+                            { key: 'totalEst', label: 'Est', value: formatHours(lane.stats.totalEstSeconds), color: '#172B4D' },
+                            { key: 'totalLogged', label: 'Logged', value: formatHours(lane.stats.totalLoggedSeconds), color: '#36B37E' },
+                            { key: 'todo', label: 'Todo', value: lane.stats.todoCount, color: '#5E6C84' },
+                            { key: 'inProgress', label: 'WIP', value: lane.stats.inProgressCount, color: '#0052CC' },
+                            { key: 'done', label: 'Done', value: lane.stats.doneCount, color: '#36B37E' },
+                          ] as const)
+                        : ([
+                            { key: 'taskCount', label: 'Tasks', value: lane.stats.taskCount, color: '#5E6C84' },
+                            { key: 'todo', label: 'Todo', value: lane.stats.todoCount, color: '#5E6C84' },
+                            { key: 'inProgress', label: 'WIP', value: lane.stats.inProgressCount, color: '#0052CC' },
+                            { key: 'done', label: 'Done', value: lane.stats.doneCount, color: '#36B37E' },
+                          ] as const)
+                      ).map((col, i, arr) => (
                         <div
                           key={col.key}
                           className={cn(
