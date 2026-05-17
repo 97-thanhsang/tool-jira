@@ -139,6 +139,8 @@ interface KanbanBoardProps {
   columnDefs?: BoardColumnDef[];
   /** Group-by field (for styled swimlane headers: icons, colors, avatars). */
   groupBy?: string;
+  /** Sub-group-by field (for styled sub-group headers: icons, colors, avatars). */
+  subGroupBy?: string;
 }
 
 /** Sub-group data within a column. */
@@ -210,6 +212,9 @@ interface DroppableColumnProps {
   onCardClick?: (key: string) => void;
   onIssueUpdate?: () => void;
   subGroups?: SubGroup[];
+  subGroupBy?: string;
+  collapsedSubGroups?: Set<string>;
+  onToggleSubGroup?: (key: string) => void;
 }
 
 function DroppableColumn({
@@ -223,6 +228,9 @@ function DroppableColumn({
   onCardClick,
   onIssueUpdate,
   subGroups,
+  subGroupBy,
+  collapsedSubGroups,
+  onToggleSubGroup,
 }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: colId });
   const issueIds = issues.map((i) => i.id);
@@ -277,28 +285,91 @@ function DroppableColumn({
               No issues
             </div>
           ) : (
-            subGroups.map((sg) => (
+            subGroups.map((sg) => {
+              const sgKey = `${colId}:${sg.label}`;
+              const isSgCollapsed = collapsedSubGroups?.has(sgKey) ?? false;
+              const sgFirstIssue = sg.issues[0];
+              let sgAccentColor: string | undefined;
+              if (sgFirstIssue && subGroupBy) {
+                switch (subGroupBy) {
+                  case 'project':
+                    sgAccentColor = projectColor(sgFirstIssue.fields.project.key);
+                    break;
+                  case 'priority':
+                    sgAccentColor = sgFirstIssue.fields.priority
+                      ? (PRIORITY_COLORS[sgFirstIssue.fields.priority.name] ?? '#DFE1E6')
+                      : '#DFE1E6';
+                    break;
+                  case 'type':
+                    sgAccentColor = TYPE_COLORS[sgFirstIssue.fields.issuetype.name] ?? '#6B7280';
+                    break;
+                  case 'assignee':
+                    sgAccentColor = '#0052CC';
+                    break;
+                }
+              }
+              return (
               <div key={sg.label}>
-                <div className="flex items-center gap-1.5 py-1 px-0.5">
-                  <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+                <button
+                  onClick={() => onToggleSubGroup?.(sgKey)}
+                  className="w-full flex items-center gap-1.5 py-1.5 px-2 rounded-sm hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors text-left"
+                  style={sgAccentColor ? { borderLeft: `3px solid ${sgAccentColor}` } : undefined}
+                >
+                  <ChevronDown
+                    size={10}
+                    className={cn(
+                      'text-[#5E6C84] dark:text-gray-400 flex-shrink-0 transition-transform',
+                      isSgCollapsed && '-rotate-90',
+                    )}
+                  />
+
+                  {/* Icon / avatar based on subGroupBy */}
+                  {sgFirstIssue && subGroupBy === 'priority' && (
+                    <PriorityIcon priority={sgFirstIssue.fields.priority} />
+                  )}
+                  {sgFirstIssue && subGroupBy === 'type' && (
+                    sgFirstIssue.fields.issuetype.iconUrl
+                      ? <Image src={sgFirstIssue.fields.issuetype.iconUrl} alt={sgFirstIssue.fields.issuetype.name} width={14} height={14} className="flex-shrink-0" unoptimized />
+                      : <span className="text-[10px] font-bold text-[#5E6C84] w-3.5 h-3.5 flex items-center justify-center">{sgFirstIssue.fields.issuetype.name.charAt(0)}</span>
+                  )}
+                  {sgFirstIssue && subGroupBy === 'assignee' && (
+                    sgFirstIssue.fields.assignee?.avatarUrls?.['24x24']
+                      ? <Image src={sgFirstIssue.fields.assignee.avatarUrls['24x24']} alt={sgFirstIssue.fields.assignee.displayName} width={20} height={20} className="rounded-full flex-shrink-0" unoptimized />
+                      : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#0052CC] text-white text-[8px] font-bold flex-shrink-0">
+                          {sgFirstIssue.fields.assignee?.displayName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) ?? '?'}
+                        </span>
+                  )}
+                  {sgFirstIssue && subGroupBy === 'project' && (
+                    <span
+                      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[7px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: sgAccentColor }}
+                    >
+                      {sgFirstIssue.fields.project.key.charAt(0)}
+                    </span>
+                  )}
+
+                  <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-200 uppercase tracking-wide flex-1">
                     {sg.label}
                   </span>
-                  <span className="text-[9px] text-[#8993A4] bg-[#F4F5F7] dark:bg-gray-700 px-1.5 py-0.5 rounded-full">
+                  <span className="text-[10px] font-medium text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">
                     {sg.issues.length}
                   </span>
-                </div>
-                <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                  {sg.issues.map((issue) => (
-                    <SortableCard
-                      key={issue.id}
-                      issue={issue}
-                      onCardClick={onCardClick}
-                      onIssueUpdate={onIssueUpdate}
-                    />
-                  ))}
-                </SortableContext>
+                </button>
+                {!isSgCollapsed && (
+                  <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                    {sg.issues.map((issue) => (
+                      <SortableCard
+                        key={issue.id}
+                        issue={issue}
+                        onCardClick={onCardClick}
+                        onIssueUpdate={onIssueUpdate}
+                      />
+                    ))}
+                  </SortableContext>
+                )}
               </div>
-            ))
+            );
+          })
           )
         ) : issues.length === 0 ? (
           <div className="text-center py-8 text-xs text-[#5E6C84] dark:text-gray-500">
@@ -378,9 +449,11 @@ export function KanbanBoard({
   swimlanes,
   columnDefs,
   groupBy,
+  subGroupBy,
 }: KanbanBoardProps) {
   const [activeIssue, setActiveIssue] = useState<JiraIssue | null>(null);
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
+  const [collapsedSubGroups, setCollapsedSubGroups] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
 
   function handleDragStart(event: DragStartEvent) {
@@ -555,6 +628,15 @@ export function KanbanBoard({
               });
             }
 
+            function toggleSubGroup(key: string) {
+              setCollapsedSubGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            }
+
             return (
               <div key={lane.key} className="flex-shrink-0 mb-6">
                 {/* Card wrapper (team dashboard style) */}
@@ -678,6 +760,9 @@ export function KanbanBoard({
                               onCardClick={onCardClick}
                               onIssueUpdate={onIssueUpdate}
                               subGroups={subGroups}
+                              subGroupBy={subGroupBy}
+                              collapsedSubGroups={collapsedSubGroups}
+                              onToggleSubGroup={toggleSubGroup}
                             />
                           </div>
                         );

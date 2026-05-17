@@ -55,7 +55,7 @@ export default function BoardPage() {
   const { statusColumnMap } = useStatusColumns();
 
   // Filter state
-  const [filters, setFilters] = useState<BoardFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<BoardFilters>({ ...EMPTY_FILTERS, period: 'month' });
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
 
   // ── Group / member filter ────────────────────────────────────────────────
@@ -562,6 +562,7 @@ export default function BoardPage() {
           swimlanes={swimlanes}
           columnDefs={columnDefs}
           groupBy={groupBy !== 'none' ? groupBy : undefined}
+          subGroupBy={subGroupBy !== 'none' ? subGroupBy : undefined}
         />
       </div>
 
