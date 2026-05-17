@@ -44,6 +44,23 @@ function projectColor(key: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+/** Format seconds to hours (1 decimal). */
+function formatHours(seconds: number): string {
+  if (!seconds) return '0h';
+  const h = seconds / 3600;
+  return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
+}
+
+/** Stat badge for swimlane header stats row. */
+function StatBadge({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div className="flex items-center gap-0.5 px-1.5 border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0">
+      <span className="text-[#8993A4] dark:text-gray-500">{label}</span>
+      <span className={cn('font-semibold text-[#172B4D] dark:text-gray-200', color)}>{value}</span>
+    </div>
+  );
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface BoardColumn {
@@ -67,7 +84,16 @@ export interface BoardColumnDef {
   statusIds: string[];
 }
 
-/** Move handler: called when a card is dropped into a target column. */
+/** Stats for a swimlane (shown in header when groupBy='assignee'). */
+export interface SwimlaneStats {
+  taskCount: number;
+  totalEstSeconds: number;
+  totalLoggedSeconds: number;
+  todoCount: number;
+  inProgressCount: number;
+  doneCount: number;
+}
+
 export type MoveCardFn = (
   issueId: string,
   issueKey: string,
@@ -100,10 +126,11 @@ interface KanbanBoardProps {
   onCardClick?: (key: string) => void;
   /** Called after any inline edit (assignee, priority, labels) — parent revalidates */
   onIssueUpdate?: () => void;
-  /** Swimlane data: each lane has a key and columns map (label → issues). */
+  /** Swimlane data: each lane has a key, columns map, and optional stats. */
   swimlanes?: {
     key: string;
     columns: Record<string, JiraIssue[]>;
+    stats?: SwimlaneStats;
   }[];
   /** Column definitions (metadata only) — required when swimlanes are used. */
   columnDefs?: BoardColumnDef[];
@@ -475,58 +502,93 @@ export function KanbanBoard({
             }
 
             return (
-              <div key={lane.key} className="flex-shrink-0">
-                {/* Prominent swimlane header */}
-                <button
-                  onClick={toggleCollapse}
-                  className="w-full flex items-center gap-3 mb-3 px-3 py-2 rounded-sm text-left hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors group"
-                  style={{ borderLeft: `4px solid ${accentColor}` }}
-                >
-                  <ChevronDown
-                    size={14}
-                    className={cn(
-                      'text-[#5E6C84] dark:text-gray-400 flex-shrink-0 transition-transform',
-                      isCollapsed && '-rotate-90',
+              <div key={lane.key} className="flex-shrink-0 mb-6">
+                {/* Card wrapper (team dashboard style) */}
+                <div className="border border-[#DFE1E6] dark:border-gray-700 rounded-sm bg-white dark:bg-gray-900 overflow-hidden">
+                  {/* Row 1: Header — avatar/icon + name + collapse + count */}
+                  <button
+                    onClick={toggleCollapse}
+                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 transition-colors text-left"
+                    style={{ borderLeft: `4px solid ${accentColor}` }}
+                  >
+                    <ChevronDown
+                      size={14}
+                      className={cn(
+                        'text-[#5E6C84] dark:text-gray-400 flex-shrink-0 transition-transform',
+                        isCollapsed && '-rotate-90',
+                      )}
+                    />
+
+                    {/* Icon / avatar based on groupBy */}
+                    {firstIssue && groupBy === 'priority' && (
+                      <PriorityIcon priority={firstIssue.fields.priority} />
                     )}
-                  />
+                    {firstIssue && groupBy === 'issuetype' && (
+                      firstIssue.fields.issuetype.iconUrl
+                        ? <Image src={firstIssue.fields.issuetype.iconUrl} alt={firstIssue.fields.issuetype.name} width={16} height={16} className="flex-shrink-0" unoptimized />
+                        : <span className="text-xs font-bold text-[#5E6C84] w-4 h-4 flex items-center justify-center">{firstIssue.fields.issuetype.name.charAt(0)}</span>
+                    )}
+                    {firstIssue && groupBy === 'assignee' && (
+                      firstIssue.fields.assignee?.avatarUrls?.['24x24']
+                        ? <Image src={firstIssue.fields.assignee.avatarUrls['24x24']} alt={firstIssue.fields.assignee.displayName} width={28} height={28} className="rounded-full flex-shrink-0" unoptimized />
+                        : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#0052CC] text-white text-[10px] font-bold flex-shrink-0">
+                            {firstIssue.fields.assignee?.displayName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) ?? <User size={10} />}
+                          </span>
+                    )}
+                    {firstIssue && groupBy === 'project' && (
+                      <span
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-[8px] font-bold text-white flex-shrink-0"
+                        style={{ backgroundColor: accentColor }}
+                      >
+                        {firstIssue.fields.project.key.charAt(0)}
+                      </span>
+                    )}
 
-                  {/* Icon / avatar based on groupBy */}
-                  {firstIssue && groupBy === 'priority' && (
-                    <PriorityIcon priority={firstIssue.fields.priority} />
-                  )}
-                  {firstIssue && groupBy === 'issuetype' && (
-                    firstIssue.fields.issuetype.iconUrl
-                      ? <Image src={firstIssue.fields.issuetype.iconUrl} alt={firstIssue.fields.issuetype.name} width={16} height={16} className="flex-shrink-0" unoptimized />
-                      : <span className="text-xs font-bold text-[#5E6C84] w-4 h-4 flex items-center justify-center">{firstIssue.fields.issuetype.name.charAt(0)}</span>
-                  )}
-                  {firstIssue && groupBy === 'assignee' && (
-                    firstIssue.fields.assignee?.avatarUrls?.['24x24']
-                      ? <Image src={firstIssue.fields.assignee.avatarUrls['24x24']} alt={firstIssue.fields.assignee.displayName} width={18} height={18} className="rounded-full flex-shrink-0" unoptimized />
-                      : <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0">
-                          {firstIssue.fields.assignee?.displayName?.charAt(0) ?? <User size={9} />}
-                        </span>
-                  )}
-                  {firstIssue && groupBy === 'project' && (
-                    <span
-                      className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-[8px] font-bold text-white flex-shrink-0"
-                      style={{ backgroundColor: accentColor }}
-                    >
-                      {firstIssue.fields.project.key.charAt(0)}
+                    <h4 className="text-sm font-semibold text-[#172B4D] dark:text-gray-200 flex-1">
+                      {lane.key}
+                    </h4>
+                    <span className="text-xs font-medium text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-2.5 py-0.5 rounded-full">
+                      {totalIssues}
                     </span>
-                  )}
+                  </button>
 
-                  <h4 className="text-sm font-semibold text-[#172B4D] dark:text-gray-200 flex-1">
-                    {lane.key}
-                  </h4>
-                  <span className="text-xs font-medium text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-2.5 py-0.5 rounded-full">
-                    {totalIssues}
-                  </span>
-                </button>
+                  {/* Row 2: Stats grid (assignee only, team dashboard style) */}
+                  {groupBy === 'assignee' && lane.stats && (
+                    <div className="flex items-stretch border-t border-[#DFE1E6] dark:border-gray-700">
+                      {([
+                        { key: 'taskCount', label: 'Tasks', value: lane.stats.taskCount, color: '#5E6C84' },
+                        { key: 'totalEst', label: 'Est', value: formatHours(lane.stats.totalEstSeconds), color: '#172B4D' },
+                        { key: 'totalLogged', label: 'Logged', value: formatHours(lane.stats.totalLoggedSeconds), color: '#36B37E' },
+                        { key: 'todo', label: 'Todo', value: lane.stats.todoCount, color: '#5E6C84' },
+                        { key: 'inProgress', label: 'WIP', value: lane.stats.inProgressCount, color: '#0052CC' },
+                        { key: 'done', label: 'Done', value: lane.stats.doneCount, color: '#36B37E' },
+                      ] as const).map((col, i, arr) => (
+                        <div
+                          key={col.key}
+                          className={cn(
+                            'flex-1 flex flex-col items-center justify-center py-1.5 px-1',
+                            i < arr.length - 1 && 'border-r border-[#DFE1E6] dark:border-gray-700',
+                          )}
+                        >
+                          <span className="text-[9px] text-[#5E6C84] dark:text-gray-500 uppercase tracking-wider leading-none mb-0.5">
+                            {col.label}
+                          </span>
+                          <span
+                            className="text-xs font-semibold leading-none"
+                            style={{ color: col.color }}
+                          >
+                            {col.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Column grid (collapsed when toggled) */}
                 {!isCollapsed && (
                   <div
-                    className="grid gap-4"
+                    className="grid gap-4 mt-3"
                     style={{
                       gridTemplateColumns: `repeat(${columnDefs?.length ?? 3}, minmax(0, 1fr))`,
                     }}

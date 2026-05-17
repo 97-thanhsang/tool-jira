@@ -5,7 +5,7 @@ import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear,
 import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
-import { KanbanBoard, type BoardColumn, type BoardColumnDef } from '@/components/board/kanban-board';
+import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardFilterBar } from '@/components/board/board-filter-bar';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
@@ -29,6 +29,22 @@ const defaultGroups: TeamGroup[] = [
   { id: 'backend', name: 'Team Backend', members: ['DucLM', 'AnhNT', 'TuanNA'] },
 ];
 
+/** Display name mapping — used for member chips and swimlane headers. */
+const MEMBER_DISPLAY_NAMES: Record<string, string> = {
+  SangNT: 'Sang Nguyen Thanh',
+  TriHD: 'Tri Hoang Duc',
+  NghiaDT: 'Nghia Dinh Trong',
+  ThinhTPQ: 'Thinh Tran Phu Quoc',
+  HieuDT: 'Hieu Dinh Trong',
+  PhatNH: 'Phat Nguyen Huu',
+  HuyNQ: 'Huy Nguyen Quoc',
+  LinhPT: 'Linh Pham Thi',
+  MinhNV: 'Minh Nguyen Van',
+  DucLM: 'Duc Le Minh',
+  AnhNT: 'Anh Nguyen Tuan',
+  TuanNA: 'Tuan Nguyen Anh',
+};
+
 // ─── Page component ──────────────────────────────────────────────────────────
 
 export default function BoardPage() {
@@ -50,7 +66,9 @@ export default function BoardPage() {
   const [memberDisplayNames, setMemberDisplayNames] = useState<Record<string, string>>(
     () => {
       const names: Record<string, string> = {};
-      for (const m of defaultGroups[0]?.members ?? []) names[m] = m;
+      for (const m of defaultGroups[0]?.members ?? []) {
+        names[m] = MEMBER_DISPLAY_NAMES[m] || m;
+      }
       return names;
     },
   );
@@ -127,7 +145,7 @@ export default function BoardPage() {
 
   function selectGroup(group: TeamGroup) {
     const names: Record<string, string> = {};
-    for (const m of group.members) names[m] = m;
+    for (const m of group.members) names[m] = MEMBER_DISPLAY_NAMES[m] || m;
     setSelectedMembers(group.members);
     setMemberDisplayNames(prev => ({ ...prev, ...names }));
     setShowGroupDropdown(false);
@@ -211,8 +229,11 @@ export default function BoardPage() {
     switch (field) {
       case 'project':
         return { key: issue.fields.project.key, label: `${issue.fields.project.name} (${issue.fields.project.key})` };
-      case 'assignee':
-        return { key: issue.fields.assignee?.name ?? '__unassigned', label: issue.fields.assignee?.displayName ?? 'Unassigned' };
+      case 'assignee': {
+        const name = issue.fields.assignee?.name ?? '__unassigned';
+        const label = MEMBER_DISPLAY_NAMES[name] ?? issue.fields.assignee?.displayName ?? 'Unassigned';
+        return { key: name, label };
+      }
       case 'priority':
         return { key: issue.fields.priority?.name ?? 'None', label: issue.fields.priority?.name ?? 'None' };
       case 'type':
@@ -260,7 +281,7 @@ export default function BoardPage() {
     }
 
     // Flatten into swimlanes with composite labels
-    const result: { key: string; columns: Record<string, JiraIssue[]> }[] = [];
+    const result: { key: string; columns: Record<string, JiraIssue[]>; stats?: SwimlaneStats }[] = [];
 
     const sortedG1 = Array.from(tree.entries()).sort(([a], [b]) => {
       if (a === '__unassigned' || a === 'None') return 1;
@@ -300,6 +321,36 @@ export default function BoardPage() {
 
           result.push({ key: label, columns });
         }
+      }
+    }
+
+    // Add stats for assignee grouping
+    if (groupBy === 'assignee') {
+      for (const lane of result) {
+        const allIssues = Object.values(lane.columns).flat();
+        let totalEstSeconds = 0;
+        let totalLoggedSeconds = 0;
+        let todoCount = 0;
+        let inProgressCount = 0;
+        let doneCount = 0;
+
+        for (const issue of allIssues) {
+          totalEstSeconds += issue.fields.timetracking?.originalEstimateSeconds ?? 0;
+          totalLoggedSeconds += issue.fields.timetracking?.timeSpentSeconds ?? 0;
+          const cat = issue.fields.status.statusCategory.key;
+          if (cat === 'new') todoCount++;
+          else if (cat === 'indeterminate') inProgressCount++;
+          else if (cat === 'done') doneCount++;
+        }
+
+        lane.stats = {
+          taskCount: allIssues.length,
+          totalEstSeconds,
+          totalLoggedSeconds,
+          todoCount,
+          inProgressCount,
+          doneCount,
+        };
       }
     }
 
@@ -353,189 +404,198 @@ export default function BoardPage() {
         </Button>
       </div>
 
-      {/* ── Team / Member section ── */}
+      {/* ── Team + Stats + Group-by (unified card) ── */}
       <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60">
-        {/* Header bar with collapse toggle */}
+        {/* Header */}
         <button
           onClick={() => setShowGroupSection(!showGroupSection)}
-          className="w-full flex items-center justify-between px-4 py-2 hover:bg-[#EBECF0] dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#EBECF0] dark:hover:bg-gray-800 transition-colors"
         >
           <div className="flex items-center gap-2">
-            <Users size={15} className="text-[#0052CC]" />
+            <Users size={16} className="text-[#0052CC]" />
             <span className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">
-              Team
+              {!isAllMembers
+                ? groups.find(g => g.members.every(m => selectedMembers.includes(m)) && g.members.length === selectedMembers.length)?.name ?? `${selectedMembers.length} members`
+                : 'All Members'}
             </span>
-            {!isAllMembers ? (
+            {!isAllMembers && (
               <span className="text-xs bg-[#0052CC] text-white px-2 py-0.5 rounded-full font-medium">
                 {selectedMembers.length}
               </span>
-            ) : (
-              <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
             )}
           </div>
           {showGroupSection ? <ChevronUp size={14} className="text-[#5E6C84]" /> : <ChevronDown size={14} className="text-[#5E6C84]" />}
         </button>
 
-        {/* Expanded content */}
         {showGroupSection && (
-          <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
-            {/* Member multi-select */}
-            <div className="relative" ref={memberRef}>
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="flex items-center flex-wrap gap-1 border border-[#DFE1E6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 min-w-[200px] px-2 py-1 min-h-[30px] cursor-text"
-                  onClick={() => setShowMemberDropdown(true)}
-                >
-                  {isAllMembers ? (
-                    <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
-                  ) : (
-                    <>
-                      {selectedMembers.slice(0, 5).map(m => (
-                        <span key={m} className="inline-flex items-center gap-0.5 text-[10px] bg-[#E6F0FF] dark:bg-blue-900/40 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 rounded px-1.5 py-0.5">
-                          {memberDisplayNames[m] || m}
-                          <button onClick={e => { e.stopPropagation(); removeMember(m); }} className="hover:text-red-500">
-                            <X size={9} />
-                          </button>
-                        </span>
-                      ))}
-                      {selectedMembers.length > 5 && (
-                        <span className="text-[10px] text-[#5E6C84]">+{selectedMembers.length - 5} more</span>
-                      )}
-                      <button onClick={e => { e.stopPropagation(); setSelectedMembers([]); }} className="text-[10px] text-[#5E6C84] hover:text-red-500 ml-auto">
-                        clear
-                      </button>
-                    </>
-                  )}
+          <>
+            {/* Stats row */}
+            <div className="flex items-center gap-3 px-4 pb-2 text-xs text-[#5E6C84] dark:text-gray-400">
+              <span className="font-medium text-[#172B4D] dark:text-gray-100">
+                {Object.values(filteredGrouped).reduce((s, arr) => s + arr.length, 0)} issues
+              </span>
+              {(filters.searchText || (filters.projectIn?.length ?? 0) > 0 || (filters.issuetypeIn?.length ?? 0) > 0 || (filters.statusIn?.length ?? 0) > 0 || (filters.priorityIn?.length ?? 0) > 0 || (filters.assigneeIn?.length ?? 0) > 0 || (filters.sprintIn?.length ?? 0) > 0 || (filters.reporterIn?.length ?? 0) > 0 || !!filters.period) && (
+                <>
+                  <span>·</span>
+                  <span>Filtered</span>
+                </>
+              )}
+              <span>·</span>
+              <span>{dynamicColumns.length > 0 ? dynamicColumns.length : 3} columns</span>
+              {filters.period && (
+                <>
+                  <span>·</span>
+                  <span>Due: {filters.period === 'today' ? 'Today' : filters.period === 'week' ? 'This Week' : filters.period === 'month' ? 'This Month' : 'This Year'}</span>
+                </>
+              )}
+            </div>
+
+            {/* Member chips */}
+            <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
+              <div className="relative" ref={memberRef}>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className="flex items-center flex-wrap gap-1 border border-[#DFE1E6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 min-w-[200px] px-2 py-1 min-h-[30px] cursor-text"
+                    onClick={() => setShowMemberDropdown(true)}
+                  >
+                    {isAllMembers ? (
+                      <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
+                    ) : (
+                      <>
+                        {selectedMembers.slice(0, 5).map(m => (
+                          <span key={m} className="inline-flex items-center gap-0.5 text-[10px] bg-[#E6F0FF] dark:bg-blue-900/40 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 rounded px-1.5 py-0.5">
+                            {memberDisplayNames[m] || m}
+                            <button onClick={e => { e.stopPropagation(); removeMember(m); }} className="hover:text-red-500">
+                              <X size={9} />
+                            </button>
+                          </span>
+                        ))}
+                        {selectedMembers.length > 5 && (
+                          <span className="text-[10px] text-[#5E6C84]">+{selectedMembers.length - 5} more</span>
+                        )}
+                        <button onClick={e => { e.stopPropagation(); setSelectedMembers([]); }} className="text-[10px] text-[#5E6C84] hover:text-red-500 ml-auto">
+                          clear
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {showMemberDropdown && (
+                  <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 max-h-64 overflow-y-auto">
+                    <div className="p-1.5 border-b border-[#DFE1E6] dark:border-gray-700">
+                      <input type="text" autoFocus value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                        placeholder="Search member..."
+                        className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]" />
+                    </div>
+                    {memberSearch.length > 0 ? (
+                      memberResults.map(u => (
+                        <button key={u.name} type="button"
+                          onClick={() => addMember(u.name, u.displayName)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between">
+                          <span>{u.displayName}</span>
+                          {selectedMembers.includes(u.name) && <span className="text-[#0052CC]">✓</span>}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-xs text-[#5E6C84] px-3 py-4 text-center">Type to search members</p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {showMemberDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 max-h-64 overflow-y-auto">
-                  <div className="p-1.5 border-b border-[#DFE1E6] dark:border-gray-700">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={memberSearch}
-                      onChange={e => setMemberSearch(e.target.value)}
-                      placeholder="Search member..."
-                      className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
-                    />
-                  </div>
-                  {memberSearch.length > 0 ? (
-                    memberResults.map(u => (
-                      <button
-                        key={u.name}
-                        type="button"
-                        onClick={() => addMember(u.name, u.displayName)}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between"
-                      >
-                        <span>{u.displayName}</span>
-                        {selectedMembers.includes(u.name) && <span className="text-[#0052CC]">✓</span>}
-                      </button>
-                    ))
-                  ) : (
-                    <p className="text-xs text-[#5E6C84] px-3 py-4 text-center">Type to search members</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Group shortcut */}
-            <div className="relative" ref={groupRef}>
-              <button
-                onClick={() => setShowGroupDropdown(!showGroupDropdown)}
-                className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 flex items-center gap-1"
-              >
-                <Users size={11} />
-                Groups
-                <ChevronDown size={10} />
-              </button>
-              {showGroupDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40">
-                  <button onClick={selectAllMembers} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 border-b border-[#DFE1E6] dark:border-gray-700">
-                    🌐 All Members
-                  </button>
-                  {groups.map(g => (
-                    <button key={g.id} onClick={() => selectGroup(g)} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between">
-                      <span>{g.name}</span>
-                      <span className="text-[10px] text-[#5E6C84]">{g.members.length}</span>
+              {/* Group shortcut */}
+              <div className="relative" ref={groupRef}>
+                <button
+                  onClick={() => setShowGroupDropdown(!showGroupDropdown)}
+                  className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 flex items-center gap-1"
+                >
+                  <Users size={11} />
+                  Groups
+                  <ChevronDown size={10} />
+                </button>
+                {showGroupDropdown && (
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40">
+                    <button onClick={selectAllMembers} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 border-b border-[#DFE1E6] dark:border-gray-700">
+                      🌐 All Members
                     </button>
-                  ))}
+                    {groups.map(g => (
+                      <button key={g.id} onClick={() => selectGroup(g)} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between">
+                        <span>{g.name}</span>
+                        <span className="text-[10px] text-[#5E6C84]">{g.members.length}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Group-by rows */}
+            <div className="px-4 pb-3 border-t border-[#DFE1E6] dark:border-gray-600 pt-2">
+              {/* Group by */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
+                {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
+                  <button key={g}
+                    onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
+                    className={cn(
+                      'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                      groupBy === g
+                        ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                        : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                    )}
+                  >
+                    {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sub group */}
+              {groupBy !== 'none' && (
+                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+                  <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub</span>
+                  {(['none', 'assignee', 'priority', 'type'] as const)
+                    .filter(g => g !== groupBy)
+                    .map((g) => (
+                      <button key={g}
+                        onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                          subGroupBy === g
+                            ? 'bg-[#6554C0] text-white border-[#6554C0]'
+                            : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                        )}
+                      >
+                        {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                      </button>
+                    ))}
+                </div>
+              )}
+
+              {/* Sub sub */}
+              {subGroupBy !== 'none' && (
+                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+                  <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
+                  {(['none', 'priority', 'type'] as const)
+                    .filter(g => g !== groupBy && g !== subGroupBy)
+                    .map((g) => (
+                      <button key={g}
+                        onClick={() => setSubSubGroupBy(g)}
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                          subSubGroupBy === g
+                            ? 'bg-[#998DD9] text-white border-[#998DD9]'
+                            : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                        )}
+                      >
+                        {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Filter bar ── */}
-      <BoardFilterBar filters={filters} onChange={setFilters} />
-
-      {/* ── Group-by ── */}
-      <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 p-2">
-        {/* Group by */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
-          {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
-            <button
-              key={g}
-              onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
-              className={cn(
-                'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                groupBy === g
-                  ? 'bg-[#0052CC] text-white border-[#0052CC]'
-                  : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-              )}
-            >
-              {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-            </button>
-          ))}
-        </div>
-
-        {/* Sub group */}
-        {groupBy !== 'none' && (
-          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
-            <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub</span>
-            {(['none', 'assignee', 'priority', 'type'] as const)
-              .filter(g => g !== groupBy)
-              .map((g) => (
-                <button
-                  key={g}
-                  onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
-                  className={cn(
-                    'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                    subGroupBy === g
-                      ? 'bg-[#6554C0] text-white border-[#6554C0]'
-                      : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                  )}
-                >
-                  {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-                </button>
-              ))}
-          </div>
-        )}
-
-        {/* Sub sub */}
-        {subGroupBy !== 'none' && (
-          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
-            <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
-            {(['none', 'priority', 'type'] as const)
-              .filter(g => g !== groupBy && g !== subGroupBy)
-              .map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setSubSubGroupBy(g)}
-                  className={cn(
-                    'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                    subSubGroupBy === g
-                      ? 'bg-[#998DD9] text-white border-[#998DD9]'
-                      : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                  )}
-                >
-                  {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-                </button>
-              ))}
-          </div>
+          </>
         )}
       </div>
 
