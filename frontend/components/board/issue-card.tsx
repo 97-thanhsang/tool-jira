@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Link from 'next/link';
 import { ExternalLink, X, Search, Loader2 } from 'lucide-react';
 import type { JiraIssue, JiraUser, JiraPriority } from '@/types/jira';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { cn } from '@/lib/utils';
+import { useDndContext } from '@dnd-kit/core';
 
 export interface IssueCardProps {
   issue: JiraIssue;
@@ -151,6 +151,9 @@ const POPOVER_ITEM = 'w-full flex items-center gap-2 text-left px-3 py-1.5 text-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps) {
+  const { active: dndActive } = useDndContext();
+  const isDraggingActive = !!dndActive;
+
   const typeColor = issueTypeColors[issue.fields.issuetype?.name ?? ''] ?? 'bg-gray-400 text-white';
   const statusCat = issue.fields.status.statusCategory.key;
   const dueDateStatus = statusCat === 'done' ? null : getDueDateStatus(issue.fields.duedate);
@@ -247,7 +250,8 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
   return (
     <div
       className={cn(
-        'group relative p-3 rounded-sm hover:shadow-md transition-all border border-[#DFE1E6] dark:border-gray-700',
+        'group relative p-3 rounded-sm transition-all border border-[#DFE1E6] dark:border-gray-700',
+        isDraggingActive && 'hover:shadow-md',
         (dueDateStatus === 'overdue' || (statusCat !== 'done' && !estimated))
           ? 'bg-red-50 dark:bg-red-950/20 border-l-2 border-l-red-500'
           : dueDateStatus === 'due-soon'
@@ -261,9 +265,9 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate }: IssueCardProps)
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${typeColor}`}>
           {issueTypeLabel(issue.fields.issuetype?.name ?? '')}
         </span>
-        <Link href={`/issues/${issue.key}`} className="text-xs text-[#0052CC] dark:text-blue-400 font-medium hover:underline" onClick={e => e.stopPropagation()}>
+        <button type="button" onClick={() => onCardClick?.(issue.key)} className="text-xs text-[#0052CC] dark:text-blue-400 font-medium hover:underline">
           {issue.key}
-        </Link>
+        </button>
         <a href={`https://task.ascvn.com.vn/browse/${issue.key}`} target="_blank" rel="noopener noreferrer"
           className="ml-auto opacity-0 group-hover:opacity-100 text-[#5E6C84] hover:text-[#0052CC] transition-opacity" title="Open in Jira" onClick={e => e.stopPropagation()}>
           <ExternalLink size={12} />
