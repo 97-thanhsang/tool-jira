@@ -132,7 +132,7 @@ interface KanbanBoardProps {
   /** Swimlane data: each lane has a key, columns map, and optional stats. */
   swimlanes?: {
     key: string;
-    columns: Record<string, JiraIssue[]>;
+    columns: Record<string, ColumnData>;
     stats?: SwimlaneStats;
   }[];
   /** Column definitions (metadata only) — required when swimlanes are used. */
@@ -140,6 +140,15 @@ interface KanbanBoardProps {
   /** Group-by field (for styled swimlane headers: icons, colors, avatars). */
   groupBy?: string;
 }
+
+/** Sub-group data within a column. */
+export interface SubGroup {
+  label: string;
+  issues: JiraIssue[];
+}
+
+/** Column data — flat issues or sub-grouped. */
+export type ColumnData = JiraIssue[] | { subGroups: SubGroup[] };
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
 
@@ -200,6 +209,7 @@ interface DroppableColumnProps {
   isLoading: boolean;
   onCardClick?: (key: string) => void;
   onIssueUpdate?: () => void;
+  subGroups?: SubGroup[];
 }
 
 function DroppableColumn({
@@ -212,6 +222,7 @@ function DroppableColumn({
   isLoading,
   onCardClick,
   onIssueUpdate,
+  subGroups,
 }: DroppableColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: colId });
   const issueIds = issues.map((i) => i.id);
@@ -259,6 +270,36 @@ function DroppableColumn({
       >
         {isLoading ? (
           <ColumnSkeleton />
+        ) : subGroups ? (
+          // Sub-grouped: render each sub-group with a header
+          subGroups.length === 0 ? (
+            <div className="text-center py-8 text-xs text-[#5E6C84] dark:text-gray-500">
+              No issues
+            </div>
+          ) : (
+            subGroups.map((sg) => (
+              <div key={sg.label}>
+                <div className="flex items-center gap-1.5 py-1 px-0.5">
+                  <span className="text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wider">
+                    {sg.label}
+                  </span>
+                  <span className="text-[9px] text-[#8993A4] bg-[#F4F5F7] dark:bg-gray-700 px-1.5 py-0.5 rounded-full">
+                    {sg.issues.length}
+                  </span>
+                </div>
+                <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                  {sg.issues.map((issue) => (
+                    <SortableCard
+                      key={issue.id}
+                      issue={issue}
+                      onCardClick={onCardClick}
+                      onIssueUpdate={onIssueUpdate}
+                    />
+                  ))}
+                </SortableContext>
+              </div>
+            ))
+          )
         ) : issues.length === 0 ? (
           <div className="text-center py-8 text-xs text-[#5E6C84] dark:text-gray-500">
             No issues
@@ -308,15 +349,17 @@ function findIssueInSwimlanes(
   colDef: BoardColumnDef;
 } | null {
   for (const lane of swimlanes) {
-    for (const [colLabel, issues] of Object.entries(lane.columns)) {
-      const issue = issues.find((i) => i.id === issueId);
+    for (const [colLabel, colData] of Object.entries(lane.columns)) {
+      const flatIssues = colData && 'subGroups' in colData
+        ? colData.subGroups.flatMap(sg => sg.issues)
+        : (colData as JiraIssue[]) || [];
+      const issue = flatIssues.find((i) => i.id === issueId);
       if (issue) {
-        // We don't have colDef reference here — caller must look it up
         return {
           issue,
           colLabel,
           colId: makeSwimlaneColId(lane.key, colLabel.toLowerCase().replace(/\s+/g, '-')),
-          colDef: null as unknown as BoardColumnDef, // placeholder, caller must fill
+          colDef: null as unknown as BoardColumnDef,
         };
       }
     }
@@ -345,8 +388,11 @@ export function KanbanBoard({
 
     if (hasSwimlanes) {
       for (const lane of swimlanes!) {
-        for (const issues of Object.values(lane.columns)) {
-          const found = issues.find((i) => i.id === id);
+        for (const colData of Object.values(lane.columns)) {
+          const flatIssues: JiraIssue[] = colData && 'subGroups' in colData
+            ? colData.subGroups.flatMap(sg => sg.issues)
+            : (colData as JiraIssue[]) || [];
+          const found = flatIssues.find((i) => i.id === id);
           if (found) {
             setActiveIssue(found);
             return;
@@ -384,8 +430,11 @@ export function KanbanBoard({
       let sourceIssue: JiraIssue | undefined;
       let sourceColLabel: string | undefined;
       for (const lane of swimlanes!) {
-        for (const [colLabel, issues] of Object.entries(lane.columns)) {
-          const issue = issues.find((i) => i.id === activeId);
+        for (const [colLabel, colData] of Object.entries(lane.columns)) {
+          const flatIssues: JiraIssue[] = colData && 'subGroups' in colData
+            ? colData.subGroups.flatMap(sg => sg.issues)
+            : (colData as JiraIssue[]) || [];
+          const issue = flatIssues.find((i) => i.id === activeId);
           if (issue) {
             sourceIssue = issue;
             sourceColLabel = colLabel;
@@ -464,12 +513,14 @@ export function KanbanBoard({
       >
         <div className="flex flex-col gap-6 overflow-y-auto h-full pr-2">
           {swimlanes!.map((lane) => {
-            const totalIssues = Object.values(lane.columns).reduce((sum, issues) => sum + issues.length, 0);
+            const flatFrom = (cd: ColumnData): JiraIssue[] =>
+              cd && 'subGroups' in cd ? cd.subGroups.flatMap(sg => sg.issues) : (cd as JiraIssue[]) || [];
+            const totalIssues = Object.values(lane.columns).reduce((sum, col) => sum + flatFrom(col).length, 0);
             const isCollapsed = collapsedLanes.has(lane.key);
-            // Get first issue for icon/color extraction
             const firstIssue = (() => {
               for (const col of Object.values(lane.columns)) {
-                if (col.length > 0) return col[0];
+                const arr = flatFrom(col);
+                if (arr.length > 0) return arr[0];
               }
               return null;
             })();
@@ -605,7 +656,33 @@ export function KanbanBoard({
                     }}
                   >
                     {(columnDefs ?? []).map((colDef) => {
-                      const issues = lane.columns[colDef.label] || [];
+                      const colData = lane.columns[colDef.label];
+                      const flatIssues = colData && 'subGroups' in colData
+                        ? colData.subGroups.flatMap(sg => sg.issues)
+                        : (colData as JiraIssue[]) || [];
+
+                      // Check for sub-groups
+                      const subGroups = colData && 'subGroups' in colData ? colData.subGroups : null;
+
+                      if (subGroups) {
+                        return (
+                          <div key={`${lane.key}-${colDef.id}`} className="flex flex-col gap-3">
+                            <DroppableColumn
+                              colId={makeSwimlaneColId(lane.key, colDef.id)}
+                              label={colDef.label}
+                              color={colDef.color}
+                              wipMin={colDef.wipMin}
+                              wipMax={colDef.wipMax}
+                              issues={flatIssues}
+                              isLoading={isLoading}
+                              onCardClick={onCardClick}
+                              onIssueUpdate={onIssueUpdate}
+                              subGroups={subGroups}
+                            />
+                          </div>
+                        );
+                      }
+
                       return (
                         <DroppableColumn
                           key={`${lane.key}-${colDef.id}`}
@@ -614,7 +691,7 @@ export function KanbanBoard({
                           color={colDef.color}
                           wipMin={colDef.wipMin}
                           wipMax={colDef.wipMax}
-                          issues={issues}
+                          issues={flatIssues}
                           isLoading={isLoading}
                           onCardClick={onCardClick}
                           onIssueUpdate={onIssueUpdate}

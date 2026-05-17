@@ -5,7 +5,7 @@ import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear,
 import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
-import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats } from '@/components/board/kanban-board';
+import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardFilterBar } from '@/components/board/board-filter-bar';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
@@ -216,15 +216,13 @@ export default function BoardPage() {
 
   // ── 3-level grouping for swimlanes ──────────────────────────────────────
   type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type';
-  type SubGroupBy   = 'none' | 'assignee' | 'priority' | 'type';
-  type SubSubGroupBy = 'none' | 'priority' | 'type';
+  type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type';
 
-  const [groupBy, setGroupBy]             = useState<GroupBy>('none');
-  const [subGroupBy, setSubGroupBy]       = useState<SubGroupBy>('none');
-  const [subSubGroupBy, setSubSubGroupBy] = useState<SubSubGroupBy>('none');
+  const [groupBy, setGroupBy]       = useState<GroupBy>('none');
+  const [subGroupBy, setSubGroupBy] = useState<SubGroupBy>('none');
 
   // Get a field value from an issue for grouping
-  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy | SubSubGroupBy): { key: string; label: string } | null {
+  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy): { key: string; label: string } | null {
     if (field === 'none') return null;
     switch (field) {
       case 'project':
@@ -243,7 +241,7 @@ export default function BoardPage() {
     }
   }
 
-  // Composite swimlane computation (3-level nesting)
+  // Swimlane computation: groupBy → swimlanes, subGroupBy → sub-groups within columns
   const swimlanes = useMemo(() => {
     if (groupBy === 'none') return undefined;
 
@@ -251,89 +249,67 @@ export default function BoardPage() {
       ? dynamicColumns.map(c => c.name)
       : ['To Do', 'In Progress', 'Done'];
 
-    // Collect all issues
+    // Collect all issues with their column assignment
     const allIssues: { issue: JiraIssue; colName: string }[] = [];
     for (const [colName, issues] of Object.entries(filteredGrouped)) {
       for (const issue of issues) allIssues.push({ issue, colName });
     }
 
-    // Group → SubGroup → SubSubGroup → columns
-    const tree = new Map<string, Map<string, Map<string, Record<string, JiraIssue[]>>>>();
+    // Group by primary field → swimlanes
+    const groupMap = new Map<string, { label: string; issues: { issue: JiraIssue; colName: string }[] }>();
 
-    for (const { issue, colName } of allIssues) {
-      const g1 = getFieldValue(issue, groupBy);
-      const g2 = subGroupBy !== 'none' ? getFieldValue(issue, subGroupBy) : null;
-      const g3 = subSubGroupBy !== 'none' ? getFieldValue(issue, subSubGroupBy) : null;
+    for (const item of allIssues) {
+      const g1 = getFieldValue(item.issue, groupBy);
       if (!g1) continue;
-
-      const g1Key = g1.key;
-      const g2Key = g2?.key ?? '__none';
-      const g3Key = g3?.key ?? '__none';
-
-      if (!tree.has(g1Key)) tree.set(g1Key, new Map());
-      if (!tree.get(g1Key)!.has(g2Key)) tree.get(g1Key)!.set(g2Key, new Map());
-      if (!tree.get(g1Key)!.get(g2Key)!.has(g3Key)) {
-        const emptyCols: Record<string, JiraIssue[]> = {};
-        for (const cn of colNames) emptyCols[cn] = [];
-        tree.get(g1Key)!.get(g2Key)!.set(g3Key, emptyCols);
+      if (!groupMap.has(g1.key)) {
+        groupMap.set(g1.key, { label: g1.label, issues: [] });
       }
-      tree.get(g1Key)!.get(g2Key)!.get(g3Key)![colName]?.push(issue);
+      groupMap.get(g1.key)!.issues.push(item);
     }
 
-    // Flatten into swimlanes with composite labels
-    const result: { key: string; columns: Record<string, JiraIssue[]>; stats?: SwimlaneStats }[] = [];
-
-    const sortedG1 = Array.from(tree.entries()).sort(([a], [b]) => {
+    const sortedGroups = Array.from(groupMap.entries()).sort(([a], [b]) => {
       if (a === '__unassigned' || a === 'None') return 1;
       if (b === '__unassigned' || b === 'None') return -1;
       return a.localeCompare(b);
     });
 
-    for (const [g1Key, subMap] of sortedG1) {
-      const g1Label = getFieldValue({ fields: { project: { key: g1Key, name: g1Key }, assignee: { name: g1Key, displayName: g1Key }, priority: { name: g1Key }, issuetype: { name: g1Key } } } as unknown as JiraIssue, groupBy)?.label ?? g1Key;
+    const result: { key: string; columns: Record<string, ColumnData>; stats?: SwimlaneStats }[] = [];
 
-      const sortedG2 = Array.from(subMap.entries()).sort(([a], [b]) => {
-        if (a === '__unassigned' || a === 'None') return 1;
-        if (b === '__unassigned' || b === 'None') return -1;
-        return a.localeCompare(b);
-      });
+    for (const [, group] of sortedGroups) {
+      // Build columns: group issues by column name
+      const colMap = new Map<string, JiraIssue[]>();
+      for (const cn of colNames) colMap.set(cn, []);
+      for (const item of group.issues) {
+        colMap.get(item.colName)?.push(item.issue);
+      }
 
-      for (const [g2Key, subSubMap] of sortedG2) {
-        const g2Label = subGroupBy !== 'none' && g2Key !== '__none'
-          ? getFieldValue({ fields: { assignee: { name: g2Key, displayName: g2Key }, priority: { name: g2Key }, issuetype: { name: g2Key } } } as unknown as JiraIssue, subGroupBy)?.label ?? g2Key
-          : '';
-
-        const sortedG3 = Array.from(subSubMap.entries()).sort(([a], [b]) => {
-          if (a === 'None') return 1;
-          if (b === 'None') return -1;
-          return a.localeCompare(b);
-        });
-
-        for (const [g3Key, columns] of sortedG3) {
-          const g3Label = subSubGroupBy !== 'none' && g3Key !== '__none'
-            ? getFieldValue({ fields: { priority: { name: g3Key }, issuetype: { name: g3Key } } } as unknown as JiraIssue, subSubGroupBy)?.label ?? g3Key
-            : '';
-
-          const parts = [g1Label];
-          if (g2Label) parts.push(g2Label);
-          if (g3Label) parts.push(g3Label);
-          const label = parts.join(' → ');
-
-          result.push({ key: label, columns });
+      // If sub-group is active, nest sub-groups within each column
+      const columns: Record<string, ColumnData> = {};
+      if (subGroupBy !== 'none') {
+        for (const [colName, issues] of colMap) {
+          // Group by sub-field within this column
+          const subMap = new Map<string, JiraIssue[]>();
+          for (const issue of issues) {
+            const sg = getFieldValue(issue, subGroupBy);
+            const sk = sg?.label ?? 'Other';
+            if (!subMap.has(sk)) subMap.set(sk, []);
+            subMap.get(sk)!.push(issue);
+          }
+          const subGroups: SubGroup[] = Array.from(subMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([label, issues]) => ({ label, issues }));
+          columns[colName] = { subGroups };
+        }
+      } else {
+        for (const [colName, issues] of colMap) {
+          columns[colName] = issues;
         }
       }
-    }
 
-    // Add stats for all group-by types
-    for (const lane of result) {
-      const allIssues = Object.values(lane.columns).flat();
-      let totalEstSeconds = 0;
-      let totalLoggedSeconds = 0;
-      let todoCount = 0;
-      let inProgressCount = 0;
-      let doneCount = 0;
-
-      for (const issue of allIssues) {
+      // Compute stats
+      const allLaneIssues = Object.values(colMap).flat();
+      let totalEstSeconds = 0, totalLoggedSeconds = 0, todoCount = 0, inProgressCount = 0, doneCount = 0;
+      for (const issue of allLaneIssues) {
         totalEstSeconds += issue.fields.timetracking?.originalEstimateSeconds ?? 0;
         totalLoggedSeconds += issue.fields.timetracking?.timeSpentSeconds ?? 0;
         const cat = issue.fields.status.statusCategory.key;
@@ -342,18 +318,15 @@ export default function BoardPage() {
         else if (cat === 'done') doneCount++;
       }
 
-      lane.stats = {
-        taskCount: allIssues.length,
-        totalEstSeconds,
-        totalLoggedSeconds,
-        todoCount,
-        inProgressCount,
-        doneCount,
-      };
+      result.push({
+        key: group.label,
+        columns,
+        stats: { taskCount: allLaneIssues.length, totalEstSeconds, totalLoggedSeconds, todoCount, inProgressCount, doneCount },
+      });
     }
 
     return result;
-  }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
+  }, [groupBy, subGroupBy, filteredGrouped, dynamicColumns]);
 
   const columnDefs = useMemo(() => {
     if (!swimlanes) return undefined;
@@ -536,7 +509,7 @@ export default function BoardPage() {
                 <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
                 {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
                   <button key={g}
-                    onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
+                    onClick={() => { setGroupBy(g); setSubGroupBy('none'); }}
                     className={cn(
                       'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
                       groupBy === g
@@ -552,38 +525,16 @@ export default function BoardPage() {
               {/* Sub group */}
               {groupBy !== 'none' && (
                 <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
-                  <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub</span>
-                  {(['none', 'assignee', 'priority', 'type'] as const)
+                  <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub group</span>
+                  {(['none', 'project', 'assignee', 'priority', 'type'] as const)
                     .filter(g => g !== groupBy)
                     .map((g) => (
                       <button key={g}
-                        onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
+                        onClick={() => { setSubGroupBy(g); }}
                         className={cn(
                           'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
                           subGroupBy === g
                             ? 'bg-[#6554C0] text-white border-[#6554C0]'
-                            : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                        )}
-                      >
-                        {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-                      </button>
-                    ))}
-                </div>
-              )}
-
-              {/* Sub sub */}
-              {subGroupBy !== 'none' && (
-                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
-                  <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
-                  {(['none', 'priority', 'type'] as const)
-                    .filter(g => g !== groupBy && g !== subGroupBy)
-                    .map((g) => (
-                      <button key={g}
-                        onClick={() => setSubSubGroupBy(g)}
-                        className={cn(
-                          'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                          subSubGroupBy === g
-                            ? 'bg-[#998DD9] text-white border-[#998DD9]'
                             : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
                         )}
                       >
