@@ -9,6 +9,7 @@ import { useWorklogMutations } from '@/hooks/use-worklog-mutations';
 import { WorklogCalendar } from '@/components/worklog/worklog-calendar';
 import { WorklogFilterBar, EMPTY_WORKLOG_FILTERS, applyWorklogFilters, type WorklogFilterBarFilters } from '@/components/worklog/worklog-filter-bar';
 import { WorklogDrawer } from '@/components/worklog/worklog-drawer';
+import { SWIMLANE_PALETTE } from '@/components/worklog/worklog-day-cell';
 import type { WorklogEntry, TeamGroup } from '@/types/jira';
 import { cn } from '@/lib/utils';
 
@@ -259,11 +260,6 @@ export default function WorklogPage() {
     return filters.groupBy.toLowerCase() as 'project' | 'type' | 'assignee' | 'status';
   }, [filters.groupBy]);
 
-  const subGroupByField = useMemo(() => {
-    if (!filters.subGroupBy || filters.subGroupBy === 'None') return null;
-    return filters.subGroupBy.toLowerCase() as 'project' | 'type' | 'assignee' | 'status';
-  }, [filters.subGroupBy]);
-
   const totalFiltered = filteredEntries.length;
   const totalFilteredHours = filteredEntries.reduce((s, e) => s + e.timeSpentSeconds / 3600, 0);
 
@@ -417,6 +413,18 @@ export default function WorklogPage() {
             </div>
           </>
         )}
+        {/* Color legend — member → color mapping */}
+        {selectedMembers.length > 1 && (
+          <div className="border-t border-[#DFE1E6] dark:border-gray-600 px-4 py-2 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-medium text-[#5E6C84] dark:text-gray-400">Colors:</span>
+            {[...selectedMembers].sort().map((m, i) => (
+              <span key={m} className="inline-flex items-center gap-1 text-[10px] text-[#5E6C84] dark:text-gray-400">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SWIMLANE_PALETTE[i % SWIMLANE_PALETTE.length] }} />
+                {memberDisplayNames[m] || m}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -433,7 +441,6 @@ export default function WorklogPage() {
           entriesByDate={entriesByDate}
           dailyHours={dailyHours}
           groupBy={groupByField}
-          subGroupBy={subGroupByField}
           onNavigate={handleNavigate}
           onModeChange={setMode}
           onEntryClick={setDrawerEntry}

@@ -22,7 +22,6 @@ export interface WorklogFilterBarFilters {
   sprintIn?: string[];
   reporterIn?: string[];
   groupBy?: 'Project' | 'Type' | 'Assignee' | 'Status' | 'None';
-  subGroupBy?: 'Project' | 'Type' | 'Assignee' | 'Status' | 'None';
   period?: 'today' | 'week' | 'month' | 'year';
 }
 
@@ -474,8 +473,7 @@ export function WorklogFilterBar({
     (filters.assigneeIn?.length ?? 0) > 0 ||
     (filters.sprintIn?.length ?? 0) > 0 ||
     (filters.reporterIn?.length ?? 0) > 0 ||
-    !!filters.groupBy ||
-    !!filters.subGroupBy;
+    !!filters.groupBy;
 
   return (
     <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
@@ -568,7 +566,7 @@ export function WorklogFilterBar({
         {/* Period (started date) */}
       </div>
 
-      {/* ── Group-by & Sub-group buttons (board-style) ──────────────────────── */}
+      {/* ── Group-by buttons (board-style) ──────────────────────── */}
       <div className="px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
@@ -577,7 +575,6 @@ export function WorklogFilterBar({
               onClick={() => onChange({
                 ...filters,
                 groupBy: g === 'None' ? undefined : g,
-                subGroupBy: undefined,
               })}
               className={cn(
                 'text-xs px-2 py-0.5 rounded border transition-colors',
@@ -590,30 +587,6 @@ export function WorklogFilterBar({
             </button>
           ))}
         </div>
-
-        {filters.groupBy && (
-          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
-            <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub group</span>
-            {(['None', 'Project', 'Type', 'Assignee', 'Status'] as const)
-              .filter(g => g !== filters.groupBy)
-              .map((g) => (
-                <button key={g}
-                  onClick={() => onChange({
-                    ...filters,
-                    subGroupBy: g === 'None' ? undefined : g,
-                  })}
-                  className={cn(
-                    'text-xs px-2 py-0.5 rounded border transition-colors',
-                    (filters.subGroupBy ?? 'None') === g
-                      ? 'bg-[#6554C0] text-white border-[#6554C0]'
-                      : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                  )}
-                >
-                  {g}
-                </button>
-              ))}
-          </div>
-        )}
       </div>
 
       {/* ── Active filter chips row ─────────────────────────────────────────── */}
@@ -663,9 +636,6 @@ export function WorklogFilterBar({
           ))}
           {filters.groupBy && (
             <FilterChip label={`Group by: ${filters.groupBy}`} onRemove={() => onChange({ ...filters, groupBy: undefined })} />
-          )}
-          {filters.subGroupBy && (
-            <FilterChip label={`Sub-group: ${filters.subGroupBy}`} onRemove={() => onChange({ ...filters, subGroupBy: undefined })} />
           )}
           <button
             onClick={() => onChange(EMPTY_WORKLOG_FILTERS)}

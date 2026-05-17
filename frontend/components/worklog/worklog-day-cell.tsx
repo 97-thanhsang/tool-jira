@@ -130,25 +130,36 @@ export function getGroupKey(entry: WorklogEntry, field: GroupByField): string {
   }
 }
 
-export function getGroupColor(entry: WorklogEntry, field: GroupByField): string {
-  switch (field) {
-    case 'project': return PROJECT_COLORS[entry.projectKey] ?? '#5E6C84';
-    case 'type': return TYPE_COLORS[entry.issueTypeName] ?? '#5E6C84';
-    case 'assignee': {
+function getEntryColor(entry: WorklogEntry, groupBy: GroupByField): string {
+  if (!groupBy) return '#FFFFFF';
+  switch (groupBy) {
+    case 'project': {
       const name = entry.author?.displayName || '';
       let hash = 0;
       for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-      const colors = ['#0052CC', '#36B37E', '#DE350B', '#FF8B00', '#6554C0', '#008DA6', '#E774BB', '#FF5630'];
-      return colors[Math.abs(hash) % colors.length];
+      return SWIMLANE_PALETTE[Math.abs(hash) % SWIMLANE_PALETTE.length];
     }
-    case 'status': {
-      if (!entry.status) return '#5E6C84';
-      const s = entry.status.toLowerCase();
-      if (s.includes('done') || s.includes('resolved')) return '#36B37E';
-      if (s.includes('progress')) return '#0052CC';
-      return '#5E6C84';
-    }
-    default: return '#5E6C84';
+    case 'assignee':
+    case 'status':
+    case 'type':
+      return PROJECT_COLORS[entry.projectKey] ?? '#5E6C84';
+    default:
+      return '#FFFFFF';
+  }
+}
+
+function getExtraLabel(entry: WorklogEntry, groupBy: GroupByField): string | null {
+  if (!groupBy) return null;
+  switch (groupBy) {
+    case 'project':
+      return entry.author?.displayName ?? null;
+    case 'assignee':
+    case 'type':
+      return entry.projectKey ?? null;
+    case 'status':
+      return entry.projectKey ?? null;
+    default:
+      return null;
   }
 }
 
@@ -190,11 +201,13 @@ function DraggableTimelineEntry({
   entry,
   color,
   style,
+  extraLabel,
   onEntryClick,
 }: {
   entry: LayoutEntry;
   color: string;
   style: React.CSSProperties;
+  extraLabel?: string | null;
   onEntryClick?: (e: WorklogEntry) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -216,6 +229,10 @@ function DraggableTimelineEntry({
     SLOT_HEIGHT,
   );
 
+  const isWhite = color === '#FFFFFF' || color === '#ffffff' || color === '#FFF' || color === '#fff';
+  const textClass = isWhite ? 'text-[#172B4D] dark:text-gray-200' : 'text-white';
+  const subtitleClass = isWhite ? 'text-[#5E6C84] dark:text-gray-400' : 'text-white/70';
+
   return (
     <div
       ref={setNodeRef}
@@ -223,6 +240,7 @@ function DraggableTimelineEntry({
       {...attributes}
       className={cn(
         'absolute rounded-sm cursor-grab active:cursor-grabbing hover:brightness-110 transition-all group',
+        isWhite && 'border border-[#DFE1E6] dark:border-gray-600',
         isDragging ? 'opacity-50 shadow-2xl z-50' : 'z-10',
       )}
       style={{ ...dragStyle, backgroundColor: color, minHeight }}
@@ -232,16 +250,22 @@ function DraggableTimelineEntry({
       }}
       title={`${entry.issueKey}: ${entry.comment || entry.issueSummary} (${(entry.timeSpentSeconds / 3600).toFixed(1)}h)`}
     >
-      <div className="px-1.5 py-1 text-white flex flex-col h-full" style={{ fontSize: '11px', lineHeight: '1.3' }}>
+      <div className="px-1.5 py-1 flex flex-col h-full" style={{ fontSize: '11px', lineHeight: '1.3' }}>
         {/* Top row: type icon + key */}
         <div className="flex items-center gap-1 flex-1 min-h-0">
           <TypeBadge typeName={entry.issueTypeName} iconUrl={entry.issueTypeIconUrl} />
-          <span className="font-semibold truncate flex-1">{entry.issueKey}</span>
+          <span className={cn('font-semibold truncate flex-1', textClass)}>{entry.issueKey}</span>
         </div>
+
+        {extraLabel && (
+          <div className={cn('text-[9px] truncate leading-tight', subtitleClass)}>
+            {extraLabel}
+          </div>
+        )}
 
         {/* Bottom row: hours + pencil */}
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-white/70 text-[10px] font-medium">
+          <span className={cn('text-[10px] font-medium', subtitleClass)}>
             {(entry.timeSpentSeconds / 3600).toFixed(1)}h
           </span>
           <button
@@ -275,7 +299,6 @@ interface WorklogDayCellProps {
   isDragActive?: boolean;
   isDragSource?: boolean;
   groupBy?: GroupByField;
-  subGroupBy?: GroupByField;
   onEntryClick?: (entry: WorklogEntry) => void;
   onDayClick?: (date: Date) => void;
 }
@@ -290,7 +313,6 @@ export function WorklogDayCell({
   isDragActive = false,
   isDragSource = false,
   groupBy = null,
-  subGroupBy = null,
   onEntryClick,
   onDayClick,
 }: WorklogDayCellProps) {
@@ -308,13 +330,6 @@ export function WorklogDayCell({
 
   const laidOutEntries = useMemo(() => layoutEntries(entries), [entries]);
   const groups = useMemo(() => groupEntries(entries, groupBy), [entries, groupBy]);
-  const groupsWithSubs = useMemo(() => {
-    if (!subGroupBy) return null;
-    return groups.map(g => ({
-      ...g,
-      subGroups: groupEntries(g.entries, subGroupBy),
-    }));
-  }, [groups, subGroupBy]);
 
   // ── Weekend / Compact: simple list (no timeline) ──
 
@@ -388,61 +403,36 @@ export function WorklogDayCell({
           )}
         >
           {groupBy && groups.length > 0 ? (
-            (groupsWithSubs ?? groups).map((g) => (
+            groups.map((g) => (
               <div key={g.key} className="space-y-0.5">
                 <div className="flex items-center gap-1.5 px-0.5 py-0.5">
                   <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
                   <span className="text-[10px] font-semibold text-[#172B4D] dark:text-gray-200 truncate leading-tight">{g.label}</span>
                   <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 ml-auto flex-shrink-0 font-medium">{g.totalHours.toFixed(1)}h</span>
                 </div>
-                {'subGroups' in g && (g as { subGroups: EntryGroup[] }).subGroups.length > 0 ? (
-                  (g as { subGroups: EntryGroup[] }).subGroups.slice(0, compact ? 8 : 3).map(sg => (
-                    <div key={sg.key} className="ml-2 space-y-0.5">
-                      <div className="flex items-center gap-1 px-0.5 py-0">
-                        <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: sg.color }} />
-                        <span className="text-[9px] font-medium text-[#5E6C84] dark:text-gray-400 truncate leading-tight">{sg.label}</span>
-                        <span className="text-[8px] text-[#8993A4] dark:text-gray-500 ml-auto flex-shrink-0">{sg.totalHours.toFixed(1)}h</span>
-                      </div>
-                      {sg.entries.slice(0, compact ? 5 : 3).map(e => (
-                        <div key={e.id}
-                          className="px-1.5 py-0.5 text-[10px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
-                          style={{ borderLeftColor: sg.color, borderLeftWidth: '2px' }}
-                          onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}>
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="flex items-center gap-1 min-w-0">
-                              <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
-                              <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
-                            </div>
-                            <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">{(e.timeSpentSeconds / 3600).toFixed(1)}h</span>
-                          </div>
-                        </div>
-                      ))}
+                {g.entries.slice(0, compact ? 15 : 5).map((e) => (
+                <div
+                  key={e.id}
+                  className="px-1.5 py-0.5 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
+                  style={{ borderLeftColor: g.color, borderLeftWidth: '3px' }}
+                  onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
+                      <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
                     </div>
-                  ))
-                ) : (
-                  g.entries.slice(0, compact ? 15 : 5).map((e) => (
-                  <div
-                    key={e.id}
-                    className="px-1.5 py-0.5 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
-                    style={{ borderLeftColor: g.color, borderLeftWidth: '3px' }}
-                    onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
-                        <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity text-[#5E6C84] hover:text-[#0052CC]"
-                          onPointerDown={(ev) => ev.stopPropagation()}
-                          onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
-                        ><Pencil size={10} /></button>
-                        <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">{(e.timeSpentSeconds / 3600).toFixed(1)}h</span>
-                      </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity text-[#5E6C84] hover:text-[#0052CC]"
+                        onPointerDown={(ev) => ev.stopPropagation()}
+                        onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
+                      ><Pencil size={10} /></button>
+                      <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">{(e.timeSpentSeconds / 3600).toFixed(1)}h</span>
                     </div>
                   </div>
-                )))}
+                </div>
+                ))}
                 {g.entries.length > (compact ? 15 : 5) && (
                   <p className="text-[10px] text-[#0052CC] dark:text-blue-400 px-0.5">+{g.entries.length - (compact ? 15 : 5)} more</p>
                 )}
@@ -454,7 +444,7 @@ export function WorklogDayCell({
               key={e.id}
               className="px-1.5 py-0.5 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
               style={{
-                borderLeftColor: PROJECT_COLORS[e.projectKey] ?? '#5E6C84',
+                borderLeftColor: groupBy ? getEntryColor(e, groupBy) : (PROJECT_COLORS[e.projectKey] ?? '#5E6C84'),
                 borderLeftWidth: '3px',
               }}
               onClick={(ev) => {
@@ -554,23 +544,6 @@ export function WorklogDayCell({
               </span>
             ))}
           </div>
-          {subGroupBy && groupsWithSubs && (
-            <div className="flex items-center gap-1 flex-wrap pl-4">
-              {groupsWithSubs.flatMap((g) =>
-                (g as { subGroups: EntryGroup[] }).subGroups.map((sg) => (
-                  <span
-                    key={`${g.key}-${sg.key}`}
-                    className="text-[8px] px-1.5 py-0.5 rounded-full border text-[#5E6C84] dark:text-gray-400 font-medium flex items-center gap-1"
-                    style={{ borderColor: sg.color }}
-                  >
-                    <span className="w-1 h-1 rounded-full" style={{ backgroundColor: sg.color }} />
-                    {sg.label.length > 16 ? sg.label.slice(0, 16) + '…' : sg.label}
-                    <span>{sg.totalHours.toFixed(1)}h</span>
-                  </span>
-                ))
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -614,7 +587,8 @@ export function WorklogDayCell({
           {laidOutEntries.length > 0 && (
             <div style={{ position: 'absolute', top: 0, left: '38px', right: '2px', bottom: 0 }}>
               {laidOutEntries.map((e) => {
-                const color = groupBy ? getGroupColor(e, groupBy) : (PROJECT_COLORS[e.projectKey] ?? '#5E6C84');
+                const color = getEntryColor(e, groupBy);
+                const extraLabel = getExtraLabel(e, groupBy);
                 const entryHeight = Math.max(e.height - 2, SLOT_HEIGHT * 0.5);
 
                 return (
@@ -622,6 +596,7 @@ export function WorklogDayCell({
                     key={e.id}
                     entry={e}
                     color={color}
+                    extraLabel={extraLabel}
                     style={{
                       position: 'absolute',
                       top: e.top,

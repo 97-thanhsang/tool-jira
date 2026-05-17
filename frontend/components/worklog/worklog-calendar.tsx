@@ -24,7 +24,6 @@ interface WorklogCalendarProps {
   entriesByDate: Record<string, WorklogEntry[]>;
   dailyHours: Record<string, number>;
   groupBy?: GroupByField;
-  subGroupBy?: GroupByField;
   onNavigate: (direction: 'prev' | 'next') => void;
   onModeChange: (mode: 'day' | 'week' | 'month') => void;
   onEntryClick?: (entry: WorklogEntry) => void;
@@ -38,7 +37,6 @@ export function WorklogCalendar({
   entriesByDate,
   dailyHours,
   groupBy,
-  subGroupBy,
   onNavigate,
   onModeChange,
   onEntryClick,
@@ -146,6 +144,7 @@ export function WorklogCalendar({
               }
               isDragActive={activeId !== null}
               isDragSource={isDragSource}
+              groupBy={groupBy}
               onEntryClick={onEntryClick}
               onDayClick={onDayClick}
             />
