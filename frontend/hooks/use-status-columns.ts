@@ -3,8 +3,6 @@ import useSWR from 'swr';
 import { api } from '@/lib/api';
 import type { JiraStatus } from '@/types/jira';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export interface StatusColumnEntry {
   name: string;
   wipMin?: number;
@@ -12,29 +10,11 @@ export interface StatusColumnEntry {
   color: string;
 }
 
-// ─── Column definitions (7 workflow columns) ──────────────────────────────────
-
-const COLUMNS: { name: string; color: string; keywords: string[] }[] = [
-  { name: 'Open',        color: '#5E6C84', keywords: ['open', 'new', 'backlog'] },
-  { name: 'Ready',       color: '#008DA6', keywords: ['selected', 'ready', 'todo', 'to do'] },
-  { name: 'In Progress', color: '#0052CC', keywords: ['in progress', 'developing', 'active', 'working', 'doing'] },
-  { name: 'In Review',   color: '#FF8B00', keywords: ['review', 'pr', 'code review', 'peer review'] },
-  { name: 'Testing',     color: '#6554C0', keywords: ['test', 'qa', 'uat', 'staging', 'verification'] },
-  { name: 'Done',        color: '#36B37E', keywords: ['done', 'closed', 'resolved', 'released', 'deployed', 'completed', 'cancelled'] },
-  { name: 'Other',       color: '#8993A4', keywords: [] },
-];
-
-function matchColumn(statusName: string): { name: string; color: string } {
-  const lower = statusName.toLowerCase();
-  for (const col of COLUMNS) {
-    for (const kw of col.keywords) {
-      if (lower.includes(kw)) return { name: col.name, color: col.color };
-    }
-  }
-  return { name: 'Other', color: '#8993A4' };
-}
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+const COLUMN_MAP: Record<string, { name: string; color: string }> = {
+  new:           { name: 'To Do',       color: '#5E6C84' },
+  indeterminate: { name: 'In Progress', color: '#0052CC' },
+  done:          { name: 'Done',        color: '#36B37E' },
+};
 
 interface UseStatusColumnsResult {
   statusColumnMap: Record<string, StatusColumnEntry> | null;
@@ -42,6 +22,10 @@ interface UseStatusColumnsResult {
   error: unknown;
 }
 
+/**
+ * Map Jira statuses to 3 columns by statusCategory:
+ * new → To Do / indeterminate → In Progress / done → Done
+ */
 export function useStatusColumns(): UseStatusColumnsResult {
   const { data: statuses, error, isLoading } = useSWR(
     '/status',
@@ -55,8 +39,8 @@ export function useStatusColumns(): UseStatusColumnsResult {
 
   const map: Record<string, StatusColumnEntry> = {};
   for (const s of statuses) {
-    const col = matchColumn(s.name);
-    if (!map[s.id]) {
+    const col = COLUMN_MAP[s.statusCategory.key];
+    if (col && !map[s.id]) {
       map[s.id] = { name: col.name, color: col.color };
     }
   }

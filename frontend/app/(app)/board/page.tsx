@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api, getStoredUser } from '@/lib/api';
 import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns';
-import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X, Loader2 } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
@@ -11,7 +11,7 @@ import { BoardFilterBar } from '@/components/board/board-filter-bar';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { JiraIssue } from '@/types/jira';
+import type { JiraIssue, JiraTransition } from '@/types/jira';
 import type { TeamGroup } from '@/types/jira';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,6 +80,29 @@ export default function BoardPage() {
   const memberRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Move confirmation popup ─────────────────────────────────────────────
+  const [movePopup, setMovePopup] = useState<{
+    issueKey: string;
+    issueId: string;
+    targetCol: string;
+    targetLabel: string;
+    transitions: JiraTransition[] | null;
+    loading: boolean;
+  } | null>(null);
+
+  const handleMoveRequest = useCallback(
+    async (issueId: string, issueKey: string, targetCol: string, targetLabel: string) => {
+      setMovePopup({ issueKey, issueId, targetCol, targetLabel, transitions: null, loading: true });
+      try {
+        const { data } = await api.get<{ transitions: JiraTransition[] }>(`/issue/${issueKey}/transitions`);
+        setMovePopup(prev => prev ? { ...prev, transitions: data.transitions, loading: false } : null);
+      } catch {
+        setMovePopup(null);
+      }
+    },
+    [],
+  );
 
   // Build dynamic JQL: expand beyond currentUser when viewing team members
   const boardJql = useMemo<string | undefined>(() => {
@@ -214,6 +237,42 @@ export default function BoardPage() {
     ];
   }, [dynamicColumns, filteredGrouped]);
 
+  // ── Dynamic per-type column filtering ───────────────────────────────────
+  // Build: issueType → Set<columnName> from ALL unfiltered issues
+  const typeColumnMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const [colName, issues] of Object.entries(grouped)) {
+      for (const issue of issues) {
+        const typeName = issue.fields.issuetype.name;
+        if (!map.has(typeName)) map.set(typeName, new Set());
+        map.get(typeName)!.add(colName);
+      }
+    }
+    return map;
+  }, [grouped]);
+
+  // Only show columns relevant to the currently visible issue types
+  const visibleColumns = useMemo(() => {
+    if (columns.length === 0) return columns;
+
+    // Determine visible types (from filter or all)
+    const visibleTypes = filters.issuetypeIn?.length
+      ? new Set(filters.issuetypeIn)
+      : new Set(typeColumnMap.keys());
+
+    return columns.filter(col => {
+      // Always show if column has issues
+      if (col.issues.length > 0) return true;
+
+      // Check: does any visible type have this column in its status set?
+      for (const typeName of visibleTypes) {
+        const typeCols = typeColumnMap.get(typeName);
+        if (typeCols?.has(col.label)) return true;
+      }
+      return false;
+    });
+  }, [columns, typeColumnMap, filters.issuetypeIn]);
+
   // ── 3-level grouping for swimlanes ──────────────────────────────────────
   type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type';
   type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type';
@@ -347,6 +406,32 @@ export default function BoardPage() {
     ];
   }, [swimlanes, dynamicColumns]);
 
+  // Filter columnDefs to only show relevant columns per issue type
+  const visibleColumnDefs = useMemo(() => {
+    if (!columnDefs) return undefined;
+    if (swimlanes) {
+      return columnDefs.filter(cd => {
+        // Check if any swimlane has issues in this column
+        for (const lane of swimlanes) {
+          const colData = lane.columns[cd.label];
+          const flat = colData && 'subGroups' in colData
+            ? colData.subGroups.flatMap(sg => sg.issues)
+            : (colData as JiraIssue[]) || [];
+          if (flat.length > 0) return true;
+        }
+        // Check if any visible type could have this column
+        const visibleTypes = filters.issuetypeIn?.length
+          ? new Set(filters.issuetypeIn)
+          : new Set(typeColumnMap.keys());
+        for (const typeName of visibleTypes) {
+          if (typeColumnMap.get(typeName)?.has(cd.label)) return true;
+        }
+        return false;
+      });
+    }
+    return columnDefs;
+  }, [columnDefs, swimlanes, typeColumnMap, filters.issuetypeIn]);
+
   if (error) {
     return (
       <div className="p-6 text-center">
@@ -412,7 +497,7 @@ export default function BoardPage() {
                 </>
               )}
               <span>·</span>
-              <span>{dynamicColumns.length > 0 ? dynamicColumns.length : 3} columns</span>
+              <span>{visibleColumns.length} columns</span>
               {filters.period && (
                 <>
                   <span>·</span>
@@ -554,17 +639,69 @@ export default function BoardPage() {
       {/* Board */}
       <div className="flex-1 min-h-0">
         <KanbanBoard
-          columns={columns}
+          columns={visibleColumns}
           isLoading={isLoading}
-          moveCard={moveCard}
+          onMoveRequest={handleMoveRequest}
           onCardClick={setQuickViewKey}
           onIssueUpdate={() => mutate()}
           swimlanes={swimlanes}
-          columnDefs={columnDefs}
+          columnDefs={visibleColumnDefs}
           groupBy={groupBy !== 'none' ? groupBy : undefined}
           subGroupBy={subGroupBy !== 'none' ? subGroupBy : undefined}
         />
       </div>
+
+      {/* ── Move confirmation popup ── */}
+      {movePopup && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40" onClick={() => setMovePopup(null)}>
+          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-lg shadow-2xl w-96 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#DFE1E6] dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">
+                Move {movePopup.issueKey}
+              </h3>
+              <button onClick={() => setMovePopup(null)} className="text-[#5E6C84] hover:text-[#172B4D] dark:hover:text-gray-200">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              <p className="text-xs text-[#5E6C84] dark:text-gray-400 mb-3">
+                Select status for <strong className="text-[#172B4D] dark:text-gray-200">{movePopup.targetLabel}</strong>
+              </p>
+
+              {movePopup.loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 size={20} className="animate-spin text-[#0052CC]" />
+                </div>
+              ) : movePopup.transitions && movePopup.transitions.length > 0 ? (
+                <div className="space-y-1">
+                  {movePopup.transitions.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        moveCard(movePopup.issueId, movePopup.issueKey, movePopup.targetCol, t.to.name, [t.to.id]);
+                        setMovePopup(null);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-left hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{
+                        backgroundColor: t.to.statusCategory.key === 'new' ? '#5E6C84' : t.to.statusCategory.key === 'indeterminate' ? '#0052CC' : '#36B37E',
+                      }} />
+                      <span className="text-sm text-[#172B4D] dark:text-gray-200">{t.to.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#8993A4] dark:text-gray-500 text-center py-4">
+                  No transitions available
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick View */}
       <QuickViewPanel issueKey={quickViewKey} onClose={() => setQuickViewKey(null)} />

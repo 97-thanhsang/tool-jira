@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -126,6 +126,8 @@ interface KanbanBoardProps {
   columns: BoardColumn[];
   isLoading: boolean;
   moveCard?: MoveCardFn;
+  /** When provided, called instead of moveCard on drop (for confirmation popup). */
+  onMoveRequest?: (issueId: string, issueKey: string, targetColumnName: string, targetLabel: string) => void;
   onCardClick?: (key: string) => void;
   /** Called after any inline edit (assignee, priority, labels) — parent revalidates */
   onIssueUpdate?: () => void;
@@ -444,6 +446,7 @@ export function KanbanBoard({
   columns,
   isLoading,
   moveCard,
+  onMoveRequest,
   onCardClick,
   onIssueUpdate,
   swimlanes,
@@ -455,6 +458,25 @@ export function KanbanBoard({
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const [collapsedSubGroups, setCollapsedSubGroups] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
+
+  // Collapse all lanes and sub-groups by default when swimlanes change
+  useEffect(() => {
+    if (swimlanes) {
+      setCollapsedLanes(new Set(swimlanes.map(l => l.key)));
+      const sgKeys = new Set<string>();
+      for (const lane of swimlanes) {
+        for (const [colLabel, colData] of Object.entries(lane.columns)) {
+          if (colData && 'subGroups' in colData) {
+            const colId = makeSwimlaneColId(lane.key, colLabel.toLowerCase().replace(/\s+/g, '-'));
+            for (const sg of colData.subGroups) {
+              sgKeys.add(`${colId}:${sg.label}`);
+            }
+          }
+        }
+      }
+      setCollapsedSubGroups(sgKeys);
+    }
+  }, [swimlanes]);
 
   function handleDragStart(event: DragStartEvent) {
     const id = String(event.active.id);
@@ -522,15 +544,19 @@ export function KanbanBoard({
       // sourceColLabel === targetColDef.label compares logical column name
       if (sourceColLabel === targetColDef.label) return;
 
-      moveCard?.(
-        activeId,
-        sourceIssue.key,
-        targetColDef.label,
-        targetColDef.label,
-        targetColDef.statusIds.length > 0
-          ? targetColDef.statusIds
-          : undefined,
-      );
+      if (onMoveRequest) {
+        onMoveRequest(activeId, sourceIssue.key, targetColDef.label, targetColDef.label);
+      } else {
+        moveCard?.(
+          activeId,
+          sourceIssue.key,
+          targetColDef.label,
+          targetColDef.label,
+          targetColDef.statusIds.length > 0
+            ? targetColDef.statusIds
+            : undefined,
+        );
+      }
       return;
     }
 
@@ -561,13 +587,17 @@ export function KanbanBoard({
     }
     if (!sourceIssue || sourceColId === targetCol.id) return;
 
-    moveCard?.(
-      activeId,
-      sourceIssue.key,
-      targetCol.label,
-      targetCol.label,
-      targetCol.statusIds.length > 0 ? targetCol.statusIds : undefined,
-    );
+    if (onMoveRequest) {
+      onMoveRequest(activeId, sourceIssue.key, targetCol.label, targetCol.label);
+    } else {
+      moveCard?.(
+        activeId,
+        sourceIssue.key,
+        targetCol.label,
+        targetCol.label,
+        targetCol.statusIds.length > 0 ? targetCol.statusIds : undefined,
+      );
+    }
   }
 
   function handleDragCancel() {
