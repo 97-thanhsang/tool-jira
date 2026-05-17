@@ -324,10 +324,10 @@ function DroppableColumn({
                 }
               }
               return (
-              <div key={sg.label}>
+              <div key={sg.label} className="border border-[#DFE1E6] dark:border-gray-700 rounded-sm mb-2 overflow-hidden bg-[#FAFBFC] dark:bg-gray-800/50">
                 <button
                   onClick={() => onToggleSubGroup?.(sgKey)}
-                  className="w-full flex items-center gap-1.5 py-1.5 px-2 rounded-sm hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors text-left"
+                  className="w-full flex items-center gap-1.5 py-1.5 px-2 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors text-left"
                   style={sgAccentColor ? { borderLeft: `3px solid ${sgAccentColor}` } : undefined}
                 >
                   <ChevronDown
@@ -391,10 +391,10 @@ function DroppableColumn({
                         }
                       }
                       return (
-                        <div key={ssg.label}>
+                        <div key={ssg.label} className="border border-[#DFE1E6] dark:border-gray-600 rounded-sm mb-1 ml-3 overflow-hidden bg-[#F4F5F7] dark:bg-gray-800/30">
                           <button
                             onClick={() => onToggleSubGroup?.(ssgKey)}
-                            className="w-full flex items-center gap-1.5 py-1.5 px-3 rounded-sm text-left hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors"
+                            className="w-full flex items-center gap-1.5 py-1.5 px-2 hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors text-left"
                             style={ssgAccentColor ? { borderLeft: `3px solid ${ssgAccentColor}` } : undefined}
                           >
                             <ChevronDown size={8}
