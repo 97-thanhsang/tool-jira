@@ -505,7 +505,8 @@ export function BoardFilterBar({ filters, onChange }: BoardFilterBarProps) {
     (filters.priorityIn?.length ?? 0) > 0 ||
     (filters.assigneeIn?.length ?? 0) > 0 ||
     (filters.sprintIn?.length ?? 0) > 0 ||
-    (filters.reporterIn?.length ?? 0) > 0;
+    (filters.reporterIn?.length ?? 0) > 0 ||
+    !!filters.period;
 
   return (
     <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
@@ -593,6 +594,24 @@ export function BoardFilterBar({ filters, onChange }: BoardFilterBarProps) {
           selectedValues={filters.reporterIn ?? []}
           onChange={values => onChange({ ...filters, reporterIn: values.length ? values : undefined })}
         />
+
+        {/* Period (due date) */}
+        <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
+          {(['today', 'week', 'month', 'year'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => onChange({ ...filters, period: filters.period === p ? undefined : p })}
+              className={cn(
+                'text-xs px-2.5 py-1.5 font-medium transition-colors capitalize border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0',
+                filters.period === p
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              {p === 'today' ? 'Today' : p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Year'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Active filter chips row */}
@@ -640,6 +659,12 @@ export function BoardFilterBar({ filters, onChange }: BoardFilterBarProps) {
               onChange({ ...filters, reporterIn: next?.length ? next : undefined });
             }} />
           ))}
+          {filters.period && (
+            <FilterChip
+              label={`Due: ${filters.period === 'today' ? 'Today' : filters.period === 'week' ? 'This Week' : filters.period === 'month' ? 'This Month' : 'This Year'}`}
+              onRemove={() => onChange({ ...filters, period: undefined, dateFrom: undefined, dateTo: undefined })}
+            />
+          )}
           <button
             onClick={() => onChange(EMPTY_FILTERS)}
             className="text-[11px] text-[#0052CC] dark:text-blue-400 hover:underline ml-1"

@@ -14,12 +14,35 @@ import {
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, TrendingDown } from 'lucide-react';
+import { AlertCircle, TrendingDown, ChevronDown, User } from 'lucide-react';
+import Image from 'next/image';
 
 import type { JiraIssue } from '@/types/jira';
+import { PriorityIcon } from '@/components/shared/priority-icon';
 import { IssueCard } from './issue-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+
+// ─── Priority / Type / Project color maps ────────────────────────────────────
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Highest: '#DE350B', High: '#FF5630', Medium: '#FFAB00',
+  Low: '#2684FF', Lowest: '#2684FF', Blocker: '#DE350B', Minor: '#6B778C',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  Bug: '#EF4444', Task: '#3B82F6', Story: '#22C55E',
+  Epic: '#A855F7', 'Sub-task': '#38BDF8', Support: '#F59E0B',
+  Enhancement: '#10B981', Improvement: '#6366F1', 'New Feature': '#EC4899',
+};
+
+/** Deterministic color from a string (for project keys). */
+function projectColor(key: string): string {
+  const colors = ['#0052CC', '#DE350B', '#36B37E', '#FF8B00', '#6554C0', '#008DA6', '#E774BB', '#5243AA'];
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charCodeAt(i);
+  return colors[Math.abs(hash) % colors.length];
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +107,8 @@ interface KanbanBoardProps {
   }[];
   /** Column definitions (metadata only) — required when swimlanes are used. */
   columnDefs?: BoardColumnDef[];
+  /** Group-by field (for styled swimlane headers: icons, colors, avatars). */
+  groupBy?: string;
 }
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
@@ -279,8 +304,10 @@ export function KanbanBoard({
   onIssueUpdate,
   swimlanes,
   columnDefs,
+  groupBy,
 }: KanbanBoardProps) {
   const [activeIssue, setActiveIssue] = useState<JiraIssue | null>(null);
+  const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
 
   function handleDragStart(event: DragStartEvent) {
@@ -406,47 +433,126 @@ export function KanbanBoard({
         onDragCancel={handleDragCancel}
       >
         <div className="flex flex-col gap-6 overflow-y-auto h-full pr-2">
-          {swimlanes!.map((lane) => (
-            <div key={lane.key} className="flex-shrink-0">
-              {/* Swimlane header */}
-              <div className="flex items-center gap-2 mb-2 px-1">
-                <h4 className="text-sm font-semibold text-[#172B4D] dark:text-gray-200">
-                  {lane.key}
-                </h4>
-                <span className="text-xs text-[#5E6C84] dark:text-gray-400 bg-[#DFE1E6] dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                  {Object.values(lane.columns).reduce(
-                    (sum, issues) => sum + issues.length,
-                    0,
+          {swimlanes!.map((lane) => {
+            const totalIssues = Object.values(lane.columns).reduce((sum, issues) => sum + issues.length, 0);
+            const isCollapsed = collapsedLanes.has(lane.key);
+            // Get first issue for icon/color extraction
+            const firstIssue = (() => {
+              for (const col of Object.values(lane.columns)) {
+                if (col.length > 0) return col[0];
+              }
+              return null;
+            })();
+
+            // Determine border-left accent color
+            let accentColor = '#0052CC'; // default blue
+            if (firstIssue && groupBy) {
+              switch (groupBy) {
+                case 'project':
+                  accentColor = projectColor(firstIssue.fields.project.key);
+                  break;
+                case 'priority':
+                  accentColor = firstIssue.fields.priority
+                    ? (PRIORITY_COLORS[firstIssue.fields.priority.name] ?? '#DFE1E6')
+                    : '#DFE1E6';
+                  break;
+                case 'issuetype':
+                  accentColor = TYPE_COLORS[firstIssue.fields.issuetype.name] ?? '#6B7280';
+                  break;
+                case 'assignee':
+                  accentColor = '#0052CC'; // blue for users
+                  break;
+              }
+            }
+
+            function toggleCollapse() {
+              setCollapsedLanes(prev => {
+                const next = new Set(prev);
+                if (next.has(lane.key)) next.delete(lane.key);
+                else next.add(lane.key);
+                return next;
+              });
+            }
+
+            return (
+              <div key={lane.key} className="flex-shrink-0">
+                {/* Prominent swimlane header */}
+                <button
+                  onClick={toggleCollapse}
+                  className="w-full flex items-center gap-3 mb-3 px-3 py-2 rounded-sm text-left hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors group"
+                  style={{ borderLeft: `4px solid ${accentColor}` }}
+                >
+                  <ChevronDown
+                    size={14}
+                    className={cn(
+                      'text-[#5E6C84] dark:text-gray-400 flex-shrink-0 transition-transform',
+                      isCollapsed && '-rotate-90',
+                    )}
+                  />
+
+                  {/* Icon / avatar based on groupBy */}
+                  {firstIssue && groupBy === 'priority' && (
+                    <PriorityIcon priority={firstIssue.fields.priority} />
                   )}
-                </span>
+                  {firstIssue && groupBy === 'issuetype' && (
+                    firstIssue.fields.issuetype.iconUrl
+                      ? <Image src={firstIssue.fields.issuetype.iconUrl} alt={firstIssue.fields.issuetype.name} width={16} height={16} className="flex-shrink-0" unoptimized />
+                      : <span className="text-xs font-bold text-[#5E6C84] w-4 h-4 flex items-center justify-center">{firstIssue.fields.issuetype.name.charAt(0)}</span>
+                  )}
+                  {firstIssue && groupBy === 'assignee' && (
+                    firstIssue.fields.assignee?.avatarUrls?.['24x24']
+                      ? <Image src={firstIssue.fields.assignee.avatarUrls['24x24']} alt={firstIssue.fields.assignee.displayName} width={18} height={18} className="rounded-full flex-shrink-0" unoptimized />
+                      : <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0">
+                          {firstIssue.fields.assignee?.displayName?.charAt(0) ?? <User size={9} />}
+                        </span>
+                  )}
+                  {firstIssue && groupBy === 'project' && (
+                    <span
+                      className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-[8px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      {firstIssue.fields.project.key.charAt(0)}
+                    </span>
+                  )}
+
+                  <h4 className="text-sm font-semibold text-[#172B4D] dark:text-gray-200 flex-1">
+                    {lane.key}
+                  </h4>
+                  <span className="text-xs font-medium text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-2.5 py-0.5 rounded-full">
+                    {totalIssues}
+                  </span>
+                </button>
+
+                {/* Column grid (collapsed when toggled) */}
+                {!isCollapsed && (
+                  <div
+                    className="grid gap-4"
+                    style={{
+                      gridTemplateColumns: `repeat(${columnDefs?.length ?? 3}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {(columnDefs ?? []).map((colDef) => {
+                      const issues = lane.columns[colDef.label] || [];
+                      return (
+                        <DroppableColumn
+                          key={`${lane.key}-${colDef.id}`}
+                          colId={makeSwimlaneColId(lane.key, colDef.id)}
+                          label={colDef.label}
+                          color={colDef.color}
+                          wipMin={colDef.wipMin}
+                          wipMax={colDef.wipMax}
+                          issues={issues}
+                          isLoading={isLoading}
+                          onCardClick={onCardClick}
+                          onIssueUpdate={onIssueUpdate}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {/* Column grid for this swimlane */}
-              <div
-                className="grid gap-4"
-                style={{
-                  gridTemplateColumns: `repeat(${columnDefs?.length ?? 3}, minmax(0, 1fr))`,
-                }}
-              >
-                {(columnDefs ?? []).map((colDef) => {
-                  const issues = lane.columns[colDef.label] || [];
-                  return (
-                    <DroppableColumn
-                      key={`${lane.key}-${colDef.id}`}
-                      colId={makeSwimlaneColId(lane.key, colDef.id)}
-                      label={colDef.label}
-                      color={colDef.color}
-                      wipMin={colDef.wipMin}
-                      wipMax={colDef.wipMax}
-                      issues={issues}
-                      isLoading={isLoading}
-                      onCardClick={onCardClick}
-                      onIssueUpdate={onIssueUpdate}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Drag overlay */}

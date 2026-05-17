@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { api, getStoredUser } from '@/lib/api';
-import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, X } from 'lucide-react';
+import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns';
+import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
-import { KanbanBoard, type BoardColumn } from '@/components/board/kanban-board';
+import { KanbanBoard, type BoardColumn, type BoardColumnDef } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardFilterBar } from '@/components/board/board-filter-bar';
 import { QuickViewPanel } from '@/components/board/quick-view-panel';
@@ -57,6 +58,7 @@ export default function BoardPage() {
   const [memberResults, setMemberResults] = useState<JiraUserResult[]>([]);
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const [showGroupSection, setShowGroupSection] = useState(true);
   const memberRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,8 +135,37 @@ export default function BoardPage() {
 
   const isAllMembers = selectedMembers.length === 0;
 
-  // effectiveFilters: filters from BoardFilterBar only (groups handled via JQL)
-  const effectiveFilters = filters;
+  // Derive date range from period filter
+  const dateFiltered = useMemo(() => {
+    if (!filters.period) return filters;
+    const now = new Date();
+    let dateFrom: string;
+    let dateTo: string;
+
+    switch (filters.period) {
+      case 'today':
+        dateFrom = format(now, 'yyyy-MM-dd');
+        dateTo = dateFrom;
+        break;
+      case 'week':
+        dateFrom = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+        dateTo = format(addDays(startOfWeek(now, { weekStartsOn: 1 }), 6), 'yyyy-MM-dd');
+        break;
+      case 'month':
+        dateFrom = format(startOfMonth(now), 'yyyy-MM-dd');
+        dateTo = format(endOfMonth(now), 'yyyy-MM-dd');
+        break;
+      case 'year':
+        dateFrom = format(startOfYear(now), 'yyyy-MM-dd');
+        dateTo = format(endOfYear(now), 'yyyy-MM-dd');
+        break;
+    }
+
+    return { ...filters, dateFrom, dateTo };
+  }, [filters]);
+
+  // effectiveFilters: dateFiltered + BoardFilterBar filters (groups handled via JQL)
+  const effectiveFilters = dateFiltered;
 
   // Apply client-side filters to each column
   const filteredGrouped = useMemo(() => {
@@ -165,6 +196,135 @@ export default function BoardPage() {
     ];
   }, [dynamicColumns, filteredGrouped]);
 
+  // ── 3-level grouping for swimlanes ──────────────────────────────────────
+  type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type';
+  type SubGroupBy   = 'none' | 'assignee' | 'priority' | 'type';
+  type SubSubGroupBy = 'none' | 'priority' | 'type';
+
+  const [groupBy, setGroupBy]             = useState<GroupBy>('none');
+  const [subGroupBy, setSubGroupBy]       = useState<SubGroupBy>('none');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<SubSubGroupBy>('none');
+
+  // Get a field value from an issue for grouping
+  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy | SubSubGroupBy): { key: string; label: string } | null {
+    if (field === 'none') return null;
+    switch (field) {
+      case 'project':
+        return { key: issue.fields.project.key, label: `${issue.fields.project.name} (${issue.fields.project.key})` };
+      case 'assignee':
+        return { key: issue.fields.assignee?.name ?? '__unassigned', label: issue.fields.assignee?.displayName ?? 'Unassigned' };
+      case 'priority':
+        return { key: issue.fields.priority?.name ?? 'None', label: issue.fields.priority?.name ?? 'None' };
+      case 'type':
+        return { key: issue.fields.issuetype.name, label: issue.fields.issuetype.name };
+      default:
+        return null;
+    }
+  }
+
+  // Composite swimlane computation (3-level nesting)
+  const swimlanes = useMemo(() => {
+    if (groupBy === 'none') return undefined;
+
+    const colNames = dynamicColumns.length > 0
+      ? dynamicColumns.map(c => c.name)
+      : ['To Do', 'In Progress', 'Done'];
+
+    // Collect all issues
+    const allIssues: { issue: JiraIssue; colName: string }[] = [];
+    for (const [colName, issues] of Object.entries(filteredGrouped)) {
+      for (const issue of issues) allIssues.push({ issue, colName });
+    }
+
+    // Group → SubGroup → SubSubGroup → columns
+    const tree = new Map<string, Map<string, Map<string, Record<string, JiraIssue[]>>>>();
+
+    for (const { issue, colName } of allIssues) {
+      const g1 = getFieldValue(issue, groupBy);
+      const g2 = subGroupBy !== 'none' ? getFieldValue(issue, subGroupBy) : null;
+      const g3 = subSubGroupBy !== 'none' ? getFieldValue(issue, subSubGroupBy) : null;
+      if (!g1) continue;
+
+      const g1Key = g1.key;
+      const g2Key = g2?.key ?? '__none';
+      const g3Key = g3?.key ?? '__none';
+
+      if (!tree.has(g1Key)) tree.set(g1Key, new Map());
+      if (!tree.get(g1Key)!.has(g2Key)) tree.get(g1Key)!.set(g2Key, new Map());
+      if (!tree.get(g1Key)!.get(g2Key)!.has(g3Key)) {
+        const emptyCols: Record<string, JiraIssue[]> = {};
+        for (const cn of colNames) emptyCols[cn] = [];
+        tree.get(g1Key)!.get(g2Key)!.set(g3Key, emptyCols);
+      }
+      tree.get(g1Key)!.get(g2Key)!.get(g3Key)![colName]?.push(issue);
+    }
+
+    // Flatten into swimlanes with composite labels
+    const result: { key: string; columns: Record<string, JiraIssue[]> }[] = [];
+
+    const sortedG1 = Array.from(tree.entries()).sort(([a], [b]) => {
+      if (a === '__unassigned' || a === 'None') return 1;
+      if (b === '__unassigned' || b === 'None') return -1;
+      return a.localeCompare(b);
+    });
+
+    for (const [g1Key, subMap] of sortedG1) {
+      const g1Label = getFieldValue({ fields: { project: { key: g1Key, name: g1Key }, assignee: { name: g1Key, displayName: g1Key }, priority: { name: g1Key }, issuetype: { name: g1Key } } } as unknown as JiraIssue, groupBy)?.label ?? g1Key;
+
+      const sortedG2 = Array.from(subMap.entries()).sort(([a], [b]) => {
+        if (a === '__unassigned' || a === 'None') return 1;
+        if (b === '__unassigned' || b === 'None') return -1;
+        return a.localeCompare(b);
+      });
+
+      for (const [g2Key, subSubMap] of sortedG2) {
+        const g2Label = subGroupBy !== 'none' && g2Key !== '__none'
+          ? getFieldValue({ fields: { assignee: { name: g2Key, displayName: g2Key }, priority: { name: g2Key }, issuetype: { name: g2Key } } } as unknown as JiraIssue, subGroupBy)?.label ?? g2Key
+          : '';
+
+        const sortedG3 = Array.from(subSubMap.entries()).sort(([a], [b]) => {
+          if (a === 'None') return 1;
+          if (b === 'None') return -1;
+          return a.localeCompare(b);
+        });
+
+        for (const [g3Key, columns] of sortedG3) {
+          const g3Label = subSubGroupBy !== 'none' && g3Key !== '__none'
+            ? getFieldValue({ fields: { priority: { name: g3Key }, issuetype: { name: g3Key } } } as unknown as JiraIssue, subSubGroupBy)?.label ?? g3Key
+            : '';
+
+          const parts = [g1Label];
+          if (g2Label) parts.push(g2Label);
+          if (g3Label) parts.push(g3Label);
+          const label = parts.join(' → ');
+
+          result.push({ key: label, columns });
+        }
+      }
+    }
+
+    return result;
+  }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
+
+  const columnDefs = useMemo(() => {
+    if (!swimlanes) return undefined;
+    if (dynamicColumns.length > 0) {
+      return dynamicColumns.map(col => ({
+        id: col.name.toLowerCase().replace(/\s+/g, '-'),
+        label: col.name,
+        color: col.color,
+        wipMin: col.wipMin,
+        wipMax: col.wipMax,
+        statusIds: col.statusIds,
+      }));
+    }
+    return [
+      { id: 'to-do', label: 'To Do', color: '#5E6C84', wipMax: 5, statusIds: [] },
+      { id: 'in-progress', label: 'In Progress', color: '#0052CC', wipMax: 5, statusIds: [] },
+      { id: 'done', label: 'Done', color: '#36B37E', statusIds: [] },
+    ];
+  }, [swimlanes, dynamicColumns]);
+
   if (error) {
     return (
       <div className="p-6 text-center">
@@ -193,98 +353,191 @@ export default function BoardPage() {
         </Button>
       </div>
 
-      {/* ── Group / Member filter row ── */}
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-[#DFE1E6] dark:border-gray-700 flex-wrap">
-        {/* Member multi-select */}
-        <div className="relative" ref={memberRef}>
-          <div className="flex items-center gap-1.5">
-            <Users size={14} className="text-[#5E6C84] dark:text-gray-400" />
-            <div
-              className="flex items-center flex-wrap gap-1 border border-[#DFE1E6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 min-w-[200px] px-2 py-1 min-h-[30px] cursor-text"
-              onClick={() => setShowMemberDropdown(true)}
-            >
-              {isAllMembers ? (
-                <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
-              ) : (
-                <>
-                  {selectedMembers.slice(0, 4).map(m => (
-                    <span key={m} className="inline-flex items-center gap-0.5 text-[10px] bg-[#E6F0FF] dark:bg-blue-900/40 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 rounded px-1.5 py-0.5">
-                      {memberDisplayNames[m] || m}
-                      <button onClick={e => { e.stopPropagation(); removeMember(m); }} className="hover:text-red-500">
-                        <X size={9} />
+      {/* ── Team / Member section ── */}
+      <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60">
+        {/* Header bar with collapse toggle */}
+        <button
+          onClick={() => setShowGroupSection(!showGroupSection)}
+          className="w-full flex items-center justify-between px-4 py-2 hover:bg-[#EBECF0] dark:hover:bg-gray-800 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Users size={15} className="text-[#0052CC]" />
+            <span className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">
+              Team
+            </span>
+            {!isAllMembers ? (
+              <span className="text-xs bg-[#0052CC] text-white px-2 py-0.5 rounded-full font-medium">
+                {selectedMembers.length}
+              </span>
+            ) : (
+              <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
+            )}
+          </div>
+          {showGroupSection ? <ChevronUp size={14} className="text-[#5E6C84]" /> : <ChevronDown size={14} className="text-[#5E6C84]" />}
+        </button>
+
+        {/* Expanded content */}
+        {showGroupSection && (
+          <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
+            {/* Member multi-select */}
+            <div className="relative" ref={memberRef}>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="flex items-center flex-wrap gap-1 border border-[#DFE1E6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 min-w-[200px] px-2 py-1 min-h-[30px] cursor-text"
+                  onClick={() => setShowMemberDropdown(true)}
+                >
+                  {isAllMembers ? (
+                    <span className="text-xs text-[#5E6C84] dark:text-gray-400">All Members</span>
+                  ) : (
+                    <>
+                      {selectedMembers.slice(0, 5).map(m => (
+                        <span key={m} className="inline-flex items-center gap-0.5 text-[10px] bg-[#E6F0FF] dark:bg-blue-900/40 text-[#0052CC] dark:text-blue-300 border border-[#0052CC]/20 rounded px-1.5 py-0.5">
+                          {memberDisplayNames[m] || m}
+                          <button onClick={e => { e.stopPropagation(); removeMember(m); }} className="hover:text-red-500">
+                            <X size={9} />
+                          </button>
+                        </span>
+                      ))}
+                      {selectedMembers.length > 5 && (
+                        <span className="text-[10px] text-[#5E6C84]">+{selectedMembers.length - 5} more</span>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); setSelectedMembers([]); }} className="text-[10px] text-[#5E6C84] hover:text-red-500 ml-auto">
+                        clear
                       </button>
-                    </span>
-                  ))}
-                  {selectedMembers.length > 4 && (
-                    <span className="text-[10px] text-[#5E6C84]">+{selectedMembers.length - 4} more</span>
+                    </>
                   )}
-                  <button onClick={e => { e.stopPropagation(); setSelectedMembers([]); }} className="text-[10px] text-[#5E6C84] hover:text-red-500 ml-auto">
-                    clear
+                </div>
+              </div>
+
+              {showMemberDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 max-h-64 overflow-y-auto">
+                  <div className="p-1.5 border-b border-[#DFE1E6] dark:border-gray-700">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={memberSearch}
+                      onChange={e => setMemberSearch(e.target.value)}
+                      placeholder="Search member..."
+                      className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+                    />
+                  </div>
+                  {memberSearch.length > 0 ? (
+                    memberResults.map(u => (
+                      <button
+                        key={u.name}
+                        type="button"
+                        onClick={() => addMember(u.name, u.displayName)}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between"
+                      >
+                        <span>{u.displayName}</span>
+                        {selectedMembers.includes(u.name) && <span className="text-[#0052CC]">✓</span>}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-xs text-[#5E6C84] px-3 py-4 text-center">Type to search members</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Group shortcut */}
+            <div className="relative" ref={groupRef}>
+              <button
+                onClick={() => setShowGroupDropdown(!showGroupDropdown)}
+                className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 flex items-center gap-1"
+              >
+                <Users size={11} />
+                Groups
+                <ChevronDown size={10} />
+              </button>
+              {showGroupDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40">
+                  <button onClick={selectAllMembers} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 border-b border-[#DFE1E6] dark:border-gray-700">
+                    🌐 All Members
                   </button>
-                </>
+                  {groups.map(g => (
+                    <button key={g.id} onClick={() => selectGroup(g)} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between">
+                      <span>{g.name}</span>
+                      <span className="text-[10px] text-[#5E6C84]">{g.members.length}</span>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
-
-          {showMemberDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40 max-h-64 overflow-y-auto">
-              <div className="p-1.5 border-b border-[#DFE1E6] dark:border-gray-700">
-                <input
-                  type="text"
-                  autoFocus
-                  value={memberSearch}
-                  onChange={e => setMemberSearch(e.target.value)}
-                  placeholder="Search member..."
-                  className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
-                />
-              </div>
-              {memberSearch.length > 0 ? (
-                memberResults.map(u => (
-                  <button
-                    key={u.name}
-                    type="button"
-                    onClick={() => addMember(u.name, u.displayName)}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between"
-                  >
-                    <span>{u.displayName}</span>
-                    {selectedMembers.includes(u.name) && <span className="text-[#0052CC]">✓</span>}
-                  </button>
-                ))
-              ) : (
-                <p className="text-xs text-[#5E6C84] px-3 py-4 text-center">Type to search members</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Group shortcut */}
-        <div className="relative" ref={groupRef}>
-          <button
-            onClick={() => setShowGroupDropdown(!showGroupDropdown)}
-            className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 flex items-center gap-1"
-          >
-            <Users size={11} />
-            Groups
-            <ChevronDown size={10} />
-          </button>
-          {showGroupDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-lg z-40">
-              <button onClick={selectAllMembers} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 border-b border-[#DFE1E6] dark:border-gray-700">
-                🌐 All Members
-              </button>
-              {groups.map(g => (
-                <button key={g.id} onClick={() => selectGroup(g)} className="w-full text-left px-3 py-2 text-xs hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 flex items-center justify-between">
-                  <span>{g.name}</span>
-                  <span className="text-[10px] text-[#5E6C84]">{g.members.length}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* ── Filter bar ── */}
       <BoardFilterBar filters={filters} onChange={setFilters} />
+
+      {/* ── Group-by ── */}
+      <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 p-2">
+        {/* Group by */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
+          {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
+            <button
+              key={g}
+              onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
+              className={cn(
+                'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                groupBy === g
+                  ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                  : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+              )}
+            >
+              {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+            </button>
+          ))}
+        </div>
+
+        {/* Sub group */}
+        {groupBy !== 'none' && (
+          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+            <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub</span>
+            {(['none', 'assignee', 'priority', 'type'] as const)
+              .filter(g => g !== groupBy)
+              .map((g) => (
+                <button
+                  key={g}
+                  onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                    subGroupBy === g
+                      ? 'bg-[#6554C0] text-white border-[#6554C0]'
+                      : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                  )}
+                >
+                  {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                </button>
+              ))}
+          </div>
+        )}
+
+        {/* Sub sub */}
+        {subGroupBy !== 'none' && (
+          <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+            <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
+            {(['none', 'priority', 'type'] as const)
+              .filter(g => g !== groupBy && g !== subGroupBy)
+              .map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setSubSubGroupBy(g)}
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                    subSubGroupBy === g
+                      ? 'bg-[#998DD9] text-white border-[#998DD9]'
+                      : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                  )}
+                >
+                  {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
 
       {/* Board */}
       <div className="flex-1 min-h-0">
@@ -294,6 +547,9 @@ export default function BoardPage() {
           moveCard={moveCard}
           onCardClick={setQuickViewKey}
           onIssueUpdate={() => mutate()}
+          swimlanes={swimlanes}
+          columnDefs={columnDefs}
+          groupBy={groupBy !== 'none' ? groupBy : undefined}
         />
       </div>
 

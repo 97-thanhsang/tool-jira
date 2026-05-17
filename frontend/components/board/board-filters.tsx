@@ -17,6 +17,10 @@ export interface BoardFilters {
   assigneeIn?: string[];       // 'currentUser()' | 'EMPTY' | username
   sprintIn?: string[];         // sprint names
   reporterIn?: string[];       // 'currentUser()' | username
+  // Period / Due date filter
+  period?: 'today' | 'week' | 'month' | 'year';
+  dateFrom?: string;           // yyyy-MM-dd (derived from period)
+  dateTo?: string;             // yyyy-MM-dd (derived from period)
   // Quick filters
   onlyMyIssues: boolean;
   recentlyUpdated: boolean;
@@ -159,6 +163,15 @@ export function applyFilters(
         }
       }
       if (!match) return false;
+    }
+
+    // ── Period / Due date filter ────────────────────────────────────
+    if (filters.period && filters.dateFrom) {
+      if (!issue.fields.duedate) return false;
+      const dueMs = new Date(issue.fields.duedate).getTime();
+      const fromMs = new Date(filters.dateFrom).getTime();
+      const toMs = filters.dateTo ? new Date(filters.dateTo).getTime() + 86_399_999 : fromMs + 86_399_999; // end of day
+      if (dueMs < fromMs || dueMs > toMs) return false;
     }
 
     // ── Quick filter: only my issues ────────────────────────────────
