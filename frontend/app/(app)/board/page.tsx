@@ -693,6 +693,7 @@ export default function BoardPage() {
           columnDefs={visibleColumnDefs}
           groupBy={groupBy !== 'none' ? groupBy : undefined}
           subGroupBy={subGroupBy !== 'none' ? subGroupBy : undefined}
+          subSubGroupBy={subSubGroupBy !== 'none' ? subSubGroupBy : undefined}
         />
       </div>
 

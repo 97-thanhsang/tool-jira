@@ -141,8 +141,10 @@ interface KanbanBoardProps {
   columnDefs?: BoardColumnDef[];
   /** Group-by field (for styled swimlane headers: icons, colors, avatars). */
   groupBy?: string;
-  /** Sub-group-by field (for styled sub-group headers: icons, colors, avatars). */
+  /** Sub-group-by field (for styled sub-group headers). */
   subGroupBy?: string;
+  /** Sub-sub-group-by field (for styled sub-sub-group headers). */
+  subSubGroupBy?: string;
 }
 
 /** Sub-group data within a column. */
@@ -224,6 +226,7 @@ interface DroppableColumnProps {
   subGroupBy?: string;
   collapsedSubGroups?: Set<string>;
   onToggleSubGroup?: (key: string) => void;
+  subSubGroupBy?: string;
 }
 
 function DroppableColumn({
@@ -238,6 +241,7 @@ function DroppableColumn({
   onIssueUpdate,
   subGroups,
   subGroupBy,
+  subSubGroupBy,
   collapsedSubGroups,
   onToggleSubGroup,
 }: DroppableColumnProps) {
@@ -372,17 +376,40 @@ function DroppableColumn({
                     sg.subSubGroups.map((ssg) => {
                       const ssgKey = ssg.label;
                       const isSsgCollapsed = collapsedSubGroups?.has(ssgKey) ?? false;
+                      const ssgFirstIssue = ssg.issues[0];
+                      let ssgAccentColor: string | undefined;
+                      if (ssgFirstIssue && subSubGroupBy) {
+                        switch (subSubGroupBy) {
+                          case 'priority':
+                            ssgAccentColor = ssgFirstIssue.fields.priority
+                              ? (PRIORITY_COLORS[ssgFirstIssue.fields.priority.name] ?? '#DFE1E6')
+                              : '#DFE1E6';
+                            break;
+                          case 'type':
+                            ssgAccentColor = TYPE_COLORS[ssgFirstIssue.fields.issuetype.name] ?? '#6B7280';
+                            break;
+                        }
+                      }
                       return (
                         <div key={ssg.label}>
                           <button
                             onClick={() => onToggleSubGroup?.(ssgKey)}
-                            className="w-full flex items-center gap-1.5 py-1 px-3 text-left hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors"
+                            className="w-full flex items-center gap-1.5 py-1.5 px-3 rounded-sm text-left hover:bg-[#EBECF0] dark:hover:bg-gray-700/50 transition-colors"
+                            style={ssgAccentColor ? { borderLeft: `3px solid ${ssgAccentColor}` } : undefined}
                           >
                             <ChevronDown size={8}
-                              className={cn('text-[#8993A4] flex-shrink-0 transition-transform', isSsgCollapsed && '-rotate-90')}
+                              className={cn('text-[#5E6C84] flex-shrink-0 transition-transform', isSsgCollapsed && '-rotate-90')}
                             />
-                            <span className="text-[10px] font-medium text-[#5E6C84] dark:text-gray-400">{ssg.label}</span>
-                            <span className="text-[9px] text-[#8993A4] ml-auto">{ssg.issues.length}</span>
+                            {ssgFirstIssue && subSubGroupBy === 'priority' && (
+                              <PriorityIcon priority={ssgFirstIssue.fields.priority} />
+                            )}
+                            {ssgFirstIssue && subSubGroupBy === 'type' && (
+                              ssgFirstIssue.fields.issuetype.iconUrl
+                                ? <Image src={ssgFirstIssue.fields.issuetype.iconUrl} alt={ssgFirstIssue.fields.issuetype.name} width={12} height={12} className="flex-shrink-0" unoptimized />
+                                : <span className="text-[9px] font-bold text-[#5E6C84] w-3 h-3 flex items-center justify-center">{ssgFirstIssue.fields.issuetype.name.charAt(0)}</span>
+                            )}
+                            <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-200">{ssg.label}</span>
+                            <span className="text-[10px] font-medium text-[#0052CC] dark:text-blue-400 bg-[#E6F0FF] dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full ml-auto">{ssg.issues.length}</span>
                           </button>
                           {!isSsgCollapsed && (
                             <SortableContext items={ssg.issues.map(i => i.id)} strategy={verticalListSortingStrategy}>
@@ -486,6 +513,7 @@ export function KanbanBoard({
   columnDefs,
   groupBy,
   subGroupBy,
+  subSubGroupBy,
 }: KanbanBoardProps) {
   const [activeIssue, setActiveIssue] = useState<JiraIssue | null>(null);
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
@@ -827,6 +855,7 @@ export function KanbanBoard({
                               onIssueUpdate={onIssueUpdate}
                               subGroups={subGroups}
                               subGroupBy={subGroupBy}
+                              subSubGroupBy={subSubGroupBy}
                               collapsedSubGroups={collapsedSubGroups}
                               onToggleSubGroup={toggleSubGroup}
                             />
