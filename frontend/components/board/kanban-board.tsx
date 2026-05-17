@@ -149,6 +149,13 @@ interface KanbanBoardProps {
 export interface SubGroup {
   label: string;
   issues: JiraIssue[];
+  subSubGroups?: SubSubGroup[];
+}
+
+/** Sub-sub-group data nested within a sub-group. */
+export interface SubSubGroup {
+  label: string;
+  issues: JiraIssue[];
 }
 
 /** Column data — flat issues or sub-grouped. */
@@ -290,7 +297,7 @@ function DroppableColumn({
             </div>
           ) : (
             subGroups.map((sg) => {
-              const sgKey = `${colId}:${sg.label}`;
+              const sgKey = sg.label;
               const isSgCollapsed = collapsedSubGroups?.has(sgKey) ?? false;
               const sgFirstIssue = sg.issues[0];
               let sgAccentColor: string | undefined;
@@ -360,16 +367,40 @@ function DroppableColumn({
                   </span>
                 </button>
                 {!isSgCollapsed && (
-                  <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                    {sg.issues.map((issue) => (
-                      <SortableCard
-                        key={issue.id}
-                        issue={issue}
-                        onCardClick={onCardClick}
-                        onIssueUpdate={onIssueUpdate}
-                      />
-                    ))}
-                  </SortableContext>
+                  sg.subSubGroups && sg.subSubGroups.length > 0 ? (
+                    // Sub-sub groups nested within this sub-group
+                    sg.subSubGroups.map((ssg) => {
+                      const ssgKey = ssg.label;
+                      const isSsgCollapsed = collapsedSubGroups?.has(ssgKey) ?? false;
+                      return (
+                        <div key={ssg.label}>
+                          <button
+                            onClick={() => onToggleSubGroup?.(ssgKey)}
+                            className="w-full flex items-center gap-1.5 py-1 px-3 text-left hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors"
+                          >
+                            <ChevronDown size={8}
+                              className={cn('text-[#8993A4] flex-shrink-0 transition-transform', isSsgCollapsed && '-rotate-90')}
+                            />
+                            <span className="text-[10px] font-medium text-[#5E6C84] dark:text-gray-400">{ssg.label}</span>
+                            <span className="text-[9px] text-[#8993A4] ml-auto">{ssg.issues.length}</span>
+                          </button>
+                          {!isSsgCollapsed && (
+                            <SortableContext items={ssg.issues.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                              {ssg.issues.map(issue => (
+                                <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
+                              ))}
+                            </SortableContext>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                      {sg.issues.map((issue) => (
+                        <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
+                      ))}
+                    </SortableContext>
+                  )
                 )}
               </div>
             );
@@ -471,7 +502,10 @@ export function KanbanBoard({
           if (colData && 'subGroups' in colData) {
             const colId = makeSwimlaneColId(lane.key, colLabel.toLowerCase().replace(/\s+/g, '-'));
             for (const sg of colData.subGroups) {
-              sgKeys.add(`${colId}:${sg.label}`);
+              sgKeys.add(sg.label);
+              if (sg.subSubGroups) {
+                for (const ssg of sg.subSubGroups) sgKeys.add(ssg.label);
+              }
             }
           }
         }

@@ -8,7 +8,8 @@ import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardFilterBar } from '@/components/board/board-filter-bar';
-import { QuickViewPanel } from '@/components/board/quick-view-panel';
+import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
+import type { SubSubGroup } from '@/components/board/kanban-board';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { JiraIssue, JiraTransition } from '@/types/jira';
@@ -276,12 +277,14 @@ export default function BoardPage() {
   // ── 3-level grouping for swimlanes ──────────────────────────────────────
   type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type';
   type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type';
+  type SubSubGroupBy = 'none' | 'priority' | 'type';
 
-  const [groupBy, setGroupBy]       = useState<GroupBy>('none');
-  const [subGroupBy, setSubGroupBy] = useState<SubGroupBy>('none');
+  const [groupBy, setGroupBy]             = useState<GroupBy>('none');
+  const [subGroupBy, setSubGroupBy]       = useState<SubGroupBy>('none');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<SubSubGroupBy>('none');
 
   // Get a field value from an issue for grouping
-  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy): { key: string; label: string } | null {
+  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy | SubSubGroupBy): { key: string; label: string } | null {
     if (field === 'none') return null;
     switch (field) {
       case 'project':
@@ -356,7 +359,23 @@ export default function BoardPage() {
           }
           const subGroups: SubGroup[] = Array.from(subMap.entries())
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([label, issues]) => ({ label, issues }));
+            .map(([label, sgIssues]) => {
+              // If sub-sub-group is active, further nest within each sub-group
+              let subSubGroups: SubSubGroup[] | undefined;
+              if (subSubGroupBy !== 'none') {
+                const ssMap = new Map<string, JiraIssue[]>();
+                for (const issue of sgIssues) {
+                  const ssg = getFieldValue(issue, subSubGroupBy);
+                  const ssk = ssg?.label ?? 'Other';
+                  if (!ssMap.has(ssk)) ssMap.set(ssk, []);
+                  ssMap.get(ssk)!.push(issue);
+                }
+                subSubGroups = Array.from(ssMap.entries())
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([ssLabel, ssIssues]) => ({ label: ssLabel, issues: ssIssues }));
+              }
+              return { label, issues: sgIssues, subSubGroups };
+            });
           columns[colName] = { subGroups };
         }
       } else {
@@ -385,7 +404,7 @@ export default function BoardPage() {
     }
 
     return result;
-  }, [groupBy, subGroupBy, filteredGrouped, dynamicColumns]);
+  }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
 
   const columnDefs = useMemo(() => {
     if (!swimlanes) return undefined;
@@ -463,9 +482,12 @@ export default function BoardPage() {
       {/* ── Team + Stats + Group-by (unified card) ── */}
       <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60">
         {/* Header */}
-        <button
+        <div
           onClick={() => setShowGroupSection(!showGroupSection)}
-          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#EBECF0] dark:hover:bg-gray-800 transition-colors"
+          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#EBECF0] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter') setShowGroupSection(!showGroupSection); }}
         >
           <div className="flex items-center gap-2">
             <Users size={16} className="text-[#0052CC]" />
@@ -478,10 +500,11 @@ export default function BoardPage() {
               <span className="text-xs bg-[#0052CC] text-white px-2 py-0.5 rounded-full font-medium">
                 {selectedMembers.length}
               </span>
-            )}
+              )}
           </div>
+
           {showGroupSection ? <ChevronUp size={14} className="text-[#5E6C84]" /> : <ChevronDown size={14} className="text-[#5E6C84]" />}
-        </button>
+        </div>
 
         {showGroupSection && (
           <>
@@ -594,7 +617,7 @@ export default function BoardPage() {
                 <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
                 {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
                   <button key={g}
-                    onClick={() => { setGroupBy(g); setSubGroupBy('none'); }}
+                    onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
                     className={cn(
                       'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
                       groupBy === g
@@ -615,11 +638,33 @@ export default function BoardPage() {
                     .filter(g => g !== groupBy)
                     .map((g) => (
                       <button key={g}
-                        onClick={() => { setSubGroupBy(g); }}
+                        onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
                         className={cn(
                           'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
                           subGroupBy === g
                             ? 'bg-[#6554C0] text-white border-[#6554C0]'
+                            : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
+                        )}
+                      >
+                        {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
+                      </button>
+                    ))}
+                </div>
+              )}
+
+              {/* Sub sub */}
+              {subGroupBy !== 'none' && (
+                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+                  <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
+                  {(['none', 'priority', 'type'] as const)
+                    .filter(g => g !== groupBy && g !== subGroupBy)
+                    .map((g) => (
+                      <button key={g}
+                        onClick={() => setSubSubGroupBy(g)}
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
+                          subSubGroupBy === g
+                            ? 'bg-[#998DD9] text-white border-[#998DD9]'
                             : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
                         )}
                       >
@@ -704,7 +749,7 @@ export default function BoardPage() {
       )}
 
       {/* Quick View */}
-      <QuickViewPanel issueKey={quickViewKey} onClose={() => setQuickViewKey(null)} />
+      <IssueDetailPanel issueKey={quickViewKey} onClose={() => setQuickViewKey(null)} onUpdated={() => mutate()} />
 
       {/* Toast */}
       {toast && (
