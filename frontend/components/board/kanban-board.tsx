@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, TrendingDown, ChevronDown, User } from 'lucide-react';
+import { AlertCircle, TrendingDown, ChevronDown, User, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 
 import type { JiraIssue } from '@/types/jira';
@@ -716,6 +716,9 @@ export const KanbanBoard = React.memo(function KanbanBoard({
                 case 'assignee':
                   accentColor = '#0052CC'; // blue for users
                   break;
+                case 'parent':
+                  accentColor = '#FF8B00'; // amber/orange for parent tasks
+                  break;
               }
             }
 
@@ -777,6 +780,11 @@ export const KanbanBoard = React.memo(function KanbanBoard({
                         style={{ backgroundColor: accentColor }}
                       >
                         {firstIssue.fields.project.key.charAt(0)}
+                      </span>
+                    )}
+                    {firstIssue && groupBy === 'parent' && (
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-[#FFF3E0] dark:bg-orange-900/30 text-[#FF8B00] flex-shrink-0">
+                        <ExternalLink size={11} />
                       </span>
                     )}
 

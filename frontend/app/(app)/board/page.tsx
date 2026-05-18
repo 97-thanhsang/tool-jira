@@ -377,9 +377,9 @@ export default function BoardPage() {
   }, [columns, typeColumnMap, filters.issuetypeIn]);
 
   // ── 3-level grouping for swimlanes ──────────────────────────────────────
-  type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type';
-  type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type';
-  type SubSubGroupBy = 'none' | 'priority' | 'type';
+  type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type' | 'parent';
+  type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type' | 'parent';
+  type SubSubGroupBy = 'none' | 'priority' | 'type' | 'parent';
 
   const [groupBy, setGroupBy]             = useState<GroupBy>('none');
   const [subGroupBy, setSubGroupBy]       = useState<SubGroupBy>('none');
@@ -400,6 +400,9 @@ export default function BoardPage() {
         return { key: issue.fields.priority?.name ?? 'None', label: issue.fields.priority?.name ?? 'None' };
       case 'type':
         return { key: issue.fields.issuetype.name, label: issue.fields.issuetype.name };
+      case 'parent':
+        if (issue.fields.parent) return { key: issue.fields.parent.key, label: `${issue.fields.parent.key} — ${issue.fields.parent.fields.summary}` };
+        return { key: '__no_parent', label: 'No Parent' };
       default:
         return null;
     }
@@ -432,8 +435,8 @@ export default function BoardPage() {
     }
 
     const sortedGroups = Array.from(groupMap.entries()).sort(([a], [b]) => {
-      if (a === '__unassigned' || a === 'None') return 1;
-      if (b === '__unassigned' || b === 'None') return -1;
+      if (a === '__unassigned' || a === 'None' || a === '__no_parent') return 1;
+      if (b === '__unassigned' || b === 'None' || b === '__no_parent') return -1;
       return a.localeCompare(b);
     });
 
@@ -762,7 +765,7 @@ export default function BoardPage() {
               {/* Group by */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
-                {(['none', 'project', 'assignee', 'priority', 'type'] as const).map((g) => (
+                {(['none', 'project', 'assignee', 'priority', 'type', 'parent'] as const).map((g) => (
                   <button key={g}
                     onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
                     className={cn(
@@ -781,7 +784,7 @@ export default function BoardPage() {
               {groupBy !== 'none' && (
                 <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
                   <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub group</span>
-                  {(['none', 'project', 'assignee', 'priority', 'type'] as const)
+                  {(['none', 'project', 'assignee', 'priority', 'type', 'parent'] as const)
                     .filter(g => g !== groupBy)
                     .map((g) => (
                       <button key={g}
@@ -803,7 +806,7 @@ export default function BoardPage() {
               {subGroupBy !== 'none' && (
                 <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
                   <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
-                  {(['none', 'priority', 'type'] as const)
+                  {(['none', 'priority', 'type', 'parent'] as const)
                     .filter(g => g !== groupBy && g !== subGroupBy)
                     .map((g) => (
                       <button key={g}
