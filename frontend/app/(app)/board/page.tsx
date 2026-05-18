@@ -2,13 +2,14 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api, getStoredUser } from '@/lib/api';
 import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns';
-import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X, Loader2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X, Loader2, Pencil, Check, Undo2, AlertTriangle } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
 import { BoardFilterBar } from '@/components/board/board-filter-bar';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
+import { BoardEditContext } from '@/contexts/board-edit';
 import type { SubSubGroup } from '@/components/board/kanban-board';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -58,8 +59,107 @@ export default function BoardPage() {
   // Filter state
   const [filters, setFilters] = useState<BoardFilters>({ ...EMPTY_FILTERS, period: 'month' });
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
 
-  // ── Group / member filter ────────────────────────────────────────────────
+  // ── Staged edit state ──────────────────────────────────────────────────
+  /** Per-issue draft changes: { [issueKey]: { [field]: newValue } } */
+  const [drafts, setDrafts] = useState<Record<string, Record<string, unknown>>>({});
+  /** Which cards have pencil toggled on (showing editable fields). */
+  const [editingCards, setEditingCards] = useState<Set<string>>(new Set());
+  /** Confirm-apply popup */
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const totalDraftFields = useMemo(
+    () => Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0),
+    [drafts],
+  );
+
+  function toggleEditing(issueKey: string) {
+    setEditingCards(prev => {
+      const next = new Set(prev);
+      if (next.has(issueKey)) { next.delete(issueKey); } else { next.add(issueKey); }
+      return next;
+    });
+  }
+
+  function onFieldDraft(issueKey: string, field: string, value: unknown) {
+    setDrafts(prev => ({
+      ...prev,
+      [issueKey]: { ...(prev[issueKey] || {}), [field]: value },
+    }));
+  }
+
+  function onFieldRevert(issueKey: string, field: string) {
+    setDrafts(prev => {
+      if (!prev[issueKey]) return prev;
+      const nextIssue = { ...prev[issueKey] };
+      delete nextIssue[field];
+      if (Object.keys(nextIssue).length === 0) {
+        const next = { ...prev };
+        delete next[issueKey];
+        return next;
+      }
+      return { ...prev, [issueKey]: nextIssue };
+    });
+  }
+
+  async function confirmApply() {
+    setApplying(true);
+    setApplyError(null);
+    const issuesWithErrors: string[] = [];
+    for (const [issueKey, issueDrafts] of Object.entries(drafts)) {
+      try {
+        const fields: Record<string, unknown> = {};
+        for (const [field, value] of Object.entries(issueDrafts)) {
+          switch (field) {
+            case 'status':
+              await api.post(`/issue/${issueKey}/transitions`, { transition: { id: value as string } });
+              break;
+            case 'assignee':
+              fields.assignee = value ? { name: value } : null;
+              break;
+            case 'priority':
+              fields.priority = { name: value };
+              break;
+            case 'summary':
+              fields.summary = String(value);
+              break;
+            case 'duedate':
+              fields.duedate = value || null;
+              break;
+            case 'originalEstimate': {
+              // value is in hours, convert to Jira format "Xh"
+              const h = Number(value);
+              fields.timetracking = { originalEstimate: `${h}h` };
+              break;
+            }
+            case 'timeSpent': {
+              // Log worklog: value is in hours
+              const hs = Number(value);
+              await api.post(`/issue/${issueKey}/worklog`, { timeSpent: `${hs}h` });
+              break;
+            }
+          }
+        }
+        if (Object.keys(fields).length > 0) {
+          await api.put(`/issue/${issueKey}`, { fields });
+        }
+      } catch {
+        issuesWithErrors.push(issueKey);
+      }
+    }
+    if (issuesWithErrors.length > 0) {
+      setApplyError(`Failed for: ${issuesWithErrors.join(', ')}. Other changes applied.`);
+    } else {
+      setDrafts({});
+      setEditingCards(new Set());
+      setConfirmOpen(false);
+      mutate();
+    }
+    setApplying(false);
+  }
   const [groups] = useState<TeamGroup[]>(defaultGroups);
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     () => defaultGroups[0]?.members ?? [],
@@ -124,6 +224,8 @@ export default function BoardPage() {
 
   const { grouped, dynamicColumns, isLoading, error, mutate, moveCard, toast } =
     useBoardState(statusColumnMap, boardJql);
+
+  const onIssueUpdate = useCallback(() => { mutate(); }, [mutate]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -467,16 +569,61 @@ export default function BoardPage() {
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
           My Board
         </h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => mutate()}
-          disabled={isLoading}
-          className="border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 shrink-0"
-        >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          <span className="ml-1.5">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditMode(false)}
+              className={cn(
+                'text-xs px-2.5 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                !editMode
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditMode(true)}
+              className={cn(
+                'text-xs px-2.5 py-1.5 font-medium transition-colors inline-flex items-center gap-1',
+                editMode
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              <Pencil size={12} /> Edit
+            </button>
+          </div>
+          {editMode && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setConfirmOpen(true)}
+              disabled={totalDraftFields === 0}
+              className={cn(
+                'shrink-0 transition-all',
+                totalDraftFields > 0
+                  ? 'bg-[#36B37E] hover:bg-[#2D9B6C] text-white'
+                  : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed',
+              )}
+            >
+              <Check size={14} />
+              <span className="ml-1">Confirm ({totalDraftFields})</span>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => mutate()}
+            disabled={isLoading}
+            className="border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 shrink-0"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <span className="ml-1.5">Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {/* ── Team + Stats + Group-by (unified card) ── */}
@@ -683,18 +830,20 @@ export default function BoardPage() {
 
       {/* Board */}
       <div className="flex-1 min-h-0">
-        <KanbanBoard
-          columns={visibleColumns}
-          isLoading={isLoading}
-          onMoveRequest={handleMoveRequest}
-          onCardClick={setQuickViewKey}
-          onIssueUpdate={() => mutate()}
-          swimlanes={swimlanes}
-          columnDefs={visibleColumnDefs}
-          groupBy={groupBy !== 'none' ? groupBy : undefined}
-          subGroupBy={subGroupBy !== 'none' ? subGroupBy : undefined}
-          subSubGroupBy={subSubGroupBy !== 'none' ? subSubGroupBy : undefined}
-        />
+        <BoardEditContext.Provider value={{ editMode, editingCards, drafts, onToggleEditing: toggleEditing, onFieldDraft, onFieldRevert }}>
+          <KanbanBoard
+            columns={visibleColumns}
+            isLoading={isLoading}
+            onMoveRequest={handleMoveRequest}
+            onCardClick={setQuickViewKey}
+            onIssueUpdate={onIssueUpdate}
+            swimlanes={swimlanes}
+            columnDefs={visibleColumnDefs}
+            groupBy={groupBy !== 'none' ? groupBy : undefined}
+            subGroupBy={subGroupBy !== 'none' ? subGroupBy : undefined}
+            subSubGroupBy={subSubGroupBy !== 'none' ? subSubGroupBy : undefined}
+          />
+        </BoardEditContext.Provider>
       </div>
 
       {/* ── Move confirmation popup ── */}
@@ -744,6 +893,73 @@ export default function BoardPage() {
                   No transitions available
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm apply popup ── */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40" onClick={() => !applying && setConfirmOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-lg shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#DFE1E6] dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">Review Changes</h3>
+              <button onClick={() => !applying && setConfirmOpen(false)} className="text-[#5E6C84] hover:text-[#172B4D] dark:hover:text-gray-200"><X size={16} /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {Object.entries(drafts).map(([issueKey, issueDrafts]) => (
+                <div key={issueKey} className="border border-[#DFE1E6] dark:border-gray-600 rounded p-3">
+                  <p className="text-xs font-semibold text-[#0052CC] dark:text-blue-400 mb-2">{issueKey}</p>
+                  <div className="space-y-1.5">
+                    {Object.entries(issueDrafts).map(([field, value]) => (
+                      <div key={field} className="flex items-center gap-2 text-xs">
+                        <span className="font-medium capitalize text-[#5E6C84] dark:text-gray-400 w-20">{field}</span>
+                        <span className="text-[#36B37E] dark:text-green-400 font-medium">
+                          {(() => {
+                            if (field === 'assignee') {
+                              if (value && typeof value === 'object' && 'displayName' in value) return String((value as Record<string, unknown>).displayName);
+                              return String(value ?? 'Unassigned');
+                            }
+                            if (field === 'status') {
+                              if (value && typeof value === 'object' && 'targetName' in value) return String((value as Record<string, unknown>).targetName);
+                              return String(value);
+                            }
+                            if (field === 'duedate') return String(value || 'cleared');
+                            if (field === 'originalEstimate') return `${String(value)}h`;
+                            if (field === 'timeSpent') return `${String(value)}h`;
+                            if (field === 'summary') {
+                              const s = String(value);
+                              return s.length > 60 ? s.slice(0, 60) + '…' : s;
+                            }
+                            if (Array.isArray(value)) return (value as string[]).join(', ') || 'cleared';
+                            return String(value);
+                          })()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {applyError && (
+                <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded p-2">
+                  <AlertTriangle size={12} /> {applyError}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 px-4 py-3 border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={confirmApply}
+                disabled={applying}
+                className="bg-[#36B37E] hover:bg-[#2D9B6C] text-white"
+              >
+                {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                <span className="ml-1">Apply All Changes</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={applying}>
+                Cancel
+              </Button>
             </div>
           </div>
         </div>

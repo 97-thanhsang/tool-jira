@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -198,14 +198,14 @@ function SortableCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={cn(
-        'cursor-grab active:cursor-grabbing touch-none',
-        isDragging && 'opacity-40',
-      )}
+      className={cn(isDragging && 'opacity-40')}
     >
-      <IssueCard issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
+      <IssueCard
+        issue={issue}
+        onCardClick={onCardClick}
+        onIssueUpdate={onIssueUpdate}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
   );
 }
@@ -224,9 +224,9 @@ interface DroppableColumnProps {
   onIssueUpdate?: () => void;
   subGroups?: SubGroup[];
   subGroupBy?: string;
+  subSubGroupBy?: string;
   collapsedSubGroups?: Set<string>;
   onToggleSubGroup?: (key: string) => void;
-  subSubGroupBy?: string;
 }
 
 function DroppableColumn({
@@ -414,7 +414,7 @@ function DroppableColumn({
                           {!isSsgCollapsed && (
                             <SortableContext items={ssg.issues.map(i => i.id)} strategy={verticalListSortingStrategy}>
                               {ssg.issues.map(issue => (
-                                <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
+                        <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
                               ))}
                             </SortableContext>
                           )}
@@ -424,7 +424,7 @@ function DroppableColumn({
                   ) : (
                     <SortableContext items={sg.issues.map((i) => i.id)} strategy={verticalListSortingStrategy}>
                       {sg.issues.map((issue) => (
-                        <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
+                                <SortableCard key={issue.id} issue={issue} onCardClick={onCardClick} onIssueUpdate={onIssueUpdate} />
                       ))}
                     </SortableContext>
                   )
@@ -502,7 +502,7 @@ function findIssueInSwimlanes(
 
 // ─── Main board ──────────────────────────────────────────────────────────────
 
-export function KanbanBoard({
+export const KanbanBoard = React.memo(function KanbanBoard({
   columns,
   isLoading,
   moveCard,
@@ -520,26 +520,32 @@ export function KanbanBoard({
   const [collapsedSubGroups, setCollapsedSubGroups] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
 
-  // Collapse all lanes and sub-groups by default when swimlanes change
+  // Track last known lane keys to avoid resetting collapse on same data
+  const prevLaneKeysRef = useRef<string[]>([]);
+
+  // Collapse all lanes and sub-groups by default when swimlane keys actually change
   useEffect(() => {
-    if (swimlanes) {
-      setCollapsedLanes(new Set(swimlanes.map(l => l.key)));
-      const sgKeys = new Set<string>();
-      for (const lane of swimlanes) {
-        for (const [colLabel, colData] of Object.entries(lane.columns)) {
-          if (colData && 'subGroups' in colData) {
-            const colId = makeSwimlaneColId(lane.key, colLabel.toLowerCase().replace(/\s+/g, '-'));
-            for (const sg of colData.subGroups) {
-              sgKeys.add(sg.label);
-              if (sg.subSubGroups) {
-                for (const ssg of sg.subSubGroups) sgKeys.add(ssg.label);
-              }
+    if (!swimlanes) return;
+    const currentKeys = swimlanes.map(l => l.key).sort();
+    const prevKeys = prevLaneKeysRef.current;
+    const keysChanged = currentKeys.length !== prevKeys.length || !currentKeys.every((k, i) => k === prevKeys[i]);
+    if (!keysChanged) return; // same lanes — keep user's collapse state
+    prevLaneKeysRef.current = currentKeys;
+    setCollapsedLanes(new Set(swimlanes.map(l => l.key)));
+    const sgKeys = new Set<string>();
+    for (const lane of swimlanes) {
+      for (const [colLabel, colData] of Object.entries(lane.columns)) {
+        if (colData && 'subGroups' in colData) {
+          for (const sg of colData.subGroups) {
+            sgKeys.add(sg.label);
+            if (sg.subSubGroups) {
+              for (const ssg of sg.subSubGroups) sgKeys.add(ssg.label);
             }
           }
         }
       }
-      setCollapsedSubGroups(sgKeys);
     }
+    setCollapsedSubGroups(sgKeys);
   }, [swimlanes]);
 
   function handleDragStart(event: DragStartEvent) {
@@ -938,4 +944,4 @@ export function KanbanBoard({
       </DragOverlay>
     </DndContext>
   );
-}
+});
