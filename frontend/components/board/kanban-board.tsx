@@ -933,9 +933,10 @@ export const KanbanBoard = React.memo(function KanbanBoard({
 
   // ─── Flat render (no swimlanes) ───────────────────────────────────────
 
-  // Dynamic grid: use inline style since Tailwind JIT can't handle dynamic classes
+  // Use fixed min column width when many columns (e.g. status mode) to enable horizontal scroll
+  const manyColumns = columns.length > 5;
   const gridStyle = {
-    gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+    gridTemplateColumns: `repeat(${columns.length}, minmax(${manyColumns ? '250px' : '0px'}, 1fr))`,
   };
 
   return (
@@ -945,7 +946,8 @@ export const KanbanBoard = React.memo(function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="grid gap-4 h-full" style={gridStyle}>
+      <div className={manyColumns ? 'overflow-x-auto' : ''}>
+        <div className="grid gap-4 h-full" style={gridStyle}>
         {columns.map((col) => (
           <DroppableColumn
             key={col.id}
@@ -960,6 +962,7 @@ export const KanbanBoard = React.memo(function KanbanBoard({
             onIssueUpdate={onIssueUpdate}
           />
         ))}
+      </div>
       </div>
 
       {/* Drag overlay — ghost card following the cursor */}

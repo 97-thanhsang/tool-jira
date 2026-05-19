@@ -318,11 +318,23 @@ export default function BoardPage() {
   // Unique status names from current data — used when groupBy='status' as columns
   const statusColumns = useMemo(() => {
     if (groupBy !== 'status') return undefined;
-    const names = new Set<string>();
+    const map = new Map<string, { name: string; color: string; category: string }>();
     for (const issues of Object.values(filteredGrouped)) {
-      for (const issue of issues) names.add(issue.fields.status.name);
+      for (const issue of issues) {
+        const name = issue.fields.status.name;
+        if (!map.has(name)) {
+          const cat = issue.fields.status.statusCategory?.key ?? 'new';
+          const color = cat === 'done' ? '#36B37E' : cat === 'indeterminate' ? '#0052CC' : '#5E6C84';
+          map.set(name, { name, color, category: cat });
+        }
+      }
     }
-    return Array.from(names).sort();
+    // Sort by workflow: To Do → In Progress → Done, then alphabetically within category
+    const catOrder: Record<string, number> = { new: 0, indeterminate: 1, done: 2 };
+    return Array.from(map.values()).sort((a, b) => {
+      const diff = (catOrder[a.category] ?? 0) - (catOrder[b.category] ?? 0);
+      return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    });
   }, [groupBy, filteredGrouped]);
 
   // Build dynamic BoardColumn array
@@ -333,13 +345,13 @@ export default function BoardPage() {
       for (const issues of Object.values(filteredGrouped)) {
         for (const issue of issues) allIssues.push(issue);
       }
-      return statusColumns.map(name => {
-        const issues = allIssues.filter(i => i.fields.status.name === name);
+      return statusColumns.map(sc => {
+        const issues = allIssues.filter(i => i.fields.status.name === sc.name);
         return {
-          id: name.toLowerCase().replace(/\s+/g, '-'),
-          label: name,
+          id: sc.name.toLowerCase().replace(/\s+/g, '-'),
+          label: sc.name,
           issues,
-          color: '#5E6C84',
+          color: sc.color,
           statusIds: [],
         };
       });
@@ -554,10 +566,10 @@ export default function BoardPage() {
   const columnDefs = useMemo(() => {
     // Status-as-columns: derive from unique status names in current data
     if (groupBy === 'status' && statusColumns) {
-      return statusColumns.map(name => ({
-        id: name.toLowerCase().replace(/\s+/g, '-'),
-        label: name,
-        color: '#5E6C84',
+      return statusColumns.map(sc => ({
+        id: sc.name.toLowerCase().replace(/\s+/g, '-'),
+        label: sc.name,
+        color: sc.color,
         statusIds: [],
       }));
     }
