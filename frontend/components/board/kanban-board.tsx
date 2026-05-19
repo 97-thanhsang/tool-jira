@@ -936,7 +936,7 @@ export const KanbanBoard = React.memo(function KanbanBoard({
   // Use fixed min column width when many columns (e.g. status mode) to enable horizontal scroll
   const manyColumns = columns.length > 5;
   const gridStyle = {
-    gridTemplateColumns: `repeat(${columns.length}, minmax(${manyColumns ? '480px' : '0px'}, 1fr))`,
+    gridTemplateColumns: `repeat(${columns.length}, minmax(${manyColumns ? '600px' : '0px'}, 1fr))`,
     gridTemplateRows: '1fr',
   };
 
@@ -958,8 +958,8 @@ export const KanbanBoard = React.memo(function KanbanBoard({
           .col-scroll::-webkit-scrollbar-thumb { background: #c1c7d0; border-radius: 2px; }
         `}</style>
       )}
-      <div className={manyColumns ? 'board-scroll overflow-x-auto pb-2 h-full' : ''}>
-        <div className="grid gap-4 h-full min-h-0" style={gridStyle}>
+      <div className={cn('flex-1 min-h-0 flex flex-col', manyColumns && 'board-scroll overflow-x-auto pb-2')}>
+        <div className="grid gap-4 flex-1 min-h-0" style={gridStyle}>
         {columns.map((col) => (
           <DroppableColumn
             key={col.id}

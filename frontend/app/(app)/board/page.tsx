@@ -772,7 +772,7 @@ export default function BoardPage() {
       <BoardFilterBar filters={filters} onChange={setFilters} />
 
       {/* Board */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col">
         <BoardEditContext.Provider value={{ editMode, editingCards, drafts, onToggleEditing: toggleEditing, onFieldDraft, onFieldRevert }}>
           <KanbanBoard
             columns={visibleColumns}
