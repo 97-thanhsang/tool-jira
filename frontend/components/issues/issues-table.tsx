@@ -58,11 +58,11 @@ export type ColumnKey =
   | 'assignee' | 'reporter' | 'sprint' | 'est' | 'logged'
   | 'labels' | 'due' | 'updated';
 
-export type GroupBy = 'none' | 'project' | 'status' | 'issuetype' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter';
+export type GroupBy = 'none' | 'project' | 'status' | 'type' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter';
 
 export type SubGroupBy =
   | 'none'
-  | 'issuetype'
+  | 'type'
   | 'status'
   | 'statusCategory'
   | 'assignee'
@@ -73,7 +73,7 @@ export type SubGroupBy =
 
 export type SubSubGroupBy =
   | 'none'
-  | 'issuetype'
+  | 'type'
   | 'status'
   | 'priority'
   | 'assignee'
@@ -121,23 +121,23 @@ const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker',
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
-  issuetype: 'Type', assignee: 'Assignee', reporter: 'Reporter',
+  type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
 };
 
 const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
-  issuetype: 'Type', assignee: 'Assignee', reporter: 'Reporter',
+  type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
 };
 
 /** SubGroupBy options that are compatible with a given GroupBy (excludes the same field) */
 function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
-  const all: SubGroupBy[] = ['none', 'status', 'priority', 'issuetype', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
+  const all: SubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
   // Map groupBy → SubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy, SubGroupBy[]>> = {
     status:    ['status', 'statusCategory'],
-    issuetype: ['issuetype'],
+    type: ['type'],
     assignee:  ['assignee'],
     priority:  ['priority'],
     sprint:    ['sprint'],
@@ -150,18 +150,18 @@ function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
 
 const SUB_SUB_GROUP_BY_LABELS: Record<SubSubGroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
-  issuetype: 'Type', assignee: 'Assignee', reporter: 'Reporter',
+  type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
 };
 
 /** SubSubGroupBy options compatible with a given GroupBy and SubGroupBy (excludes overlapping fields) */
 function getSubSubGroupOptions(groupBy: GroupBy, subGroupBy: SubGroupBy): SubSubGroupBy[] {
-  const all: SubSubGroupBy[] = ['none', 'status', 'priority', 'issuetype', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
+  const all: SubSubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
   // Map field → SubSubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy | SubGroupBy, SubSubGroupBy[]>> = {
     status:         ['status'],
     statusCategory: ['status', 'statusCategory'],
-    issuetype:      ['issuetype'],
+    type:      ['type'],
     assignee:       ['assignee'],
     priority:       ['priority'],
     sprint:         ['sprint'],
@@ -259,7 +259,7 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
         gKey = f.status.name;
         gLabel = f.status.name;
         break;
-      case 'issuetype':
+      case 'type':
         gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
       case 'sprint': {
         const s = resolveSprint(issue);
@@ -300,7 +300,7 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
     let gKey: string, gLabel: string;
 
     switch (subGroupBy) {
-      case 'issuetype':
+      case 'type':
         gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
       case 'status':
         gKey = f.status.name; gLabel = f.status.name; break;
@@ -349,7 +349,7 @@ function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): {
     let gKey: string, gLabel: string;
 
     switch (subSubGroupBy) {
-      case 'issuetype':
+      case 'type':
         gKey = f.issuetype.name; gLabel = f.issuetype.name; break;
       case 'status':
         gKey = f.status.name; gLabel = f.status.name; break;
@@ -1010,7 +1010,7 @@ function getGroupBorderColor(groupBy: GroupBy, issue?: JiraIssue): string {
       const cat = f.status.statusCategory.key;
       return cat === 'new' ? '#DFE1E6' : cat === 'indeterminate' ? '#0052CC' : '#006644';
     }
-    case 'issuetype': {
+    case 'type': {
       const colors: Record<string, string> = {
         Bug: '#EF4444', Task: '#3B82F6', Story: '#22C55E',
         Epic: '#A855F7', 'Sub-task': '#38BDF8',
@@ -1045,7 +1045,7 @@ function GroupHeaderContent({ groupBy, group, firstIssue }: {
   const f = firstIssue.fields;
 
   switch (groupBy) {
-    case 'issuetype':
+    case 'type':
       return (
         <div className="flex items-center gap-2 min-w-0">
           {f.issuetype.iconUrl
@@ -1111,7 +1111,7 @@ function SubGroupHeaderContent({ subGroupBy, sub, firstIssue }: {
   const f = firstIssue.fields;
 
   switch (subGroupBy) {
-    case 'issuetype':
+    case 'type':
       return (
         <div className="flex items-center gap-1.5 min-w-0">
           {f.issuetype.iconUrl
@@ -1177,7 +1177,7 @@ function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
   const f = firstIssue.fields;
 
   switch (subSubGroupBy) {
-    case 'issuetype':
+    case 'type':
       return (
         <div className="flex items-center gap-1 min-w-0">
           {f.issuetype.iconUrl

@@ -235,17 +235,6 @@ export default function WorklogPage() {
         </div>
       </div>
 
-      <GroupByControls
-        groupBy={groupBy}
-        subGroupBy="none"
-        subSubGroupBy="none"
-        onGroupByChange={setGroupBy}
-        onSubGroupByChange={() => {}}
-        onSubSubGroupByChange={() => {}}
-        groupByOptions={['none', 'Project', 'Type', 'Assignee', 'Status']}
-        levels={1}
-      />
-
       <GroupSelector
         groups={groups}
         selectedMembers={selectedMembers}
@@ -268,6 +257,17 @@ export default function WorklogPage() {
           </div>
         )}
       </GroupSelector>
+
+      <GroupByControls
+        groupBy={groupBy}
+        subGroupBy="none"
+        subSubGroupBy="none"
+        onGroupByChange={setGroupBy}
+        onSubGroupByChange={() => {}}
+        onSubSubGroupByChange={() => {}}
+        groupByOptions={['none', 'Project', 'Type', 'Assignee', 'Status']}
+        levels={1}
+      />
 
       {/* Filters */}
       <WorklogFilterBar

@@ -113,8 +113,8 @@ export default function IssuesPage() {
         onGroupByChange={setGroupBy}
         onSubGroupByChange={setSubGroupBy}
         onSubSubGroupByChange={setSubSubGroupBy}
-        groupByOptions={['none', 'project', 'status', 'issuetype', 'sprint', 'assignee', 'priority', 'statusCategory', 'reporter']}
-        subSubGroupByOptions={['none', 'priority', 'issuetype', 'status', 'sprint']}
+        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
+        subSubGroupByOptions={['none', 'priority', 'type', 'status', 'sprint']}
       />
 
       {error ? (

@@ -689,7 +689,7 @@ export default function BoardPage() {
         onGroupByChange={setGroupBy}
         onSubGroupByChange={setSubGroupBy}
         onSubSubGroupByChange={setSubSubGroupBy}
-        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent']}
+        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
         subSubGroupByOptions={['none', 'priority', 'type', 'parent']}
       />
 

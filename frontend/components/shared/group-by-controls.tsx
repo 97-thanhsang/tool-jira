@@ -26,6 +26,7 @@ function parseOptions(allOptions: readonly string[], exclude: string[]): string[
 function formatLabel(value: string): string {
   if (value === NONE_VALUE) return 'None';
   if (value === 'type' || value === 'issuetype') return 'Type';
+  if (value === 'statusCategory') return 'Status Category';
   return value;
 }
 
