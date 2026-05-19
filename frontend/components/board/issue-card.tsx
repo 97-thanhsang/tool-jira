@@ -375,6 +375,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             'text-[10px] font-bold px-1.5 py-0.5 rounded-sm flex-shrink-0 leading-none',
             STATUS_CATEGORY_COLORS[statusCat] ?? 'bg-gray-400 text-white',
             (editMode || editingCard) && 'cursor-pointer ring-1 ring-[#0052CC]/40',
+            editingCard && 'ring-2 ring-[#0052CC]',
             draft?.status != null && 'ring-2 ring-[#36B37E]',
           )}
           title={editingCard ? 'Change status' : issue.fields.status.name}
@@ -571,7 +572,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
       {/* Row 5: Labels + Components (only when has tags or popover open) */}
       {(hasTags || openPopover === 'labels') && (
       <div className="relative mb-2">
-        <button type="button" className={cn('w-full text-left cursor-pointer', draftHighlight('labels', draft))} onClick={(e) => handleTogglePopover('labels', e)} onPointerDown={e => e.stopPropagation()}>
+        <button type="button" className={cn('w-full text-left cursor-pointer', editingCard && 'ring-2 ring-[#0052CC]/30 rounded', draftHighlight('labels', draft))} onClick={(e) => handleTogglePopover('labels', e)} onPointerDown={e => e.stopPropagation()}>
           {hasTags && (
             <div className="flex items-center gap-1 flex-wrap">
               {components.map(c => (
@@ -617,7 +618,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             onPointerDown={editingCard ? (e) => e.stopPropagation() : undefined}
             className={cn(
               'flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm transition-colors',
-              editingCard ? 'cursor-pointer hover:ring-1 hover:ring-[#0052CC]/30' : 'cursor-default',
+              editingCard ? 'cursor-pointer ring-2 ring-[#0052CC]/30' : 'cursor-default',
               draftHighlight('priority', draft),
             )}
             style={{ color: PRIORITY_COLORS[displayPriority?.name ?? ''] ?? '#6B778C' }}
@@ -706,8 +707,8 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
               <div className="px-2 py-1">
                 <div className="relative">
                   <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5E6C84] dark:text-gray-500 pointer-events-none" />
-                  <input type="text" value={userQuery} onChange={e => setUserQuery(e.target.value)} placeholder="Search users..." autoFocus
-                    className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded pl-7 pr-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 placeholder:text-[#8993A4] focus:outline-none focus:border-[#0052CC]" />
+                    <input type="text" value={userQuery} onChange={e => setUserQuery(e.target.value)} placeholder="Search users..." 
+                      className="w-full text-xs border border-[#DFE1E6] dark:border-gray-600 rounded pl-7 pr-2 py-1.5 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 placeholder:text-[#8993A4] focus:outline-none focus:border-[#0052CC]" />
                 </div>
               </div>
               <div className="max-h-48 overflow-y-auto">
