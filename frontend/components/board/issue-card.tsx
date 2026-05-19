@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, X, Search, Loader2, GripVertical, Calendar, Pencil, Check, Undo2, Timer, Clock, User } from 'lucide-react';
+import { ExternalLink, X, Search, Loader2, GripVertical, Calendar, Pencil, Check, Undo2, Timer, Clock, User, UserCheck } from 'lucide-react';
 import type { JiraIssue, JiraUser, JiraPriority, JiraTransition } from '@/types/jira';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,9 @@ const issueTypeColors: Record<string, string> = {
 };
 
 const STATUS_CATEGORY_COLORS: Record<string, string> = {
-  new: 'bg-[#DFE1E6]', indeterminate: 'bg-[#0052CC]', done: 'bg-[#36B37E]',
+  new: 'bg-[#5E6C84] text-white',
+  indeterminate: 'bg-[#0052CC] text-white',
+  done: 'bg-[#00875A] text-white',
 };
 
 const PRIORITY_OPTIONS: Array<{ name: JiraPriority['name']; color: string }> = [
@@ -219,6 +221,15 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
     : estimated > 28800 ? 'text-[#FF8B00]'
     : 'text-[#5E6C84] dark:text-gray-400';
 
+  // ── Warning badge: explains WHY card has colored background ─────────
+  const warningBadge = ((): { label: string; color: string } | null => {
+    if (statusCat === 'done') return null;
+    if (dueDateStatus === 'overdue') return { label: 'Overdue', color: '#DE350B' };
+    if (estimated <= 0) return { label: 'Missing estimate', color: '#DE350B' };
+    if (dueDateStatus === 'due-soon') return { label: 'Due soon', color: '#FF8B00' };
+    return null;
+  })();
+
   const [optAssignee, setOptAssignee] = useState<JiraUser | null | undefined>(undefined);
   const [optPriority, setOptPriority] = useState<JiraPriority | undefined>(undefined);
   const [optLabels, setOptLabels] = useState<string[] | undefined>(undefined);
@@ -344,7 +355,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
     <div
       onClick={!editMode ? () => onCardClick?.(issue.key) : undefined}
       className={cn(
-        'group relative p-3 rounded-sm transition-all border border-[#DFE1E6] dark:border-gray-700 mb-2',
+        'group relative p-3 rounded-sm transition-all border border-[#DFE1E6] dark:border-gray-700 m-2',
         !editMode && 'cursor-pointer',
         editMode && 'ring-1 ring-[#0052CC]/25',
         editingCard && '!ring-2 !ring-[#36B37E] !border-[#36B37E]/40 bg-[#F0FFF4] dark:bg-green-950/20',
@@ -361,14 +372,16 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         <button
           type="button"
           className={cn(
-            'w-2 h-2 rounded-full flex-shrink-0',
-            STATUS_CATEGORY_COLORS[statusCat] ?? 'bg-gray-400',
+            'text-[10px] font-bold px-1.5 py-0.5 rounded-sm flex-shrink-0 leading-none',
+            STATUS_CATEGORY_COLORS[statusCat] ?? 'bg-gray-400 text-white',
             (editMode || editingCard) && 'cursor-pointer ring-1 ring-[#0052CC]/40',
             draft?.status != null && 'ring-2 ring-[#36B37E]',
           )}
           title={editingCard ? 'Change status' : issue.fields.status.name}
           onClick={(editMode || editingCard) ? (e) => handleToggleInlinePopover('status', e) : undefined}
-        />
+        >
+          {issue.fields.status.name}
+        </button>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${typeColor}`}>
           {issue.fields.issuetype?.name ?? ''}
         </span>
@@ -525,20 +538,8 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             issue.fields.duedate && <span>📅 {formatDate(issue.fields.duedate)}</span>
           )}
         </div>
-        {/* Est + Log — right side with icons */}
+        {/* Log + Est — right side with icons */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {editingCard ? (
-            <span className="inline-flex items-center gap-1">
-              <Timer size={10} />
-              <input type="number" min="0" step="0.5" defaultValue={estimated / 3600}
-                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); }}
-                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); } }}
-                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
-              {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
-            </span>
-          ) : (estimated > 0 && (
-            <span className={cn('inline-flex items-center gap-1', estColor)}><Timer size={10} /> {formatHours(estimated)}</span>
-          ))}
           {editingCard ? (
             <span className="inline-flex items-center gap-1">
               <Clock size={10} />
@@ -550,6 +551,18 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             </span>
           ) : (logged > 0 && (
             <span className={cn('inline-flex items-center gap-1', logColor)}><Clock size={10} /> {formatHours(logged)}</span>
+          ))}
+          {editingCard ? (
+            <span className="inline-flex items-center gap-1">
+              <Timer size={10} />
+              <input type="number" min="0" step="0.5" defaultValue={estimated / 3600}
+                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); }}
+                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); } }}
+                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
+              {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
+            </span>
+          ) : (estimated > 0 && (
+            <span className={cn('inline-flex items-center gap-1', estColor)}><Timer size={10} /> {formatHours(estimated)}</span>
           ))}
         </div>
       </div>
@@ -596,7 +609,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
       )}
 
       {/* Row 6: Footer */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 leading-none">
         <div className="relative">
           <button
             type="button"
@@ -634,6 +647,18 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           </span>
         )}
 
+        {warningBadge && (
+          <div className='relative'>
+              <span
+              className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm transition-colors"
+              style={{ color: warningBadge.color }}
+            >
+              {warningBadge.label}
+            </span>
+          </div>
+
+        )}
+
         {/* Reporter: avatar + name (push right) */}
         <div className="flex items-center gap-1 flex-shrink-0 ml-auto" title={`Reporter: ${issue.fields.reporter?.displayName}`}>
           <User size={10} className="text-[#8993A4]" />
@@ -653,12 +678,12 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
 
         {/* Assignee: avatar + name (clickable to edit) */}
         <div className="relative flex-shrink-0">
-          <button type="button" onClick={e => handleTogglePopover('assignee', e)} onPointerDown={e => e.stopPropagation()} className={cn(
+          <button type="button" onClick={editingCard ? (e) => handleTogglePopover('assignee', e) : undefined} onPointerDown={editingCard ? (e) => e.stopPropagation() : undefined} className={cn(
             'flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity',
             draftHighlight('assignee', draft),
             editingCard && 'ring-1 ring-[#0052CC]/30 rounded px-1',
           )}>
-            <User size={10} className="text-[#5E6C84]" />
+            <UserCheck size={10} className="text-[#5E6C84]" />
             {displayAssignee ? (
               <img src={displayAssignee.avatarUrls['24x24']} alt="" className="w-4 h-4 rounded-full border border-[#DFE1E6] dark:border-gray-600" />
             ) : (

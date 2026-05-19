@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { api, getStoredUser } from '@/lib/api';
 import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns';
-import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X, Loader2, Pencil, Check, Undo2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, Users, ChevronDown, ChevronUp, X, Loader2, Pencil, Check, Undo2, AlertTriangle, Info } from 'lucide-react';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
@@ -60,6 +60,7 @@ export default function BoardPage() {
   const [filters, setFilters] = useState<BoardFilters>({ ...EMPTY_FILTERS, period: 'month' });
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   // ── Staged edit state ──────────────────────────────────────────────────
   /** Per-issue draft changes: { [issueKey]: { [field]: newValue } } */
@@ -604,6 +605,45 @@ export default function BoardPage() {
               <Pencil size={12} /> Edit
             </button>
           </div>
+          {/* Legend popover */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setLegendOpen(v => !v)}
+              className={cn(
+                'text-xs px-2 py-1.5 rounded border transition-colors',
+                legendOpen
+                  ? 'bg-[#0052CC] text-white border-[#0052CC]'
+                  : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800',
+              )}
+              title="Legend"
+            >
+              <Info size={14} />
+            </button>
+            {legendOpen && (
+              <div className="absolute top-full right-0 mt-1 w-64 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-600 rounded shadow-xl z-50 p-3 text-[10px] text-[#5E6C84] dark:text-gray-400">
+                <div className="font-semibold text-[#172B4D] dark:text-gray-200 text-xs mb-1.5">Card Colors</div>
+                <div className="space-y-1 mb-2">
+                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#DE350B] flex-shrink-0" /> Overdue / Missing estimate</div>
+                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#FF8B00] flex-shrink-0" /> Due soon</div>
+                </div>
+                <div className="font-semibold text-[#172B4D] dark:text-gray-200 text-xs mb-1.5">Time Colors</div>
+                <div className="space-y-1 mb-2">
+                  <div>🕐 Log <span className="text-[#36B37E]">green</span> — on track</div>
+                  <div>🕐 Log <span className="text-[#FF8B00]">orange</span> — over est</div>
+                  <div>🕐 Log <span className="text-[#DE350B]">red</span> — {'>'}8h</div>
+                  <div>⏱ Est <span className="text-[#FF8B00]">orange</span> — {'>'}8h</div>
+                </div>
+                <div className="font-semibold text-[#172B4D] dark:text-gray-200 text-xs mb-1.5">Icons</div>
+                <div className="space-y-1">
+                  <div>👤 Reporter · 👤✓ Assignee</div>
+                  <div>✏️ Edit card · ⠿ Drag to move</div>
+                  <div>📅 Due date · 🕐 Created</div>
+                  <div>⏱ Estimate · 🕐 Logged time</div>
+                </div>
+              </div>
+            )}
+          </div>
           {editMode && (
             <Button
               variant="default"
@@ -804,7 +844,7 @@ export default function BoardPage() {
 
               {/* Sub group */}
               {groupBy !== 'none' && (
-                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+                <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 ml-4 border-t border-[#DFE1E6] dark:border-gray-600">
                   <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub group</span>
                   {(['none', 'project', 'assignee', 'priority', 'type', 'parent'] as const)
                     .filter(g => g !== groupBy)
@@ -826,7 +866,7 @@ export default function BoardPage() {
 
               {/* Sub sub */}
               {subGroupBy !== 'none' && (
-                <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-[#DFE1E6] dark:border-gray-600">
+                <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 ml-8 border-t border-[#DFE1E6] dark:border-gray-600">
                   <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
                   {(['none', 'priority', 'type', 'parent'] as const)
                     .filter(g => g !== groupBy && g !== subGroupBy)
