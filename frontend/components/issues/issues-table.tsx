@@ -288,7 +288,7 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
       case 'parent':
         if (f.parent) {
           gKey = f.parent.key;
-          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+          gLabel = f.parent.fields?.summary ? `${f.parent.key} — ${f.parent.fields.summary}` : f.parent.key;
         } else {
           gKey = '__no_parent';
           gLabel = 'No Parent';
@@ -346,7 +346,7 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
       case 'parent':
         if (f.parent) {
           gKey = f.parent.key;
-          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+          gLabel = f.parent.fields?.summary ? `${f.parent.key} — ${f.parent.fields.summary}` : f.parent.key;
         } else {
           gKey = '__no_parent';
           gLabel = 'No Parent';
@@ -404,7 +404,7 @@ function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): {
       case 'parent':
         if (f.parent) {
           gKey = f.parent.key;
-          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+          gLabel = f.parent.fields?.summary ? `${f.parent.key} — ${f.parent.fields.summary}` : f.parent.key;
         } else {
           gKey = '__no_parent';
           gLabel = 'No Parent';

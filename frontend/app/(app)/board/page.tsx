@@ -310,8 +310,41 @@ export default function BoardPage() {
     return result;
   }, [grouped, effectiveFilters, currentUsername]);
 
+  // ── 3-level grouping state ──────────────────────────────────────────────
+  const [groupBy, setGroupBy]             = useState<string>('none');
+  const [subGroupBy, setSubGroupBy]       = useState<string>('none');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
+
+  // Unique status names from current data — used when groupBy='status' as columns
+  const statusColumns = useMemo(() => {
+    if (groupBy !== 'status') return undefined;
+    const names = new Set<string>();
+    for (const issues of Object.values(filteredGrouped)) {
+      for (const issue of issues) names.add(issue.fields.status.name);
+    }
+    return Array.from(names).sort();
+  }, [groupBy, filteredGrouped]);
+
   // Build dynamic BoardColumn array
   const columns: BoardColumn[] = useMemo(() => {
+    // Status-as-columns: redistribute all issues by their actual status name
+    if (groupBy === 'status' && statusColumns) {
+      const allIssues: JiraIssue[] = [];
+      for (const issues of Object.values(filteredGrouped)) {
+        for (const issue of issues) allIssues.push(issue);
+      }
+      return statusColumns.map(name => {
+        const issues = allIssues.filter(i => i.fields.status.name === name);
+        return {
+          id: name.toLowerCase().replace(/\s+/g, '-'),
+          label: name,
+          issues,
+          color: '#5E6C84',
+          statusIds: [],
+        };
+      });
+    }
+
     if (dynamicColumns.length > 0) {
       return dynamicColumns.map(col => ({
         id: col.name.toLowerCase().replace(/\s+/g, '-'),
@@ -328,7 +361,7 @@ export default function BoardPage() {
       { id: 'in-progress', label: 'In Progress', issues: filteredGrouped['In Progress'] || [], color: '#0052CC', wipMax: 5, statusIds: [] },
       { id: 'done', label: 'Done', issues: filteredGrouped['Done'] || [], color: '#36B37E', statusIds: [] },
     ];
-  }, [dynamicColumns, filteredGrouped]);
+  }, [groupBy, statusColumns, dynamicColumns, filteredGrouped]);
 
   // ── Dynamic per-type column filtering ───────────────────────────────────
   // Build: issueType → Set<columnName> from ALL unfiltered issues
@@ -366,10 +399,6 @@ export default function BoardPage() {
     });
   }, [columns, typeColumnMap, filters.issuetypeIn]);
 
-  // ── 3-level grouping for swimlanes ──────────────────────────────────────
-  const [groupBy, setGroupBy]             = useState<string>('none');
-  const [subGroupBy, setSubGroupBy]       = useState<string>('none');
-  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
 
   // Helper: resolve sprint from issue fields
   function resolveSprint(issue: JiraIssue): { id: string; name: string } | null {
@@ -521,16 +550,6 @@ export default function BoardPage() {
 
     return result;
   }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
-
-  // Unique status names from current data — used when groupBy='status' as columns
-  const statusColumns = useMemo(() => {
-    if (groupBy !== 'status') return undefined;
-    const names = new Set<string>();
-    for (const issues of Object.values(filteredGrouped)) {
-      for (const issue of issues) names.add(issue.fields.status.name);
-    }
-    return Array.from(names).sort();
-  }, [groupBy, filteredGrouped]);
 
   const columnDefs = useMemo(() => {
     // Status-as-columns: derive from unique status names in current data

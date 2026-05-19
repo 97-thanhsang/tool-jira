@@ -232,7 +232,10 @@ export function WorklogCalendar({
                     className="w-full flex items-center gap-2 px-3 py-1.5 bg-[#FAFBFC] dark:bg-gray-800/80 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors text-left"
                   >
                     <ChevronDown size={12} className={cn('text-[#5E6C84] dark:text-gray-400 transition-transform', !isOpen && '-rotate-90')} />
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lane.color }} />
+                    {/* Color dot — hidden when icon/avatar/priority provide their own visual */}
+                    {!(lane.avatarUrl || lane.iconUrl || lane.priorityName) && (
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lane.color }} />
+                    )}
                     {/* Rich group content */}
                     {lane.avatarUrl ? (
                       <img src={lane.avatarUrl} alt="" width={20} height={20} className="rounded-full flex-shrink-0" />
