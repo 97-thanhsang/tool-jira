@@ -89,3 +89,18 @@ export async function updateWorklog(
 export async function deleteWorklog(issueKey: string, worklogId: string) {
   return api.delete(`/issue/${issueKey}/worklog/${worklogId}`);
 }
+
+/** Fetch all worklogs for today (authored by the given user). */
+export async function fetchTodayWorklogs(username: string): Promise<WorklogEntry[]> {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const result = await fetchWorklogs(username, todayStr, todayStr);
+  return result.entries;
+}
+
+/** Fetch total logged seconds (lifetime) for a single issue via its worklog endpoint. */
+export async function fetchIssueWorklogTotal(issueKey: string): Promise<number> {
+  const r = await api.get<{ worklogs: Array<{ timeSpentSeconds: number }> }>(
+    `/issue/${issueKey}/worklog`,
+  );
+  return r.data.worklogs.reduce((s, w) => s + w.timeSpentSeconds, 0);
+}

@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { JiraIssue, JiraTransition } from '@/types/jira';
 import type { TeamGroup } from '@/types/jira';
+import { validateWorklogRules } from '@/lib/worklog-validation';
+import { fetchTodayWorklogs, deleteWorklog, addWorklog } from '@/lib/worklog-api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +116,24 @@ export default function BoardPage() {
   async function confirmApply() {
     setApplying(true);
     setApplyError(null);
+
+    // Pre-fetch today's worklogs once for worklog-rule validation
+    let todayWorklogs: Awaited<ReturnType<typeof fetchTodayWorklogs>> = [];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (currentUsername) {
+      try {
+        todayWorklogs = await fetchTodayWorklogs(currentUsername);
+      } catch { /* validation will just skip pre-fetched data */ }
+    }
+
+    // Build flat issue lookup keyed by issueKey for lifetime total
+    const issueByKey = new Map<string, JiraIssue>();
+    for (const [, issues] of Object.entries(grouped)) {
+      for (const issue of issues) {
+        issueByKey.set(issue.key, issue);
+      }
+    }
+
     const issuesWithErrors: string[] = [];
     for (const [issueKey, issueDrafts] of Object.entries(drafts)) {
       try {
@@ -142,9 +162,38 @@ export default function BoardPage() {
               break;
             }
             case 'timeSpent': {
-              // Log worklog: value is in hours
+              // Overwrite worklog for today on the correct sub-task
               const hs = Number(value);
-              await api.post(`/issue/${issueKey}/worklog`, { timeSpent: `${hs}h` });
+              if (hs <= 0) break;
+
+              const issue = issueByKey.get(issueKey);
+              const lifetimeTotal = issue?.fields.timetracking?.timeSpentSeconds ?? 0;
+              const todayForIssue = todayWorklogs.filter(e => e.issueKey === issueKey);
+
+              const validation = validateWorklogRules({
+                issueKey,
+                newHoursRequested: hs,
+                todayWorklogsForIssue: todayForIssue,
+                allTodayWorklogs: todayWorklogs,
+                lifetimeTotalSeconds: lifetimeTotal,
+              });
+
+              if (!validation.valid) {
+                issuesWithErrors.push(`${issueKey}: ${validation.error}`);
+                break;
+              }
+
+              // Delete existing today worklogs for this sub-task (overwrite model)
+              for (const wl of todayForIssue) {
+                await deleteWorklog(issueKey, wl.id);
+              }
+              // Create new worklog with correct started time and seconds
+              await addWorklog({
+                issueKey,
+                timeSpentSeconds: Math.round(hs * 3600),
+                comment: '',
+                started: validation.started!,
+              });
               break;
             }
           }
