@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ExternalLink, X, Search, Loader2, GripVertical, Calendar, Pencil, Check, Undo2 } from 'lucide-react';
+import { ExternalLink, X, Search, Loader2, GripVertical, Calendar, Pencil, Check, Undo2, Timer, Clock, User } from 'lucide-react';
 import type { JiraIssue, JiraUser, JiraPriority, JiraTransition } from '@/types/jira';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,10 @@ const PRIORITY_OPTIONS: Array<{ name: JiraPriority['name']; color: string }> = [
   { name: 'Lowest', color: '#2684FF' }, { name: 'Blocker', color: '#DE350B' },
   { name: 'Minor', color: '#6B778C' },
 ];
+
+const PRIORITY_COLORS: Record<string, string> = Object.fromEntries(
+  PRIORITY_OPTIONS.map(p => [p.name, p.color]),
+);
 
 const LABEL_COLORS = ['#0052CC', '#36B37E', '#DE350B', '#FF8B00', '#6554C0', '#008DA6', '#E774BB', '#FF5630', '#00B8D9', '#8777D9'];
 
@@ -206,6 +210,15 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
   const hasTimeTracking = !!(estimated || logged);
   const progress = estimated > 0 ? Math.min(logged / estimated, 1) : 0;
 
+  const logColor = logged <= 0 ? 'text-gray-300 dark:text-gray-600'
+    : logged > 28800 ? 'text-[#DE350B]'
+    : estimated > 0 && logged > estimated ? 'text-[#FF8B00]'
+    : 'text-[#36B37E]';
+
+  const estColor = estimated <= 0 ? 'text-gray-300 dark:text-gray-600'
+    : estimated > 28800 ? 'text-[#FF8B00]'
+    : 'text-[#5E6C84] dark:text-gray-400';
+
   const [optAssignee, setOptAssignee] = useState<JiraUser | null | undefined>(undefined);
   const [optPriority, setOptPriority] = useState<JiraPriority | undefined>(undefined);
   const [optLabels, setOptLabels] = useState<string[] | undefined>(undefined);
@@ -331,7 +344,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
     <div
       onClick={!editMode ? () => onCardClick?.(issue.key) : undefined}
       className={cn(
-        'group relative p-3 rounded-sm transition-all border border-[#DFE1E6] dark:border-gray-700',
+        'group relative p-3 rounded-sm transition-all border border-[#DFE1E6] dark:border-gray-700 mb-2',
         !editMode && 'cursor-pointer',
         editMode && 'ring-1 ring-[#0052CC]/25',
         editingCard && '!ring-2 !ring-[#36B37E] !border-[#36B37E]/40 bg-[#F0FFF4] dark:bg-green-950/20',
@@ -357,7 +370,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           onClick={(editMode || editingCard) ? (e) => handleToggleInlinePopover('status', e) : undefined}
         />
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm ${typeColor}`}>
-          {issueTypeLabel(issue.fields.issuetype?.name ?? '')}
+          {issue.fields.issuetype?.name ?? ''}
         </span>
         {draft?.status != null && (
           <span className={cn('text-[10px] font-medium', draftHighlight('status', draft))}>
@@ -381,6 +394,15 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             ↳ {issue.fields.parent.key}
           </button>
         )}
+        {/* Project — shown after parent key */}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onCardClick?.(issue.key); }}
+          className="inline-flex items-center gap-0.5 text-[10px] text-[#5E6C84] dark:text-gray-400 hover:text-[#0052CC] dark:hover:text-blue-400 hover:underline truncate max-w-[100px]"
+          title={issue.fields.project.name}
+        >
+          {issue.fields.project.key}
+        </button>
         {/* Pencil icon — toggle edit mode for this card */}
         {editMode && (
           <button
@@ -471,21 +493,23 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
               className={cn('h-full rounded-full transition-all', progress >= 1 ? 'bg-[#36B37E]' : 'bg-[#0052CC]')}
               style={{ width: `${Math.min(progress * 100, 100)}%` }}
             />
-          </div>
         </div>
+      </div>
       )}
 
-      {/* Row 4: Sprint + Created date */}
-      {(sprintName || issue.fields.created) && (
-        <div className="flex items-center gap-3 text-[10px] text-[#5E6C84] dark:text-gray-400 mb-2">
+      {/* Row 4: Sprint + Created date + Due date (left) | Est + Log (right) */}
+      {(sprintName || issue.fields.created || issue.fields.duedate || estimated > 0 || logged > 0) && (
+      <div className="flex items-center justify-between gap-2 text-[10px] text-[#5E6C84] dark:text-gray-400 mb-2">
+        <div className="flex items-center gap-3">
           {sprintName && <span>📅 {sprintName}</span>}
           {issue.fields.created && <span>🕐 {formatDate(issue.fields.created)}</span>}
-          {(editMode || editingCard) && (
+          {/* Due date — always visible, only editable when pencil active */}
+          {editingCard ? (
             <div className="relative">
               <button type="button" onClick={(e) => handleToggleInlinePopover('duedate', e)} className={cn('inline-flex items-center gap-1 text-[#0052CC] hover:underline', draftHighlight('duedate', draft))}>
                 <Calendar size={10} /> {draft?.duedate !== undefined ? (draft.duedate ? formatDate(draft.duedate as string) : 'None') : (issue.fields.duedate ? formatDate(issue.fields.duedate) : 'Set due')}
               </button>
-              {draft?.duedate !== undefined && editingCard && (
+              {draft?.duedate !== undefined && (
                 <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('duedate')} />
               )}
               {openPopover === 'duedate' && (
@@ -497,8 +521,38 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
                 </div>
               )}
             </div>
+          ) : (
+            issue.fields.duedate && <span>📅 {formatDate(issue.fields.duedate)}</span>
           )}
         </div>
+        {/* Est + Log — right side with icons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {editingCard ? (
+            <span className="inline-flex items-center gap-1">
+              <Timer size={10} />
+              <input type="number" min="0" step="0.5" defaultValue={estimated / 3600}
+                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); }}
+                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); } }}
+                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
+              {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
+            </span>
+          ) : (estimated > 0 && (
+            <span className={cn('inline-flex items-center gap-1', estColor)}><Timer size={10} /> {formatHours(estimated)}</span>
+          ))}
+          {editingCard ? (
+            <span className="inline-flex items-center gap-1">
+              <Clock size={10} />
+              <input type="number" min="0" step="0.5" defaultValue={logged / 3600}
+                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFieldDraft?.('timeSpent', v); }}
+                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFieldDraft?.('timeSpent', v); } }}
+                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
+              {draft?.timeSpent != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('timeSpent')} />}
+            </span>
+          ) : (logged > 0 && (
+            <span className={cn('inline-flex items-center gap-1', logColor)}><Clock size={10} /> {formatHours(logged)}</span>
+          ))}
+        </div>
+      </div>
       )}
 
       {/* Row 5: Labels + Components (only when has tags or popover open) */}
@@ -544,8 +598,19 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
       {/* Row 6: Footer */}
       <div className="flex items-center gap-2">
         <div className="relative">
-          <button type="button" onClick={e => handleTogglePopover('priority', e)} onPointerDown={e => e.stopPropagation()} className={cn('flex-shrink-0 cursor-pointer', draftHighlight('priority', draft))} title={displayPriority?.name ?? 'No priority'}>
-            <PriorityIcon priority={displayPriority} />
+          <button
+            type="button"
+            onClick={editingCard ? (e) => handleTogglePopover('priority', e) : undefined}
+            onPointerDown={editingCard ? (e) => e.stopPropagation() : undefined}
+            className={cn(
+              'flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-sm transition-colors',
+              editingCard ? 'cursor-pointer hover:ring-1 hover:ring-[#0052CC]/30' : 'cursor-default',
+              draftHighlight('priority', draft),
+            )}
+            style={{ color: PRIORITY_COLORS[displayPriority?.name ?? ''] ?? '#6B778C' }}
+            title={displayPriority?.name ?? 'No priority'}
+          >
+            {displayPriority?.name ?? '—'}
           </button>
           {draft?.priority != null && editingCard && (
             <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('priority')} />
@@ -569,47 +634,9 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           </span>
         )}
 
-        {editingCard ? (
-          <span className="inline-flex items-center gap-1 flex-shrink-0">
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              defaultValue={estimated / 3600}
-              onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); }}
-              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); } }}
-              placeholder="est h"
-              className="w-11 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]"
-            />h est
-            {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
-          </span>
-        ) : (estimated > 0 && (
-          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 flex-shrink-0">est {formatHours(estimated)}</span>
-        ))}
-        {editingCard ? (
-          <span className="inline-flex items-center gap-1 flex-shrink-0">
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              defaultValue={logged / 3600}
-              onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFieldDraft?.('timeSpent', v); }}
-              onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFieldDraft?.('timeSpent', v); } }}
-              placeholder="log h"
-              className="w-11 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]"
-            />h log
-            {draft?.timeSpent != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('timeSpent')} />}
-          </span>
-        ) : (logged > 0 && (
-          <span className="text-[10px] text-[#36B37E] dark:text-green-400 flex-shrink-0">log {formatHours(logged)}</span>
-        ))}
-
-        <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate flex-1">
-          {issue.fields.project?.name}
-        </span>
-
-        {/* Reporter: avatar + name */}
-        <div className="flex items-center gap-1 flex-shrink-0" title={`Reporter: ${issue.fields.reporter?.displayName}`}>
+        {/* Reporter: avatar + name (push right) */}
+        <div className="flex items-center gap-1 flex-shrink-0 ml-auto" title={`Reporter: ${issue.fields.reporter?.displayName}`}>
+          <User size={10} className="text-[#8993A4]" />
           {issue.fields.reporter?.avatarUrls?.['24x24'] ? (
             <img src={issue.fields.reporter.avatarUrls['24x24']} alt="" className="w-4 h-4 rounded-full" />
           ) : (
@@ -631,6 +658,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             draftHighlight('assignee', draft),
             editingCard && 'ring-1 ring-[#0052CC]/30 rounded px-1',
           )}>
+            <User size={10} className="text-[#5E6C84]" />
             {displayAssignee ? (
               <img src={displayAssignee.avatarUrls['24x24']} alt="" className="w-4 h-4 rounded-full border border-[#DFE1E6] dark:border-gray-600" />
             ) : (

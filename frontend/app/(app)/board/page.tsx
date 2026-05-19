@@ -105,6 +105,11 @@ export default function BoardPage() {
     });
   }
 
+  function cancelAllDrafts() {
+    setDrafts({});
+    setEditingCards(new Set());
+  }
+
   async function confirmApply() {
     setApplying(true);
     setApplyError(null);
@@ -614,6 +619,23 @@ export default function BoardPage() {
             >
               <Check size={14} />
               <span className="ml-1">Confirm ({totalDraftFields})</span>
+            </Button>
+          )}
+          {editMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={cancelAllDrafts}
+              disabled={totalDraftFields === 0}
+              className={cn(
+                'shrink-0 transition-all border-[#DFE1E6] dark:border-gray-600',
+                totalDraftFields > 0
+                  ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300'
+                  : 'text-gray-400 cursor-not-allowed',
+              )}
+            >
+              <X size={14} />
+              <span className="ml-1">Cancel</span>
             </Button>
           )}
           <Button
