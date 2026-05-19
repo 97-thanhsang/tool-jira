@@ -5,6 +5,7 @@ import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear,
 import { RefreshCw, CheckCircle2, XCircle, X, Loader2, Pencil, Check, Undo2, AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
+import { GroupByControls } from '@/components/shared/group-by-controls';
 import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
@@ -366,16 +367,12 @@ export default function BoardPage() {
   }, [columns, typeColumnMap, filters.issuetypeIn]);
 
   // ── 3-level grouping for swimlanes ──────────────────────────────────────
-  type GroupBy      = 'none' | 'project' | 'assignee' | 'priority' | 'type' | 'parent';
-  type SubGroupBy   = 'none' | 'project' | 'assignee' | 'priority' | 'type' | 'parent';
-  type SubSubGroupBy = 'none' | 'priority' | 'type' | 'parent';
-
-  const [groupBy, setGroupBy]             = useState<GroupBy>('none');
-  const [subGroupBy, setSubGroupBy]       = useState<SubGroupBy>('none');
-  const [subSubGroupBy, setSubSubGroupBy] = useState<SubSubGroupBy>('none');
+  const [groupBy, setGroupBy]             = useState<string>('none');
+  const [subGroupBy, setSubGroupBy]       = useState<string>('none');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
 
   // Get a field value from an issue for grouping
-  function getFieldValue(issue: JiraIssue, field: GroupBy | SubGroupBy | SubSubGroupBy): { key: string; label: string } | null {
+  function getFieldValue(issue: JiraIssue, field: string): { key: string; label: string } | null {
     if (field === 'none') return null;
     switch (field) {
       case 'project':
@@ -685,72 +682,16 @@ export default function BoardPage() {
         onSelectAllMembers={selectAllMembers}
       />
 
-      {/* ── Group-by controls ── */}
-      <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60">
-        <div className="px-4 pb-3 pt-2">
-          {/* Group by */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
-            {(['none', 'project', 'assignee', 'priority', 'type', 'parent'] as const).map((g) => (
-              <button key={g}
-                onClick={() => { setGroupBy(g); setSubGroupBy('none'); setSubSubGroupBy('none'); }}
-                className={cn(
-                  'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                  groupBy === g
-                    ? 'bg-[#0052CC] text-white border-[#0052CC]'
-                    : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                )}
-              >
-                {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-              </button>
-            ))}
-          </div>
-
-          {/* Sub group */}
-          {groupBy !== 'none' && (
-            <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 ml-4 border-t border-[#DFE1E6] dark:border-gray-600">
-              <span className="text-xs font-medium text-[#6554C0] dark:text-purple-400 w-16">Sub group</span>
-              {(['none', 'project', 'assignee', 'priority', 'type', 'parent'] as const)
-                .filter(g => g !== groupBy)
-                .map((g) => (
-                  <button key={g}
-                    onClick={() => { setSubGroupBy(g); setSubSubGroupBy('none'); }}
-                    className={cn(
-                      'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                      subGroupBy === g
-                        ? 'bg-[#6554C0] text-white border-[#6554C0]'
-                        : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                    )}
-                  >
-                    {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-                  </button>
-                ))}
-            </div>
-          )}
-
-          {/* Sub sub */}
-          {subGroupBy !== 'none' && (
-            <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5 ml-8 border-t border-[#DFE1E6] dark:border-gray-600">
-              <span className="text-xs font-medium text-[#998DD9] dark:text-purple-300 w-16">Sub sub</span>
-              {(['none', 'priority', 'type', 'parent'] as const)
-                .filter(g => g !== groupBy && g !== subGroupBy)
-                .map((g) => (
-                  <button key={g}
-                    onClick={() => setSubSubGroupBy(g)}
-                    className={cn(
-                      'text-xs px-2 py-0.5 rounded border transition-colors capitalize',
-                      subSubGroupBy === g
-                        ? 'bg-[#998DD9] text-white border-[#998DD9]'
-                        : 'border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-white dark:hover:bg-gray-700',
-                    )}
-                  >
-                    {g === 'none' ? 'None' : g === 'type' ? 'Type' : g}
-                  </button>
-                ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <GroupByControls
+        groupBy={groupBy}
+        subGroupBy={subGroupBy}
+        subSubGroupBy={subSubGroupBy}
+        onGroupByChange={setGroupBy}
+        onSubGroupByChange={setSubGroupBy}
+        onSubSubGroupByChange={setSubSubGroupBy}
+        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent']}
+        subSubGroupByOptions={['none', 'priority', 'type', 'parent']}
+      />
 
 
       <BoardFilterBar filters={filters} onChange={setFilters} />

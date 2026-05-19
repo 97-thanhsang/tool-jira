@@ -14,6 +14,7 @@ import type { WorklogEntry } from '@/types/jira';
 import { cn } from '@/lib/utils';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES, type TeamGroup } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
+import { GroupByControls } from '@/components/shared/group-by-controls';
 
 // ─── Page component ──────────────────────────────────────────────────────────
 
@@ -24,6 +25,14 @@ export default function WorklogPage() {
 
   // Filters
   const [filters, setFilters] = useState<WorklogFilterBarFilters>({ ...EMPTY_WORKLOG_FILTERS, period: 'month' });
+  const [groupBy, setGroupBy] = useState<string>('none');
+
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      groupBy: groupBy === 'none' ? undefined : groupBy as 'Project' | 'Type' | 'Assignee' | 'Status',
+    }));
+  }, [groupBy]);
 
   // ── Group / member filter ────────────────────────────────────────────────
   const [groups] = useState<TeamGroup[]>(DEFAULT_GROUPS);
@@ -226,6 +235,17 @@ export default function WorklogPage() {
         </div>
       </div>
 
+      <GroupByControls
+        groupBy={groupBy}
+        subGroupBy="none"
+        subSubGroupBy="none"
+        onGroupByChange={setGroupBy}
+        onSubGroupByChange={() => {}}
+        onSubSubGroupByChange={() => {}}
+        groupByOptions={['none', 'Project', 'Type', 'Assignee', 'Status']}
+        levels={1}
+      />
+
       <GroupSelector
         groups={groups}
         selectedMembers={selectedMembers}
@@ -253,6 +273,7 @@ export default function WorklogPage() {
       <WorklogFilterBar
         filters={filters}
         onChange={setFilters}
+        hideGroupBy
       />
 
       {/* Calendar */}

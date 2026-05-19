@@ -34,6 +34,7 @@ export const EMPTY_WORKLOG_FILTERS: WorklogFilterBarFilters = {
 interface WorklogFilterBarProps {
   filters: WorklogFilterBarFilters;
   onChange: (f: WorklogFilterBarFilters) => void;
+  hideGroupBy?: boolean;
 }
 
 // ─── Style constants ──────────────────────────────────────────────────────────
@@ -421,6 +422,7 @@ function useStatuses() {
 export function WorklogFilterBar({
   filters,
   onChange,
+  hideGroupBy,
 }: WorklogFilterBarProps) {
   const [textInput, setTextInput] = useState(filters.searchText ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -473,7 +475,7 @@ export function WorklogFilterBar({
     (filters.assigneeIn?.length ?? 0) > 0 ||
     (filters.sprintIn?.length ?? 0) > 0 ||
     (filters.reporterIn?.length ?? 0) > 0 ||
-    !!filters.groupBy;
+    (!hideGroupBy && !!filters.groupBy);
 
   return (
     <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
@@ -567,6 +569,7 @@ export function WorklogFilterBar({
       </div>
 
       {/* ── Group-by buttons (board-style) ──────────────────────── */}
+      {!hideGroupBy && (
       <div className="px-4 py-2 border-t border-[#DFE1E6] dark:border-gray-700">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 w-16">Group by</span>
@@ -588,6 +591,7 @@ export function WorklogFilterBar({
           ))}
         </div>
       </div>
+      )}
 
       {/* ── Active filter chips row ─────────────────────────────────────────── */}
       {hasAnyFilter && (
@@ -634,7 +638,7 @@ export function WorklogFilterBar({
               onChange({ ...filters, reporterIn: next?.length ? next : undefined });
             }} />
           ))}
-          {filters.groupBy && (
+          {!hideGroupBy && filters.groupBy && (
             <FilterChip label={`Group by: ${filters.groupBy}`} onRemove={() => onChange({ ...filters, groupBy: undefined })} />
           )}
           <button

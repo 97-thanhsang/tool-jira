@@ -7,6 +7,7 @@ import { IssuesTable } from '@/components/issues/issues-table';
 import { FilterPanel } from '@/components/issues/filter-panel';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
+import { GroupByControls } from '@/components/shared/group-by-controls';
 import type { TeamGroup } from '@/types/jira';
 
 export default function IssuesPage() {
@@ -26,6 +27,10 @@ export default function IssuesPage() {
       return names;
     },
   );
+  // ── Group-by controls state ──
+  const [groupBy, setGroupBy] = useState<string>('none');
+  const [subGroupBy, setSubGroupBy] = useState<string>('none');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
   // ── Group / member helpers ──
   function addMember(username: string, displayName: string) {
     if (selectedMembers.includes(username)) return;
@@ -101,6 +106,17 @@ export default function IssuesPage() {
         onSelectAllMembers={selectAllMembers}
       />
 
+      <GroupByControls
+        groupBy={groupBy}
+        subGroupBy={subGroupBy}
+        subSubGroupBy={subSubGroupBy}
+        onGroupByChange={setGroupBy}
+        onSubGroupByChange={setSubGroupBy}
+        onSubSubGroupByChange={setSubSubGroupBy}
+        groupByOptions={['none', 'project', 'status', 'issuetype', 'sprint', 'assignee', 'priority', 'statusCategory', 'reporter']}
+        subSubGroupByOptions={['none', 'priority', 'issuetype', 'status', 'sprint']}
+      />
+
       {error ? (
         <div className="flex items-center justify-center py-16">
           <p className="text-sm text-red-600">
@@ -122,6 +138,9 @@ export default function IssuesPage() {
               sortDir={sortDir}
               onSortChange={handleSortChange}
               onIssueUpdate={() => mutate()}
+              groupBy={groupBy}
+              subGroupBy={subGroupBy}
+              subSubGroupBy={subSubGroupBy}
             />
           </>
         )}

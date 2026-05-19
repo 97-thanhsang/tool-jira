@@ -994,6 +994,9 @@ interface IssuesTableProps {
   sortDir: 'ASC' | 'DESC';
   onSortChange: (field: string, dir: 'ASC' | 'DESC') => void;
   onIssueUpdate?: () => void;
+  groupBy?: string;
+  subGroupBy?: string;
+  subSubGroupBy?: string;
 }
 
 // ─── Group header helpers ──────────────────────────────────────────
@@ -1227,7 +1230,7 @@ function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
   }
 }
 
-export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate }: IssuesTableProps) {
+export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
   const [transitionDropOpen, setTransDropOpen]  = useState(false);
@@ -1236,9 +1239,14 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const [collapsedGroups, setCollapsedGroups]   = useState<Set<string>>(new Set());
   const [visibleColumns, setVisibleColumns]     = useState<Set<ColumnKey>>(DEFAULT_VISIBLE);
   const [columnOrder, setColumnOrder]           = useState<ColumnKey[]>(DEFAULT_ORDER);
-  const [groupBy, setGroupBy]                   = useState<GroupBy>('project');
-  const [subGroupBy, setSubGroupBy]             = useState<SubGroupBy>('none');
-  const [subSubGroupBy, setSubSubGroupBy]       = useState<SubSubGroupBy>('none');
+  const [internalGroupBy, setInternalGroupBy]                   = useState<GroupBy>('none');
+  const [internalSubGroupBy, setInternalSubGroupBy]             = useState<SubGroupBy>('none');
+  const [internalSubSubGroupBy, setInternalSubSubGroupBy]       = useState<SubSubGroupBy>('none');
+
+  // Use external props if provided, else internal state
+  const effectiveGroupBy = (groupBy ?? internalGroupBy) as GroupBy;
+  const effectiveSubGroupBy = (subGroupBy ?? internalSubGroupBy) as SubGroupBy;
+  const effectiveSubSubGroupBy = (subSubGroupBy ?? internalSubSubGroupBy) as SubSubGroupBy;
   const [showColumnPicker, setShowColPicker]    = useState(false);
   const [dragOverKey, setDragOverKey]           = useState<ColumnKey | null>(null);
   const dragSrcRef                              = useRef<ColumnKey | null>(null);
@@ -1409,7 +1417,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     [visibleColumns, columnOrder],
   );
 
-  const groups = useMemo(() => groupIssues(issues, groupBy), [issues, groupBy]);
+  const groups = useMemo(() => groupIssues(issues, effectiveGroupBy), [issues, effectiveGroupBy]);
 
   const rowEditProps = useMemo((): RowEditProps | undefined => {
     if (!editMode) return undefined;
@@ -1451,9 +1459,9 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }
 
   function handleGroupByChange(g: GroupBy) {
-    setGroupBy(g);
-    setSubGroupBy('none');    // always reset sub-group when primary group changes
-    setSubSubGroupBy('none'); // always reset sub-sub-group when primary group changes
+    setInternalGroupBy(g);
+    setInternalSubGroupBy('none');    // always reset sub-group when primary group changes
+    setInternalSubSubGroupBy('none'); // always reset sub-sub-group when primary group changes
   }
 
   function toggleGroup(key: string) {
@@ -1539,7 +1547,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     const rows: string[][] = [headers];
 
     for (const group of groups) {
-      if (groupBy !== 'none' && group.label) {
+      if (effectiveGroupBy !== 'none' && group.label) {
         rows.push([group.label, ...Array<string>(headers.length - 1).fill('')]);
       }
       for (const issue of group.issues) {
@@ -1566,7 +1574,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     <div>
       {/* ── Toolbar ───────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
-        {/* Group by + Sub group by */}
+        {/* Group by + Sub group by (hidden when external props provided) */}
+        {!groupBy && !subGroupBy && !subSubGroupBy && (
         <div className="flex flex-col gap-2 p-2.5 bg-[#F4F5F7] dark:bg-gray-700/40 rounded-md border border-[#DFE1E6] dark:border-gray-600">
           {/* Group by row */}
           <div className="flex items-center gap-3">
@@ -1580,7 +1589,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   onClick={() => handleGroupByChange(g)}
                   className={cn(
                     'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
-                    groupBy === g
+                    effectiveGroupBy === g
                       ? 'bg-[#0052CC] text-white shadow-inner'
                       : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#DEEBFF] dark:hover:bg-gray-700 hover:text-[#0052CC] dark:hover:text-blue-400',
                   )}
@@ -1589,15 +1598,15 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                 </button>
               ))}
             </div>
-            {groupBy !== 'none' && (
+            {effectiveGroupBy !== 'none' && (
               <span className="text-[10px] font-medium text-[#0052CC] dark:text-blue-400 bg-[#DEEBFF] dark:bg-blue-900/30 px-1.5 py-0.5 rounded select-none">
-                {GROUP_BY_LABELS[groupBy]}
+                {GROUP_BY_LABELS[effectiveGroupBy]}
               </span>
             )}
           </div>
 
           {/* Sub group by — only shown when Group By ≠ none */}
-          {groupBy !== 'none' && (
+          {effectiveGroupBy !== 'none' && (
             <>
               {/* Separator */}
               <div className="border-t border-[#DFE1E6] dark:border-gray-600" />
@@ -1607,13 +1616,13 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   Sub group
                 </span>
                 <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shadow-sm">
-                  {getSubGroupOptions(groupBy).map(s => (
+                  {getSubGroupOptions(effectiveGroupBy).map(s => (
                     <button
                       key={s}
-                      onClick={() => setSubGroupBy(s)}
+                      onClick={() => setInternalSubGroupBy(s)}
                       className={cn(
                         'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
-                        subGroupBy === s
+                        effectiveSubGroupBy === s
                           ? 'bg-[#6554C0] text-white shadow-inner'
                           : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#EAE6FF] dark:hover:bg-purple-900/30 hover:text-[#6554C0] dark:hover:text-purple-400',
                       )}
@@ -1622,9 +1631,9 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                     </button>
                   ))}
                 </div>
-                {subGroupBy !== 'none' && (
+                {effectiveSubGroupBy !== 'none' && (
                   <span className="text-[10px] font-medium text-[#6554C0] dark:text-purple-400 bg-[#EAE6FF] dark:bg-purple-900/30 px-1.5 py-0.5 rounded select-none">
-                    {SUB_GROUP_BY_LABELS[subGroupBy]}
+                    {SUB_GROUP_BY_LABELS[effectiveSubGroupBy]}
                   </span>
                 )}
               </div>
@@ -1632,7 +1641,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
           )}
 
           {/* Sub sub group by — only shown when Sub Group By ≠ none */}
-          {subGroupBy !== 'none' && (
+          {effectiveSubGroupBy !== 'none' && (
             <>
               {/* Separator */}
               <div className="border-t border-[#DFE1E6] dark:border-gray-600" />
@@ -1642,13 +1651,13 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   Sub sub
                 </span>
                 <div className="flex rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shadow-sm">
-                  {getSubSubGroupOptions(groupBy, subGroupBy).map(s => (
+                  {getSubSubGroupOptions(effectiveGroupBy, effectiveSubGroupBy).map(s => (
                     <button
                       key={s}
-                      onClick={() => setSubSubGroupBy(s)}
+                      onClick={() => setInternalSubSubGroupBy(s)}
                       className={cn(
                         'px-3 py-1.5 text-xs font-semibold transition-all border-r border-[#DFE1E6] dark:border-gray-600 last:border-r-0 whitespace-nowrap',
-                        subSubGroupBy === s
+                        effectiveSubSubGroupBy === s
                           ? 'bg-[#998DD9] text-white shadow-inner'
                           : 'bg-white dark:bg-gray-800 text-[#42526E] dark:text-gray-400 hover:bg-[#F3F0FF] dark:hover:bg-purple-900/20 hover:text-[#998DD9] dark:hover:text-purple-300',
                       )}
@@ -1657,15 +1666,16 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                     </button>
                   ))}
                 </div>
-                {subSubGroupBy !== 'none' && (
+                {effectiveSubSubGroupBy !== 'none' && (
                   <span className="text-[10px] font-medium text-[#998DD9] dark:text-purple-300 bg-[#F3F0FF] dark:bg-purple-900/20 px-1.5 py-0.5 rounded select-none">
-                    {SUB_SUB_GROUP_BY_LABELS[subSubGroupBy]}
+                    {SUB_SUB_GROUP_BY_LABELS[effectiveSubSubGroupBy]}
                   </span>
                 )}
               </div>
             </>
           )}
         </div>
+        )}
 
         <div className="flex items-center gap-2">
           {/* VIEW / EDIT toggle */}
@@ -1988,26 +1998,26 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         ) : (
           groups.map(group => {
             const collapsed = collapsedGroups.has(group.key);
-            const subGroups = subGroupIssues(group.issues, subGroupBy);
+            const subGroups = subGroupIssues(group.issues, effectiveSubGroupBy);
             return (
               <div key={group.key}>
-                {groupBy !== 'none' && (
+                {effectiveGroupBy !== 'none' && (
                   <button
                     onClick={() => toggleGroup(group.key)}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-[#EBECF0] dark:bg-gray-700 hover:bg-[#DFE1E6] dark:hover:bg-gray-600 border-b-2 border-[#DFE1E6] dark:border-gray-600 border-l-4 transition-colors text-left"
-                    style={{ borderLeftColor: getGroupBorderColor(groupBy, group.issues[0]) }}
+                    style={{ borderLeftColor: getGroupBorderColor(effectiveGroupBy, group.issues[0]) }}
                   >
                     {collapsed
                       ? <ChevronRight size={14} className="text-[#0052CC] dark:text-blue-400 flex-shrink-0" />
                       : <ChevronDown  size={14} className="text-[#0052CC] dark:text-blue-400 flex-shrink-0" />}
-                    <GroupHeaderContent groupBy={groupBy} group={group} firstIssue={group.issues[0]} />
+                    <GroupHeaderContent groupBy={effectiveGroupBy} group={group} firstIssue={group.issues[0]} />
                     <span className="inline-flex items-center justify-center min-w-[22px] h-[18px] text-[11px] font-bold text-white bg-[#0052CC] dark:bg-blue-600 rounded-full px-1.5 leading-none">
                       {group.issues.length}
                     </span>
                   </button>
                 )}
 
-                {!collapsed && subGroupBy === 'none'
+                {!collapsed && effectiveSubGroupBy === 'none'
                   ? group.issues.map(issue => (
                     <IssueTableRow
                       key={issue.id}
@@ -2023,25 +2033,25 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   ))
                   : !collapsed && subGroups.map(sub => {
                     const subCollapsed = collapsedGroups.has(`${group.key}::${sub.key}`);
-                    const subSubGroups = subSubGroupIssues(sub.issues, subSubGroupBy);
+                    const subSubGroups = subSubGroupIssues(sub.issues, effectiveSubSubGroupBy);
                     return (
                       <div key={sub.key}>
                         {/* Sub-group header */}
                         <button
                           onClick={() => toggleGroup(`${group.key}::${sub.key}`)}
                           className="w-full flex items-center gap-2 pl-10 pr-4 py-2 bg-[#F4F5F7] dark:bg-gray-750/80 hover:bg-[#EBECF0] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 border-l-[3px] transition-colors text-left"
-                          style={{ borderLeftColor: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }}
+                          style={{ borderLeftColor: getGroupBorderColor(effectiveSubGroupBy as unknown as GroupBy, sub.issues[0]) }}
                         >
                           {subCollapsed
-                            ? <ChevronRight size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }} />
-                            : <ChevronDown  size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }} />}
-                          <SubGroupHeaderContent subGroupBy={subGroupBy} sub={sub} firstIssue={sub.issues[0]} />
+                            ? <ChevronRight size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(effectiveSubGroupBy as unknown as GroupBy, sub.issues[0]) }} />
+                            : <ChevronDown  size={12} className="flex-shrink-0" style={{ color: getGroupBorderColor(effectiveSubGroupBy as unknown as GroupBy, sub.issues[0]) }} />}
+                          <SubGroupHeaderContent subGroupBy={effectiveSubGroupBy} sub={sub} firstIssue={sub.issues[0]} />
                           <span className="inline-flex items-center justify-center min-w-[20px] h-[16px] text-[10px] font-bold text-white rounded-full px-1.5 leading-none"
-                            style={{ backgroundColor: getGroupBorderColor(subGroupBy as unknown as GroupBy, sub.issues[0]) }}>
+                            style={{ backgroundColor: getGroupBorderColor(effectiveSubGroupBy as unknown as GroupBy, sub.issues[0]) }}>
                             {sub.issues.length}
                           </span>
                         </button>
-                        {!subCollapsed && subSubGroupBy === 'none'
+                        {!subCollapsed && effectiveSubSubGroupBy === 'none'
                           ? sub.issues.map(issue => (
                             <IssueTableRow
                               key={issue.id}
@@ -2063,14 +2073,14 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                                 <button
                                   onClick={() => toggleGroup(`${group.key}::${sub.key}::${subSub.key}`)}
                                   className="w-full flex items-center gap-1.5 pl-16 pr-4 py-1.5 bg-[#FAFBFC] dark:bg-gray-750/60 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 border-b border-[#DFE1E6] dark:border-gray-700 border-l-[2px] transition-colors text-left"
-                                  style={{ borderLeftColor: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}
+                                  style={{ borderLeftColor: getGroupBorderColor(effectiveSubSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}
                                 >
                                   {subSubCollapsed
-                                    ? <ChevronRight size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />
-                                    : <ChevronDown size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />}
-                                  <SubSubGroupHeaderContent subSubGroupBy={subSubGroupBy} subSub={subSub} firstIssue={subSub.issues[0]} />
+                                    ? <ChevronRight size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(effectiveSubSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />
+                                    : <ChevronDown size={10} className="flex-shrink-0" style={{ color: getGroupBorderColor(effectiveSubSubGroupBy as unknown as GroupBy, subSub.issues[0]) }} />}
+                                  <SubSubGroupHeaderContent subSubGroupBy={effectiveSubSubGroupBy} subSub={subSub} firstIssue={subSub.issues[0]} />
                                   <span className="inline-flex items-center justify-center min-w-[18px] h-[14px] text-[9px] font-bold text-white rounded-full px-1 leading-none"
-                                    style={{ backgroundColor: getGroupBorderColor(subSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}>
+                                    style={{ backgroundColor: getGroupBorderColor(effectiveSubSubGroupBy as unknown as GroupBy, subSub.issues[0]) }}>
                                     {subSub.issues.length}
                                   </span>
                                 </button>
