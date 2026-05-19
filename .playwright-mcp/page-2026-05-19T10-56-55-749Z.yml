@@ -1,0 +1,327 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content":
+    - /url: "#geist-skip-nav"
+  - main [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - generic [ref=e9]:
+            - link "97-thanhsang's projects Hobby" [ref=e10] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects
+              - img [ref=e11]
+              - generic [ref=e12]:
+                - generic [ref=e13]: 97-thanhsang's projects
+                - generic [ref=e15]: Hobby
+            - button [ref=e16] [cursor=pointer]:
+              - img [ref=e18]
+          - button "Find… F" [ref=e21]:
+            - generic [ref=e23]:
+              - img [ref=e25]
+              - generic [ref=e27]: Find…
+              - generic [ref=e29]: F
+        - navigation [ref=e31]:
+          - generic [ref=e34]:
+            - link "Projects" [ref=e35] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects
+              - img [ref=e37]
+              - generic [ref=e40]: Projects
+            - link "Deployments" [ref=e41] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/deployments
+              - img [ref=e43]
+              - generic [ref=e46]: Deployments
+            - link "Logs" [ref=e47] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/logs
+              - img [ref=e49]
+              - generic [ref=e52]: Logs
+            - link "Analytics" [ref=e53] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/analytics
+              - img [ref=e55]
+              - generic [ref=e58]: Analytics
+            - link "Speed Insights" [ref=e59] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/speed-insights
+              - img [ref=e61]
+              - generic [ref=e64]: Speed Insights
+            - link "Observability" [ref=e65] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/observability
+              - img [ref=e67]
+              - generic [ref=e70]: Observability
+              - img [ref=e72]
+            - link "Firewall" [ref=e74] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/firewall
+              - img [ref=e76]
+              - generic [ref=e80]: Firewall
+            - link "CDN" [ref=e81] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/cdn
+              - img [ref=e83]
+              - generic [ref=e86]: CDN
+            - separator [ref=e87]
+            - link "Environment Variables" [ref=e88] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/settings/environment-variables
+              - img [ref=e90]
+              - generic [ref=e93]: Environment Variables
+            - link "Domains" [ref=e94] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/domains
+              - img [ref=e96]
+              - generic [ref=e99]: Domains
+            - link "Integrations" [ref=e100] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/integrations
+              - img [ref=e102]
+              - generic [ref=e105]: Integrations
+            - link "Storage" [ref=e106] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/stores
+              - img [ref=e108]
+              - generic [ref=e111]: Storage
+            - link "Flags" [ref=e112] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/experimentation/collections
+              - img [ref=e114]
+              - generic [ref=e117]: Flags
+            - link "Agent" [ref=e118] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/agent
+              - img [ref=e120]
+              - generic [ref=e123]: Agent
+              - img [ref=e125]
+            - link "AI Gateway" [ref=e127] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/ai-gateway
+              - img [ref=e129]
+              - generic [ref=e132]: AI Gateway
+              - img [ref=e134]
+            - link "Sandboxes" [ref=e136] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/sandboxes
+              - img [ref=e138]
+              - generic [ref=e141]: Sandboxes
+            - link "Workflows" [ref=e142] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/workflows
+              - img [ref=e144]
+              - generic [ref=e147]: Workflows
+            - separator [ref=e148]
+            - link "Usage" [ref=e149] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/usage
+              - img [ref=e151]
+              - generic [ref=e154]: Usage
+            - link "Support" [ref=e155] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/support
+              - img [ref=e157]
+              - generic [ref=e160]: Support
+            - link "Settings" [ref=e161] [cursor=pointer]:
+              - /url: /97-thanhsangs-projects/~/settings
+              - img [ref=e163]
+              - generic [ref=e166]: Settings
+              - img [ref=e168]
+        - generic [ref=e172]:
+          - button "Avatar for 97-thanhsang 97-thanhsang" [disabled]:
+            - img "Avatar for 97-thanhsang":
+              - img "Avatar for 97-thanhsang"
+            - generic:
+              - generic: 97-thanhsang
+            - generic:
+              - img
+          - img [ref=e175]
+      - button [ref=e178] [cursor=pointer]:
+        - img [ref=e179]
+    - generic [ref=e182]:
+      - generic [ref=e183]:
+        - button "All projects" [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: All projects
+          - img [ref=e190]
+        - generic [ref=e194]: Overview
+        - button "Open page actions menu" [ref=e196] [cursor=pointer]:
+          - img [ref=e198]
+      - generic [ref=e203]:
+        - generic [ref=e205]:
+          - generic [ref=e206]:
+            - searchbox "Search" [ref=e207]
+            - img [ref=e209]
+          - button "Filter and Sort Projects" [ref=e211] [cursor=pointer]:
+            - img [ref=e213]
+          - generic [ref=e215]:
+            - generic [ref=e216]:
+              - radio "grid" [checked] [ref=e217]
+              - generic [ref=e218] [cursor=pointer]:
+                - img [ref=e219]
+                - generic [ref=e221]: grid
+            - generic [ref=e222]:
+              - radio "list" [ref=e223]
+              - generic [ref=e224] [cursor=pointer]:
+                - img [ref=e225]
+                - generic [ref=e227]: list
+          - button "Add New..." [ref=e228] [cursor=pointer]:
+            - generic [ref=e229]: Add New...
+            - img [ref=e231]
+        - generic [ref=e233]:
+          - generic [ref=e236]:
+            - generic [ref=e237]:
+              - link "Usage" [ref=e239] [cursor=pointer]:
+                - /url: /97-thanhsangs-projects/~/usage
+              - generic [ref=e240]:
+                - generic [ref=e241]:
+                  - link "Last 30 days" [ref=e243] [cursor=pointer]:
+                    - /url: /97-thanhsangs-projects/~/usage
+                  - button "Upgrade" [ref=e244] [cursor=pointer]:
+                    - generic [ref=e245]: Upgrade
+                - list [ref=e246]:
+                  - listitem [ref=e247]:
+                    - link "0.009899999999999999 Edge Requests 99 / 1M 10M" [ref=e248] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/networking-edge-requests
+                      - progressbar [ref=e249]:
+                        - img [ref=e250]
+                      - generic [ref=e253]:
+                        - generic [ref=e254]: Edge Requests
+                        - img [ref=e257]
+                      - generic [ref=e260]:
+                        - text: 99 /
+                        - generic [ref=e261]: 1M
+                      - generic: 10M
+                  - listitem [ref=e262]:
+                    - link "0.001445162 Fast Data Transfer 1.45 MB / 100 GB 1 TB" [ref=e263] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/networking-fast-data-transfer
+                      - progressbar [ref=e264]:
+                        - img [ref=e265]
+                      - generic [ref=e268]:
+                        - generic [ref=e269]: Fast Data Transfer
+                        - img [ref=e272]
+                      - generic [ref=e275]:
+                        - text: 1.45 MB /
+                        - generic [ref=e276]: 100 GB
+                      - generic: 1 TB
+                  - listitem [ref=e277]:
+                    - link "0.0007999999999999999 ISR Reads 8 / 1M 10M" [ref=e278] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/isr-reads
+                      - progressbar [ref=e279]:
+                        - img [ref=e280]
+                      - generic [ref=e283]:
+                        - generic [ref=e284]: ISR Reads
+                        - img [ref=e287]
+                      - generic [ref=e290]:
+                        - text: 8 /
+                        - generic [ref=e291]: 1M
+                      - generic: 10M
+                  - listitem [ref=e292]:
+                    - link "0.00060298 Fast Origin Transfer 60.3 kB / 10 GB 100 GB" [ref=e293] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/networking-fast-origin-transfer
+                      - progressbar [ref=e294]:
+                        - img [ref=e295]
+                      - generic [ref=e298]:
+                        - generic [ref=e299]: Fast Origin Transfer
+                        - img [ref=e302]
+                      - generic [ref=e305]:
+                        - text: 60.3 kB /
+                        - generic [ref=e306]: 10 GB
+                      - generic: 100 GB
+                  - listitem [ref=e307]:
+                    - link "0.0002777777777777778 Edge Request CPU Duration 0s / 1h" [ref=e308] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/networking-edge-request-cpu-duration
+                      - progressbar [ref=e309]:
+                        - img [ref=e310]
+                      - generic [ref=e313]:
+                        - generic [ref=e314]: Edge Request CPU Duration
+                        - img [ref=e317]
+                      - generic [ref=e320]: 0s / 1h
+                  - listitem [ref=e321]:
+                    - link "0 Microfrontends Routing 0 / 50K" [ref=e322] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/networking-microfrontends-routing
+                      - progressbar [ref=e323]:
+                        - img [ref=e324]
+                      - generic [ref=e327]:
+                        - generic [ref=e328]: Microfrontends Routing
+                        - img [ref=e331]
+                      - generic [ref=e334]: 0 / 50K
+                  - listitem [ref=e335]:
+                    - link "0 ISR Writes 0 / 200K 2M" [ref=e336] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/isr-writes
+                      - progressbar [ref=e337]:
+                        - img [ref=e338]
+                      - generic [ref=e341]:
+                        - generic [ref=e342]: ISR Writes
+                        - img [ref=e345]
+                      - generic [ref=e348]:
+                        - text: 0 /
+                        - generic [ref=e349]: 200K
+                      - generic: 2M
+                  - listitem [ref=e350]:
+                    - link "0 Function Invocations 0 / 1M" [ref=e351] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/vercel-functions-invocations
+                      - progressbar [ref=e352]:
+                        - img [ref=e353]
+                      - generic [ref=e356]:
+                        - generic [ref=e357]: Function Invocations
+                        - img [ref=e360]
+                      - generic [ref=e363]: 0 / 1M
+                  - listitem [ref=e364]:
+                    - link "0 Function Duration 0 / 100 GB-Hrs 1,000 GB-Hrs" [ref=e365] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/vercel-functions-duration
+                      - progressbar [ref=e366]:
+                        - img [ref=e367]
+                      - generic [ref=e370]:
+                        - generic [ref=e371]: Function Duration
+                        - img [ref=e374]
+                      - generic [ref=e377]:
+                        - text: 0 /
+                        - generic [ref=e378]: 100 GB-Hrs
+                      - generic: 1,000 GB-Hrs
+                  - listitem [ref=e379]:
+                    - link "0 Fluid Provisioned Memory 0 / 360 GB-Hrs 1,440 GB-Hrs" [ref=e380] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/~/usage/vercel-functions-fluid-duration
+                      - progressbar [ref=e381]:
+                        - img [ref=e382]
+                      - generic [ref=e385]:
+                        - generic [ref=e386]: Fluid Provisioned Memory
+                        - img [ref=e389]
+                      - generic [ref=e392]:
+                        - text: 0 /
+                        - generic [ref=e393]: 360 GB-Hrs
+                      - generic: 1,440 GB-Hrs
+              - button "Show More Usage" [ref=e394] [cursor=pointer]:
+                - img [ref=e396]
+            - generic [ref=e398]:
+              - link "Alerts" [ref=e400] [cursor=pointer]:
+                - /url: /97-thanhsangs-projects/~/observability/alerts
+              - generic [ref=e405]:
+                - generic [ref=e406]:
+                  - generic [ref=e407]: Get alerted for anomalies
+                  - generic [ref=e408]: Automatically monitor your projects for anomalies and get notified.
+                - button "Enable Observability Plus" [ref=e409] [cursor=pointer]:
+                  - generic [ref=e410]: Enable Observability Plus
+            - generic [ref=e411]:
+              - generic [ref=e413]: Recent Previews
+              - list [ref=e414]:
+                - generic [ref=e416]:
+                  - img [ref=e418]
+                  - generic [ref=e421]: Preview deployments that you have recently visited or created will appear here.
+          - generic [ref=e423]:
+            - generic [ref=e425]: Projects
+            - list [ref=e426]:
+              - listitem [ref=e427]:
+                - link [ref=e428] [cursor=pointer]:
+                  - /url: /97-thanhsangs-projects/tool-jira
+                - generic [ref=e429]:
+                  - link [ref=e430] [cursor=pointer]:
+                    - /url: /97-thanhsangs-projects/tool-jira
+                    - img [ref=e432]
+                  - generic [ref=e433]:
+                    - link "tool-jira" [ref=e434] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/tool-jira
+                      - generic [ref=e436]: tool-jira
+                    - link "tool-jira.vercel.app" [ref=e437] [cursor=pointer]:
+                      - /url: https://tool-jira.vercel.app
+                  - link "0" [ref=e438] [cursor=pointer]:
+                    - /url: /97-thanhsangs-projects/tool-jira/speed-insights
+                    - progressbar [ref=e440]:
+                      - img [ref=e441]
+                      - img [ref=e446]
+                  - button "Project Menu" [ref=e448] [cursor=pointer]:
+                    - img [ref=e450]
+                - link "github 97-thanhsang/tool-jira" [ref=e453] [cursor=pointer]:
+                  - /url: /97-thanhsangs-projects?repo=https%3A%2F%2Fgithub.com%2F97-thanhsang%2Ftool-jira
+                  - img "github" [ref=e454]
+                  - generic [ref=e456]: 97-thanhsang/tool-jira
+                - generic [ref=e457]:
+                  - 'link "chore(Dockerfile): comment out SQLite data volume line" [ref=e458] [cursor=pointer]':
+                    - /url: /97-thanhsangs-projects/tool-jira/48vNRBFkSbLg98YuvYqNfcfnBMzw
+                  - generic [ref=e459]:
+                    - generic [ref=e460]:
+                      - generic [ref=e462] [cursor=pointer]: 13m ago
+                      - text: "on"
+                    - img [ref=e463]
+                    - link "main" [ref=e465] [cursor=pointer]:
+                      - /url: /97-thanhsangs-projects/tool-jira/deployments?filterBranch=main
+  - alert [ref=e467]
