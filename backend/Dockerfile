@@ -20,8 +20,8 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
-# SQLite data volume (ignored when using PostgreSQL via DATABASE_URL)
-VOLUME ["/app/data"]
+# # SQLite data volume (ignored when using PostgreSQL via DATABASE_URL)
+# VOLUME ["/app/data"]
 
 EXPOSE 3001
 

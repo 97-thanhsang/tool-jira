@@ -27,3 +27,27 @@ When librarian background lookup fails with UnknownError, retry with direct offi
 - Related Files:
 
 ---
+
+## [ERR-20260519-002] task
+
+**Logged**: 2026-05-19T10:35:14.531Z
+**Priority**: medium
+**Status**: pending
+**Area**: config
+
+### Summary
+Background explore task failed with UnknownError despite simple read/glob/grep prompt
+
+### Error
+```
+During analysis of a Railway/Railpack deployment issue, background task bg_f03582de ('Inspect deploy files') failed with UnknownError from SessionPrompt infrastructure. The failure was tool-side, not caused by repo state. Direct file reads and glob were already sufficient to continue. Future sessions should treat this as intermittent task infrastructure failure and proceed with direct tools when evidence is already available, rather than blocking.
+```
+
+### Suggested Fix
+If a lightweight background exploration task fails with infrastructure UnknownError, avoid retrying immediately when equivalent direct tool evidence is already collected; continue with available evidence and optionally retry only if a material gap remains.
+
+### Metadata
+- Reproducible: unknown
+- Related Files:
+
+---
