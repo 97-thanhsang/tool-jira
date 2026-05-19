@@ -286,7 +286,7 @@ function DroppableColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          'flex-1 space-y-2 overflow-y-auto pr-1 rounded transition-colors min-h-[80px]',
+          'flex-1 space-y-2 overflow-y-auto pr-1 rounded transition-colors min-h-[80px] col-scroll',
           isOver &&
             'bg-[#DEEBFF] dark:bg-blue-900/20 outline outline-2 outline-dashed outline-[#0052CC] dark:outline-blue-500',
         )}
@@ -947,12 +947,15 @@ export const KanbanBoard = React.memo(function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      {manyColumns && (
+      {(manyColumns || true) && (
         <style>{`
           .board-scroll::-webkit-scrollbar { height: 6px; }
           .board-scroll::-webkit-scrollbar-track { background: transparent; }
           .board-scroll::-webkit-scrollbar-thumb { background: #c1c7d0; border-radius: 3px; }
           .board-scroll::-webkit-scrollbar-thumb:hover { background: #a5adba; }
+          .col-scroll::-webkit-scrollbar { width: 4px; }
+          .col-scroll::-webkit-scrollbar-track { background: transparent; }
+          .col-scroll::-webkit-scrollbar-thumb { background: #c1c7d0; border-radius: 2px; }
         `}</style>
       )}
       <div className={manyColumns ? 'board-scroll overflow-x-auto pb-2 h-full' : ''}>
