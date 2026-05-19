@@ -8,35 +8,27 @@ import { fetchTeamFilterMeta } from '@/lib/team-api';
 import { TeamFilters, type TeamFiltersState } from '@/components/team/team-filters';
 import { TeamReportTable } from '@/components/team/team-report-table';
 import type { TeamGroup } from '@/types/jira';
-
-// ─── Default groups ──────────────────────────────────────────────────────────
-
-const defaultGroups: TeamGroup[] = [
-  {
-    id: 'rd1',
-    name: 'R&D1',
-    members: ['SangNT', 'TriHD', 'NghiaDT', 'ThinhTPQ', 'HieuDT', 'PhatNH'],
-  },
-  {
-    id: 'frontend',
-    name: 'Team Frontend',
-    members: ['SangNT', 'PhatNH', 'HuyNQ', 'LinhPT', 'MinhNV'],
-  },
-  {
-    id: 'backend',
-    name: 'Team Backend',
-    members: ['DucLM', 'AnhNT', 'TuanNA'],
-  },
-];
+import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
+import { GroupSelector } from '@/components/shared/group-selector';
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function TeamPage() {
-  const [groups] = useState<TeamGroup[]>(defaultGroups);
+  const [groups] = useState<TeamGroup[]>(DEFAULT_GROUPS);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(
+    () => DEFAULT_GROUPS[0]?.members ?? [],
+  );
+  const [memberDisplayNames, setMemberDisplayNames] = useState<Record<string, string>>(
+    () => {
+      const names: Record<string, string> = {};
+      for (const m of DEFAULT_GROUPS[0]?.members ?? []) names[m] = MEMBER_DISPLAY_NAMES[m] || m;
+      return names;
+    },
+  );
   const [filters, setFilters] = useState<TeamFiltersState>(() => {
-    const initialMembers = defaultGroups[0]?.members ?? [];
+    const initialMembers = DEFAULT_GROUPS[0]?.members ?? [];
     const names: Record<string, string> = {};
-    for (const m of initialMembers) names[m] = m;
+    for (const m of initialMembers) names[m] = MEMBER_DISPLAY_NAMES[m] || m;
     return {
       searchText: '',
       selectedMembers: initialMembers,
@@ -88,13 +80,13 @@ export default function TeamPage() {
     };
   }, [filters.period, customDateFrom, customDateTo]);
 
-  // Use selected members directly from filter state
+  // Use local selectedMembers state
   const { usernames, isAllMembers } = useMemo(() => {
-    if (filters.selectedMembers.length === 0) {
+    if (selectedMembers.length === 0) {
       return { usernames: [] as string[], isAllMembers: true };
     }
-    return { usernames: filters.selectedMembers, isAllMembers: false };
-  }, [filters.selectedMembers]);
+    return { usernames: selectedMembers, isAllMembers: false };
+  }, [selectedMembers]);
 
   const {
     data,
@@ -122,6 +114,32 @@ export default function TeamPage() {
   const allProjects = filterMeta?.projects ?? [];
   const uniqueStatuses = filterMeta?.statuses ?? [];
   const uniqueTypes = filterMeta?.types ?? [];
+
+  // ─── Member management functions ──────────────────────────────────────────
+  function addMember(username: string, displayName: string) {
+    if (selectedMembers.includes(username)) return;
+    const newMembers = [...selectedMembers, username];
+    const newNames = { ...memberDisplayNames, [username]: displayName };
+    setSelectedMembers(newMembers);
+    setMemberDisplayNames(newNames);
+    setFilters(prev => ({ ...prev, selectedMembers: newMembers, memberDisplayNames: newNames }));
+  }
+  function removeMember(username: string) {
+    const newMembers = selectedMembers.filter(m => m !== username);
+    setSelectedMembers(newMembers);
+    setFilters(prev => ({ ...prev, selectedMembers: newMembers }));
+  }
+  function selectAllMembers() {
+    setSelectedMembers([]);
+    setFilters(prev => ({ ...prev, selectedMembers: [] }));
+  }
+  function selectGroup(group: TeamGroup) {
+    const names: Record<string, string> = {};
+    for (const m of group.members) names[m] = MEMBER_DISPLAY_NAMES[m] || m;
+    setSelectedMembers(group.members);
+    setMemberDisplayNames(prev => ({ ...prev, ...names }));
+    setFilters(prev => ({ ...prev, selectedMembers: group.members, memberDisplayNames: { ...prev.memberDisplayNames, ...names } }));
+  }
 
   // Summary stats
   const totalHours = data ? (data.totalLoggedSeconds / 3600).toFixed(1) : '0';
@@ -175,6 +193,17 @@ export default function TeamPage() {
         )}
       </div>
 
+      {/* Group Selector */}
+      <GroupSelector
+        groups={groups}
+        selectedMembers={selectedMembers}
+        memberDisplayNames={memberDisplayNames}
+        onAddMember={addMember}
+        onRemoveMember={removeMember}
+        onSelectGroup={selectGroup}
+        onSelectAllMembers={selectAllMembers}
+      />
+
       {/* Filters */}
       <TeamFilters
         groups={groups}
@@ -183,6 +212,7 @@ export default function TeamPage() {
         allProjects={allProjects}
         uniqueStatuses={uniqueStatuses}
         uniqueTypes={uniqueTypes}
+        hideGroupSelector
       />
 
       {/* Summary bar */}

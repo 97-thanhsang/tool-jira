@@ -26,6 +26,8 @@ interface TeamFiltersProps {
   allProjects: string[];
   uniqueStatuses: string[];
   uniqueTypes: string[];
+  /** Hide the built-in member chips + group dropdown (use with external GroupSelector) */
+  hideGroupSelector?: boolean;
 }
 
 interface JiraUserResult {
@@ -41,7 +43,7 @@ const chipLabels: Record<TeamFiltersState['quickFilter'], string> = {
   'under-8h': '⚠️ Thiếu 8h',
 };
 
-export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStatuses, uniqueTypes }: TeamFiltersProps) {
+export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStatuses, uniqueTypes, hideGroupSelector }: TeamFiltersProps) {
   const [memberSearch, setMemberSearch] = useState('');
   const [memberResults, setMemberResults] = useState<JiraUserResult[]>([]);
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
@@ -117,6 +119,9 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
     <div className="space-y-2 flex-shrink-0 pb-3 border-b border-[#DFE1E6] dark:border-gray-700">
       {/* Row 1: Member picker + Group shortcut + Period */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Member multi-select + Group shortcut (hidden when external GroupSelector is used) */}
+        {!hideGroupSelector && (
+          <>
         {/* Member multi-select */}
         <div className="relative" ref={memberRef}>
           <div className="flex items-center gap-1.5">
@@ -194,6 +199,8 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
             </div>
           )}
         </div>
+          </>
+        )}
 
         {/* Project filter — now always visible */}
         <div className="flex items-center gap-1.5">
