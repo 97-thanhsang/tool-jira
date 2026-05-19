@@ -51,3 +51,27 @@ If a lightweight background exploration task fails with infrastructure UnknownEr
 - Related Files:
 
 ---
+
+## [ERR-20260519-003] task
+
+**Logged**: 2026-05-19T11:12:01.769Z
+**Priority**: medium
+**Status**: pending
+**Area**: config
+
+### Summary
+Oracle background task failed with UnknownError during avatar root-cause analysis
+
+### Error
+```
+Background oracle task bg_314aad3f failed with infrastructure UnknownError while analyzing deployment-specific avatar issues. This was a task/session infrastructure failure, not a repo or prompt problem. Continue by using direct file evidence and other background agents instead of blocking on the failed oracle task.
+```
+
+### Suggested Fix
+When Oracle fails with infrastructure UnknownError, proceed with direct evidence collection or retry only if a critical reasoning gap remains.
+
+### Metadata
+- Reproducible: unknown
+- Related Files:
+
+---

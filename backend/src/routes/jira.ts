@@ -4,6 +4,44 @@ import { config } from '../config';
 
 const router = Router();
 
+// ─── Avatar proxy: stream Jira avatar with auth ──────────────────────────────
+router.get('/avatar', async (req: Request, res: Response) => {
+  const rawAuth = req.headers['x-jira-auth'];
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Missing auth' });
+  }
+
+  const avatarUrl = typeof req.query.url === 'string' ? req.query.url : '';
+  if (!avatarUrl) {
+    return res.status(400).json({ error: 'Missing avatar url' });
+  }
+
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: avatarUrl,
+      headers: {
+        Authorization: `Basic ${authHeader}`,
+        'X-Atlassian-Token': 'no-check',
+      },
+      responseType: 'stream',
+      maxRedirects: 5,
+      beforeRedirect: (_options: Record<string, unknown>, { headers }: { headers: Record<string, string> }) => {
+        headers['Authorization'] = `Basic ${authHeader}`;
+      },
+    });
+
+    const contentType = (response.headers['content-type'] as string) || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    response.data.pipe(res);
+  } catch (err) {
+    const error = err as AxiosError;
+    return res.status(error.response?.status || 500).json({ error: 'Avatar fetch failed' });
+  }
+});
+
 // ─── Attachment proxy: stream binary content with auth ───────────────────────
 // GET /api/jira/attachment-content/:id → streams image/file from Jira
 // NOTE: Jira Server does NOT support ?redirect=false (Cloud only).

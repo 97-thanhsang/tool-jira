@@ -38,6 +38,42 @@ function isOverdue(duedate: string) {
   return new Date(duedate) < today;
 }
 
+function useProxiedAvatarUrl(avatarUrl?: string) {
+  const [proxiedUrl, setProxiedUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!avatarUrl) {
+      setProxiedUrl('');
+      return;
+    }
+
+    let active = true;
+    let objectUrl = '';
+
+    void api.get('/avatar', {
+      params: { url: avatarUrl },
+      responseType: 'blob',
+    }).then((response) => {
+      if (!active) return;
+      objectUrl = URL.createObjectURL(response.data);
+      setProxiedUrl(objectUrl);
+    }).catch(() => {
+      if (active) {
+        setProxiedUrl('');
+      }
+    });
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [avatarUrl]);
+
+  return proxiedUrl;
+}
+
 const PRIORITY_OPTIONS = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
 // ─── small UI bits ────────────────────────────────────────────────
@@ -46,8 +82,10 @@ function Avatar({ user, size = 24 }: {
   user: { displayName: string; avatarUrls: { '24x24': string; '48x48': string } };
   size?: number;
 }) {
-  return user.avatarUrls['24x24']
-    ? <Image src={user.avatarUrls['24x24']} alt={user.displayName} width={size} height={size} className="rounded-full flex-shrink-0" unoptimized />
+  const avatarSrc = useProxiedAvatarUrl(user.avatarUrls['24x24']);
+
+  return avatarSrc
+    ? <Image src={avatarSrc} alt={user.displayName} width={size} height={size} className="rounded-full flex-shrink-0" unoptimized />
     : <span
         style={{ width: size, height: size, fontSize: size * 0.4 }}
         className="inline-flex items-center justify-center rounded-full bg-[#0052CC] text-white font-bold flex-shrink-0"
@@ -425,7 +463,26 @@ interface ChangelogHistory {
     fieldtype: string;
     fromString: string | null;
     toString: string | null;
-  }>;
+  }>; 
+}
+
+function HistoryAvatar({ author }: { author: ChangelogHistory['author'] }) {
+  const avatarSrc = useProxiedAvatarUrl(author.avatarUrls?.['24x24']);
+
+  return avatarSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={avatarSrc}
+      alt={author.displayName}
+      className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
+      width={24}
+      height={24}
+    />
+  ) : (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0 mt-0.5">
+      {author.displayName.charAt(0)}
+    </span>
+  );
 }
 
 function HistorySection({
@@ -454,20 +511,7 @@ function HistorySection({
     <div className="space-y-4">
       {histories.map(h => (
         <div key={h.id} className="flex gap-2.5">
-          {h.author.avatarUrls?.['24x24'] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={h.author.avatarUrls['24x24']}
-              alt={h.author.displayName}
-              className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
-              width={24}
-              height={24}
-            />
-          ) : (
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[9px] font-bold flex-shrink-0 mt-0.5">
-              {h.author.displayName.charAt(0)}
-            </span>
-          )}
+          <HistoryAvatar author={h.author} />
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-1.5">
               <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-100">{h.author.displayName}</span>
