@@ -10,21 +10,21 @@ export interface StatusColumnEntry {
   color: string;
 }
 
-const COLUMN_MAP: Record<string, { name: string; color: string }> = {
-  new:           { name: 'To Do',       color: '#5E6C84' },
-  indeterminate: { name: 'In Progress', color: '#0052CC' },
-  done:          { name: 'Done',        color: '#36B37E' },
-};
-
 interface UseStatusColumnsResult {
   statusColumnMap: Record<string, StatusColumnEntry> | null;
   isLoading: boolean;
   error: unknown;
 }
 
+const COLUMN_MAP: Record<string, StatusColumnEntry> = {
+  new:           { name: 'To Do',       color: '#5E6C84' },
+  indeterminate: { name: 'In Progress', color: '#0052CC' },
+  done:          { name: 'Done',        color: '#36B37E' },
+};
+
 /**
- * Map Jira statuses to 3 columns by statusCategory:
- * new → To Do / indeterminate → In Progress / done → Done
+ * Map each Jira status to one of 3 standard kanban columns
+ * based on its statusCategory.key.
  */
 export function useStatusColumns(): UseStatusColumnsResult {
   const { data: statuses, error, isLoading } = useSWR(
@@ -39,10 +39,9 @@ export function useStatusColumns(): UseStatusColumnsResult {
 
   const map: Record<string, StatusColumnEntry> = {};
   for (const s of statuses) {
-    const col = COLUMN_MAP[s.statusCategory.key];
-    if (col && !map[s.id]) {
-      map[s.id] = { name: col.name, color: col.color };
-    }
+    if (map[s.id]) continue;
+    const cat = s.statusCategory?.key ?? 'new';
+    map[s.id] = COLUMN_MAP[cat] ?? COLUMN_MAP.new;
   }
 
   return { statusColumnMap: map, isLoading, error };

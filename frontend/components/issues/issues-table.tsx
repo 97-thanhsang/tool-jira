@@ -58,7 +58,7 @@ export type ColumnKey =
   | 'assignee' | 'reporter' | 'sprint' | 'est' | 'logged'
   | 'labels' | 'due' | 'updated';
 
-export type GroupBy = 'none' | 'project' | 'status' | 'type' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter';
+export type GroupBy = 'none' | 'project' | 'status' | 'type' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter' | 'parent';
 
 export type SubGroupBy =
   | 'none'
@@ -69,7 +69,8 @@ export type SubGroupBy =
   | 'priority'
   | 'sprint'
   | 'reporter'
-  | 'project';
+  | 'project'
+  | 'parent';
 
 export type SubSubGroupBy =
   | 'none'
@@ -80,7 +81,8 @@ export type SubSubGroupBy =
   | 'sprint'
   | 'reporter'
   | 'project'
-  | 'statusCategory';
+  | 'statusCategory'
+  | 'parent';
 
 interface ColumnDef {
   key: ColumnKey;
@@ -123,17 +125,19 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
   type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
+  parent: 'Parent',
 };
 
 const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
   type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
+  parent: 'Parent',
 };
 
 /** SubGroupBy options that are compatible with a given GroupBy (excludes the same field) */
 function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
-  const all: SubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
+  const all: SubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
   // Map groupBy → SubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy, SubGroupBy[]>> = {
     status:    ['status', 'statusCategory'],
@@ -152,11 +156,12 @@ const SUB_SUB_GROUP_BY_LABELS: Record<SubSubGroupBy, string> = {
   none: 'None', status: 'Status', priority: 'Priority',
   type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
+  parent: 'Parent',
 };
 
 /** SubSubGroupBy options compatible with a given GroupBy and SubGroupBy (excludes overlapping fields) */
 function getSubSubGroupOptions(groupBy: GroupBy, subGroupBy: SubGroupBy): SubSubGroupBy[] {
-  const all: SubSubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory'];
+  const all: SubSubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
   // Map field → SubSubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy | SubGroupBy, SubSubGroupBy[]>> = {
     status:         ['status'],
@@ -280,6 +285,15 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
         const catLabels: Record<string, string> = { new: 'To Do', indeterminate: 'In Progress', done: 'Done' };
         gKey = cat; gLabel = catLabels[cat] ?? cat; break;
       }
+      case 'parent':
+        if (f.parent) {
+          gKey = f.parent.key;
+          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+        } else {
+          gKey = '__no_parent';
+          gLabel = 'No Parent';
+        }
+        break;
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -329,6 +343,15 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
         gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
       case 'project':
         gKey = f.project.key; gLabel = f.project.name; break;
+      case 'parent':
+        if (f.parent) {
+          gKey = f.parent.key;
+          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+        } else {
+          gKey = '__no_parent';
+          gLabel = 'No Parent';
+        }
+        break;
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -378,6 +401,15 @@ function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): {
         gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
       case 'project':
         gKey = f.project.key; gLabel = f.project.name; break;
+      case 'parent':
+        if (f.parent) {
+          gKey = f.parent.key;
+          gLabel = `${f.parent.key} — ${f.parent.fields.summary}`;
+        } else {
+          gKey = '__no_parent';
+          gLabel = 'No Parent';
+        }
+        break;
       default:
         gKey = '__all'; gLabel = '';
     }

@@ -371,6 +371,19 @@ export default function BoardPage() {
   const [subGroupBy, setSubGroupBy]       = useState<string>('none');
   const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
 
+  // Helper: resolve sprint from issue fields
+  function resolveSprint(issue: JiraIssue): { id: string; name: string } | null {
+    const raw = (issue.fields as any).sprint ?? (issue.fields as any).customfield_10020;
+    if (raw) {
+      if (Array.isArray(raw)) {
+        const active = (raw as any[]).find((s: any) => s.state === 'active');
+        return active ? { id: String(active.id), name: active.name } : null;
+      }
+      return { id: String((raw as any).id), name: (raw as any).name };
+    }
+    return null;
+  }
+
   // Get a field value from an issue for grouping
   function getFieldValue(issue: JiraIssue, field: string): { key: string; label: string } | null {
     if (field === 'none') return null;
@@ -389,6 +402,18 @@ export default function BoardPage() {
       case 'parent':
         if (issue.fields.parent) return { key: issue.fields.parent.key, label: `${issue.fields.parent.key} — ${issue.fields.parent.fields.summary}` };
         return { key: '__no_parent', label: 'No Parent' };
+      case 'sprint': {
+        const s = resolveSprint(issue);
+        if (s) return { key: String(s.id), label: s.name };
+        return { key: '__nosprint', label: 'No Sprint' };
+      }
+      case 'status':
+        return { key: issue.fields.status.name, label: issue.fields.status.name };
+      case 'reporter': {
+        const r = issue.fields.reporter;
+        if (r) return { key: r.name, label: r.displayName ?? r.name };
+        return { key: '__noreporter', label: 'No Reporter' };
+      }
       default:
         return null;
     }
@@ -396,7 +421,7 @@ export default function BoardPage() {
 
   // Swimlane computation: groupBy → swimlanes, subGroupBy → sub-groups within columns
   const swimlanes = useMemo(() => {
-    if (groupBy === 'none') return undefined;
+    if (groupBy === 'none' || groupBy === 'statusCategory' || groupBy === 'status') return undefined;
 
     const colNames = dynamicColumns.length > 0
       ? dynamicColumns.map(c => c.name)
@@ -497,7 +522,26 @@ export default function BoardPage() {
     return result;
   }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
 
+  // Unique status names from current data — used when groupBy='status' as columns
+  const statusColumns = useMemo(() => {
+    if (groupBy !== 'status') return undefined;
+    const names = new Set<string>();
+    for (const issues of Object.values(filteredGrouped)) {
+      for (const issue of issues) names.add(issue.fields.status.name);
+    }
+    return Array.from(names).sort();
+  }, [groupBy, filteredGrouped]);
+
   const columnDefs = useMemo(() => {
+    // Status-as-columns: derive from unique status names in current data
+    if (groupBy === 'status' && statusColumns) {
+      return statusColumns.map(name => ({
+        id: name.toLowerCase().replace(/\s+/g, '-'),
+        label: name,
+        color: '#5E6C84',
+        statusIds: [],
+      }));
+    }
     if (!swimlanes) return undefined;
     if (dynamicColumns.length > 0) {
       return dynamicColumns.map(col => ({
@@ -514,7 +558,7 @@ export default function BoardPage() {
       { id: 'in-progress', label: 'In Progress', color: '#0052CC', wipMax: 5, statusIds: [] },
       { id: 'done', label: 'Done', color: '#36B37E', statusIds: [] },
     ];
-  }, [swimlanes, dynamicColumns]);
+  }, [swimlanes, dynamicColumns, groupBy, statusColumns]);
 
   // Filter columnDefs to only show relevant columns per issue type
   const visibleColumnDefs = useMemo(() => {

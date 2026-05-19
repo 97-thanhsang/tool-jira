@@ -161,7 +161,7 @@ export function useIssuesList(filters: IssueFilters = {}) {
             maxResults: 500,
             fields:
               'summary,status,priority,issuetype,project,updated,created,assignee,reporter,' +
-              'labels,duedate,resolution,fixVersions,components,sprint,customfield_10020,timetracking',
+              'labels,duedate,resolution,fixVersions,components,sprint,customfield_10020,timetracking,parent',
           },
         })
         .then((r) => r.data),

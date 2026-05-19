@@ -321,6 +321,9 @@ function DroppableColumn({
                   case 'assignee':
                     sgAccentColor = '#0052CC';
                     break;
+                  case 'reporter':
+                    sgAccentColor = '#6554C0';
+                    break;
                 }
               }
               return (
@@ -361,6 +364,13 @@ function DroppableColumn({
                     >
                       {sgFirstIssue.fields.project.key.charAt(0)}
                     </span>
+                  )}
+                  {sgFirstIssue && subGroupBy === 'reporter' && (
+                    sgFirstIssue.fields.reporter?.avatarUrls?.['24x24']
+                      ? <Image src={sgFirstIssue.fields.reporter.avatarUrls['24x24']} alt={sgFirstIssue.fields.reporter.displayName} width={20} height={20} className="rounded-full flex-shrink-0" unoptimized />
+                      : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#6554C0] text-white text-[8px] font-bold flex-shrink-0">
+                          {sgFirstIssue.fields.reporter?.displayName?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?'}
+                        </span>
                   )}
 
                   <span className="text-[11px] font-semibold text-[#172B4D] dark:text-gray-200 uppercase tracking-wide flex-1">
@@ -719,6 +729,9 @@ export const KanbanBoard = React.memo(function KanbanBoard({
                 case 'parent':
                   accentColor = '#FF8B00'; // amber/orange for parent tasks
                   break;
+                case 'reporter':
+                  accentColor = '#6554C0';
+                  break;
               }
             }
 
@@ -786,6 +799,13 @@ export const KanbanBoard = React.memo(function KanbanBoard({
                       <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-[#FFF3E0] dark:bg-orange-900/30 text-[#FF8B00] flex-shrink-0">
                         <ExternalLink size={11} />
                       </span>
+                    )}
+                    {firstIssue && groupBy === 'reporter' && (
+                      firstIssue.fields.reporter?.avatarUrls?.['24x24']
+                        ? <Image src={firstIssue.fields.reporter.avatarUrls['24x24']} alt={firstIssue.fields.reporter.displayName} width={28} height={28} className="rounded-full flex-shrink-0" unoptimized />
+                        : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#6554C0] text-white text-[10px] font-bold flex-shrink-0">
+                            {firstIssue.fields.reporter?.displayName?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) ?? <User size={10} />}
+                          </span>
                     )}
 
                     <h4 className="text-sm font-semibold text-[#172B4D] dark:text-gray-200 flex-1">

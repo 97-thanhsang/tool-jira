@@ -9,7 +9,7 @@ import { useWorklogMutations } from '@/hooks/use-worklog-mutations';
 import { WorklogCalendar } from '@/components/worklog/worklog-calendar';
 import { WorklogFilterBar, EMPTY_WORKLOG_FILTERS, applyWorklogFilters, type WorklogFilterBarFilters } from '@/components/worklog/worklog-filter-bar';
 import { WorklogDrawer } from '@/components/worklog/worklog-drawer';
-import { SWIMLANE_PALETTE } from '@/components/worklog/worklog-day-cell';
+import { SWIMLANE_PALETTE, type GroupByField } from '@/components/worklog/worklog-day-cell';
 import type { WorklogEntry } from '@/types/jira';
 import { cn } from '@/lib/utils';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES, type TeamGroup } from '@/lib/team-constants';
@@ -30,7 +30,7 @@ export default function WorklogPage() {
   useEffect(() => {
     setFilters(prev => ({
       ...prev,
-      groupBy: groupBy === 'none' ? undefined : groupBy as 'Project' | 'Type' | 'Assignee' | 'Status',
+      groupBy: groupBy === 'none' ? undefined : groupBy as any,
     }));
   }, [groupBy]);
 
@@ -205,7 +205,7 @@ export default function WorklogPage() {
   // Map filter groupBy/subGroupBy to day cell GroupByField
   const groupByField = useMemo(() => {
     if (!filters.groupBy || filters.groupBy === 'None') return null;
-    return filters.groupBy.toLowerCase() as 'project' | 'type' | 'assignee' | 'status';
+    return filters.groupBy.toLowerCase() as GroupByField;
   }, [filters.groupBy]);
 
   const totalFiltered = filteredEntries.length;
@@ -265,7 +265,7 @@ export default function WorklogPage() {
         onGroupByChange={setGroupBy}
         onSubGroupByChange={() => {}}
         onSubSubGroupByChange={() => {}}
-        groupByOptions={['none', 'Project', 'Type', 'Assignee', 'Status']}
+        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
         levels={1}
       />
 

@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { Pencil, Layers } from 'lucide-react';
 import type { WorklogEntry } from '@/types/jira';
 
-export type GroupByField = 'project' | 'type' | 'assignee' | 'status' | null;
+export type GroupByField = 'project' | 'type' | 'assignee' | 'status' | 'priority' | 'parent' | 'statusCategory' | 'sprint' | 'reporter' | null;
 
 // Timeline: show 6:00-17:30 (11.5h = 23 slots of 30min)
 const START_HOUR = 6;        // 6:00
@@ -122,11 +122,46 @@ function layoutEntries(entries: WorklogEntry[]): LayoutEntry[] {
 
 export function getGroupKey(entry: WorklogEntry, field: GroupByField): string {
   switch (field) {
-    case 'project': return entry.projectKey || 'No Project';
+    case 'project': return entry.projectName || entry.projectKey || 'No Project';
     case 'type': return entry.issueTypeName || 'No Type';
     case 'assignee': return entry.author?.displayName || 'Unassigned';
     case 'status': return entry.status || 'No Status';
+    case 'priority': return entry.priority || 'No Priority';
+    case 'parent': return entry.parentSummary || entry.parentKey || 'No Parent';
+    case 'statusCategory': {
+      const s = (entry.status || '').toLowerCase();
+      if (s === 'done' || s === 'closed' || s === 'resolved' || s === 'completed') return 'Done';
+      if (s === 'in progress' || s === 'in review' || s === 'development' || s === 'testing') return 'In Progress';
+      if (s === 'open' || s === 'reopened' || s === 'to do' || s === 'new' || !s) return 'To Do';
+      return 'To Do';
+    }
+    case 'sprint': return 'All'; // Not available on WorklogEntry
+    // WorklogEntry has no separate reporter field; author is used as best available proxy
+    case 'reporter': return entry.author?.displayName || 'Unknown';
     default: return 'All';
+  }
+}
+
+export interface GroupMeta {
+  iconUrl?: string;
+  avatarUrl?: string;
+  displayName?: string;
+  priorityName?: string;
+}
+
+export function getGroupMeta(entry: WorklogEntry, field: GroupByField): GroupMeta {
+  switch (field) {
+    case 'assignee':
+    case 'reporter':
+      return { avatarUrl: entry.author?.avatarUrls?.['24x24'], displayName: entry.author?.displayName || 'Unknown' };
+    case 'type':
+      return { iconUrl: entry.issueTypeIconUrl, displayName: entry.issueTypeName };
+    case 'parent':
+      return { iconUrl: entry.parentIssueTypeIconUrl, displayName: entry.parentIssueTypeName };
+    case 'priority':
+      return { priorityName: entry.priority };
+    default:
+      return {};
   }
 }
 
@@ -142,6 +177,9 @@ function getEntryColor(entry: WorklogEntry, groupBy: GroupByField): string {
     case 'assignee':
     case 'status':
     case 'type':
+    case 'priority':
+    case 'parent':
+    case 'statusCategory':
       return PROJECT_COLORS[entry.projectKey] ?? '#5E6C84';
     default:
       return '#FFFFFF';
@@ -155,6 +193,9 @@ function getExtraLabel(entry: WorklogEntry, groupBy: GroupByField): string | nul
       return entry.author?.displayName ?? null;
     case 'assignee':
     case 'type':
+    case 'priority':
+    case 'parent':
+    case 'statusCategory':
       return entry.projectKey ?? null;
     case 'status':
       return entry.projectKey ?? null;

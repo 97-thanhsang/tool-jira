@@ -4,9 +4,10 @@ import { startOfWeek, addDays, format } from 'date-fns';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { DndContext, DragOverlay, closestCenter, type DragStartEvent, type DragEndEvent } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
-import type { WorklogEntry } from '@/types/jira';
-import { WorklogDayCell, type GroupByField, getGroupKey, SWIMLANE_PALETTE } from './worklog-day-cell';
+import type { WorklogEntry, JiraPriority } from '@/types/jira';
+import { WorklogDayCell, type GroupByField, type GroupMeta, getGroupKey, getGroupMeta, SWIMLANE_PALETTE } from './worklog-day-cell';
 import { WorklogEntryCard } from './worklog-entry-card';
+import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Button } from '@/components/ui/button';
 
 interface Swimlane {
@@ -16,6 +17,11 @@ interface Swimlane {
   totalHours: number;
   entriesByDate: Record<string, WorklogEntry[]>;
   dailyHours: Record<string, number>;
+  groupBy?: GroupByField;
+  iconUrl?: string;
+  avatarUrl?: string;
+  displayName?: string;
+  priorityName?: string;
 }
 
 interface WorklogCalendarProps {
@@ -90,6 +96,8 @@ export function WorklogCalendar({
           (byDate[d] ??= []).push(e);
           dh[d] = (dh[d] ?? 0) + e.timeSpentSeconds / 3600;
         }
+        const sampleEntry = val.entries[0];
+        const meta = getGroupMeta(sampleEntry, groupBy);
         return {
           key,
           label: key,
@@ -97,6 +105,8 @@ export function WorklogCalendar({
           totalHours: val.entries.reduce((s, e) => s + e.timeSpentSeconds / 3600, 0),
           entriesByDate: byDate,
           dailyHours: dh,
+          groupBy,
+          ...meta,
         };
       });
   }, [entriesByDate, groupBy]);
@@ -223,6 +233,15 @@ export function WorklogCalendar({
                   >
                     <ChevronDown size={12} className={cn('text-[#5E6C84] dark:text-gray-400 transition-transform', !isOpen && '-rotate-90')} />
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: lane.color }} />
+                    {/* Rich group content */}
+                    {lane.avatarUrl ? (
+                      <img src={lane.avatarUrl} alt="" width={20} height={20} className="rounded-full flex-shrink-0" />
+                    ) : lane.iconUrl ? (
+                      <img src={lane.iconUrl} alt="" width={16} height={16} className="flex-shrink-0" />
+                    ) : null}
+                    {lane.priorityName ? (
+                      <PriorityIcon priority={{ name: lane.priorityName, iconUrl: '' } as JiraPriority} />
+                    ) : null}
                     <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-200 flex-1">{lane.label}</span>
                     <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 font-medium">{lane.totalHours.toFixed(1)}h</span>
                     <div className="w-16 h-1.5 bg-[#F4F5F7] dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
