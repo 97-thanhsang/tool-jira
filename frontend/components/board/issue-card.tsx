@@ -547,7 +547,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
               <input type="number" min="0" step="0.5" defaultValue={logged / 3600}
                 onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFieldDraft?.('timeSpent', v); }}
                 onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFieldDraft?.('timeSpent', v); } }}
-                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
+                placeholder="h"                 className="w-14 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
               {draft?.timeSpent != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('timeSpent')} />}
             </span>
           ) : (logged > 0 && (
@@ -559,7 +559,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
               <input type="number" min="0" step="0.5" defaultValue={estimated / 3600}
                 onBlur={e => { const v = parseFloat(e.target.value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); }}
                 onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0 && v * 3600 !== estimated) onFieldDraft?.('originalEstimate', v); } }}
-                placeholder="h" className="w-8 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
+                placeholder="h"                 className="w-14 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
               {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
             </span>
           ) : (estimated > 0 && (

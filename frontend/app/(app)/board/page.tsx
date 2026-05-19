@@ -545,7 +545,7 @@ export default function BoardPage() {
       }
 
       // Compute stats
-      const allLaneIssues = Object.values(colMap).flat();
+      const allLaneIssues = [...colMap.values()].flat();
       let totalEstSeconds = 0, totalLoggedSeconds = 0, todoCount = 0, inProgressCount = 0, doneCount = 0;
       for (const issue of allLaneIssues) {
         totalEstSeconds += issue.fields.timetracking?.originalEstimateSeconds ?? 0;
