@@ -3,9 +3,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  closestCenter,
+  pointerWithin,
+  rectIntersection,
+  useSensor,
+  useSensors,
+  PointerSensor,
   type DragStartEvent,
   type DragEndEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -121,6 +127,20 @@ function parseSwimlaneColId(compositeId: string): {
     colId: compositeId.substring(idx + SWIMLANE_SEP.length),
   };
 }
+
+// ─── Custom collision detection: pointer-first for kanban ─────────────────────
+// pointerWithin detects the droppable under the cursor — most intuitive for
+// horizontal movement between columns. Fall back to closestCenter when the
+// pointer is outside all droppable zones (e.g. between columns).
+const kanbanCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) return pointerCollisions;
+
+  const rectCollisions = rectIntersection(args);
+  if (rectCollisions.length > 0) return rectCollisions;
+
+  return closestCenter(args);
+};
 
 interface KanbanBoardProps {
   columns: BoardColumn[];
@@ -530,6 +550,13 @@ export const KanbanBoard = React.memo(function KanbanBoard({
   const [collapsedSubGroups, setCollapsedSubGroups] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
 
+  // Drag sensors: require 5px movement before activating drag (avoids accidental drags on click)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+  );
+
   // Track last known lane keys to avoid resetting collapse on same data
   const prevLaneKeysRef = useRef<string[]>([]);
 
@@ -595,8 +622,25 @@ export const KanbanBoard = React.memo(function KanbanBoard({
 
     if (hasSwimlanes) {
       // Swimlane mode: over.id is composite "laneKey|||colId"
-      const parsed = parseSwimlaneColId(overId);
-      // Also try as raw column id (dropped onto a card in a flat column context)
+      let parsed = parseSwimlaneColId(overId);
+
+      // Fallback: over.id may be a card ID (dropped onto another card)
+      // Search all lanes/columns to find which one contains this card
+      if (!parsed) {
+        for (const lane of swimlanes!) {
+          for (const [colLabel, colData] of Object.entries(lane.columns)) {
+            const flatIssues: JiraIssue[] = colData && 'subGroups' in colData
+              ? colData.subGroups.flatMap(sg => sg.issues)
+              : (colData as JiraIssue[]) || [];
+            if (flatIssues.some((i) => i.id === overId)) {
+              const colId = colLabel.toLowerCase().replace(/\s+/g, '-');
+              parsed = { laneKey: lane.key, colId };
+              break;
+            }
+          }
+          if (parsed) break;
+        }
+      }
       if (!parsed) return;
       const targetColDef = columnDefs?.find((d) => d.id === parsed.colId);
       if (!targetColDef) return;
@@ -689,7 +733,8 @@ export const KanbanBoard = React.memo(function KanbanBoard({
   if (hasSwimlanes) {
     return (
       <DndContext
-        collisionDetection={closestCorners}
+        collisionDetection={kanbanCollisionDetection}
+        sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
@@ -942,7 +987,8 @@ export const KanbanBoard = React.memo(function KanbanBoard({
 
   return (
     <DndContext
-      collisionDetection={closestCorners}
+      collisionDetection={kanbanCollisionDetection}
+      sensors={sensors}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
