@@ -1,16 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Loader2, Sparkles } from 'lucide-react';
-import { api } from '@/lib/api';
-import { aiParseWorklog } from '@/lib/ai';
-import { saveWorklog } from '@/lib/worklogs';
+import { X, Loader2 } from 'lucide-react';
+import { getStoredUser } from '@/lib/api';
+import { addWorklog, deleteWorklog, fetchTodayWorklogs, fetchIssueWorklogTotal } from '@/lib/worklog-api';
+import { validateWorklogRules } from '@/lib/worklog-validation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-function getTodayDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface LogWorkModalProps {
   issueKey: string;
@@ -20,43 +16,26 @@ interface LogWorkModalProps {
 
 export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps) {
   const [timeSpent, setTimeSpent] = useState('');
-  const [dateStarted, setDateStarted] = useState(getTodayDate);
-  const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // AI state
-  const [hasAiKey, setHasAiKey] = useState(false);
-  const [naturalInput, setNaturalInput] = useState('');
-  const [parseLoading, setParseLoading] = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-
-  // Read AI key from localStorage — only in useEffect
+  // Username for worklog API
+  const [username, setUsername] = useState<string | null>(null);
   useEffect(() => {
-    setHasAiKey(!!localStorage.getItem('ai_api_key'));
+    const u = getStoredUser();
+    setUsername(u?.name ?? null);
   }, []);
-
-  async function handleParseWorklog() {
-    if (!naturalInput.trim()) return;
-    setParseLoading(true);
-    setParseError(null);
-    try {
-      const result = await aiParseWorklog(naturalInput.trim());
-      setTimeSpent(result.timeSpent);
-      if (result.comment) setComment(result.comment);
-      setNaturalInput('');
-    } catch (err: unknown) {
-      const e = err instanceof Error ? err.message : 'AI error';
-      setParseError(e);
-    } finally {
-      setParseLoading(false);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!timeSpent.trim()) {
-      setError('Time Spent is required');
+    const hs = parseFloat(timeSpent);
+    if (isNaN(hs) || hs <= 0) {
+      setError('Please enter a valid number of hours');
+      return;
+    }
+
+    if (!username) {
+      setError('Not authenticated');
       return;
     }
 
@@ -64,29 +43,49 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
     setError(null);
 
     try {
-      const started = `${dateStarted}T09:00:00.000+0700`;
-      await api.post(`/issue/${issueKey}/worklog`, {
-        timeSpent: timeSpent.trim(),
-        started,
-        ...(comment.trim() ? { comment: comment.trim() } : {}),
-      });
-      // Persist to localStorage for worklog history
-      saveWorklog({
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Fetch today's worklogs and lifetime total
+      const [todayWorklogs, lifetimeTotal] = await Promise.all([
+        fetchTodayWorklogs(username),
+        fetchIssueWorklogTotal(issueKey),
+      ]);
+
+      const todayForIssue = todayWorklogs.filter(e => e.issueKey === issueKey);
+
+      // Validate using shared rules (slot calculation excludes overwritten worklogs)
+      const validation = validateWorklogRules({
         issueKey,
-        summary: issueKey, // only key available here; summary shown separately
-        timeSpent: timeSpent.trim(),
-        date: dateStarted,
-        comment: comment.trim(),
+        newHoursRequested: hs,
+        todayWorklogsForIssue: todayForIssue,
+        allTodayWorklogs: todayWorklogs,
+        lifetimeTotalSeconds: lifetimeTotal,
       });
+
+      if (!validation.valid) {
+        setError(validation.error ?? null);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Delete existing today worklogs for this issue (overwrite model)
+      for (const wl of todayForIssue) {
+        await deleteWorklog(issueKey, wl.id);
+      }
+
+      // Create new worklog
+      await addWorklog({
+        issueKey,
+        timeSpentSeconds: Math.round(hs * 3600),
+        comment: '',
+        started: validation.started!,
+      });
+
       onSuccess();
       onClose();
     } catch (err: unknown) {
-      const apiErr = err as {
-        response?: { data?: { errorMessages?: string[] } };
-      };
-      const msg =
-        apiErr.response?.data?.errorMessages?.[0] ??
-        'Failed to log work. Please try again.';
+      const apiErr = err as { response?: { data?: { errorMessages?: string[] } } };
+      const msg = apiErr.response?.data?.errorMessages?.[0] ?? 'Failed to log work.';
       setError(msg);
     } finally {
       setIsSubmitting(false);
@@ -95,132 +94,43 @@ export function LogWorkModal({ issueKey, onClose, onSuccess }: LogWorkModalProps
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
 
-      {/* Modal panel */}
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-[#172B4D]">
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-[#172B4D]">
             Log Work — {issueKey}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-[#5E6C84] hover:text-[#172B4D] transition-colors rounded"
-            aria-label="Close"
-          >
-            <X size={18} />
+          <button onClick={onClose} className="text-[#5E6C84] hover:text-[#172B4D]" aria-label="Close">
+            <X size={16} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* AI Natural Language Input */}
-          {hasAiKey && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3 space-y-2">
-              <label className="block text-xs font-semibold text-indigo-700 flex items-center gap-1">
-                <Sparkles size={11} />
-                Describe your work (optional — AI will parse)
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. họp team 2 tiếng, review PR 30 phút"
-                  value={naturalInput}
-                  onChange={(e) => setNaturalInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleParseWorklog(); } }}
-                  className="flex-1 rounded border border-indigo-200 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleParseWorklog}
-                  disabled={parseLoading || !naturalInput.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0"
-                >
-                  {parseLoading ? (
-                    <Loader2 size={11} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={11} />
-                  )}
-                  {parseLoading ? '…' : '✨ Parse'}
-                </Button>
-              </div>
-              {parseError && (
-                <p className="text-xs text-red-600">{parseError}</p>
-              )}
-            </div>
-          )}
-
-          {/* Time Spent */}
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-xs font-semibold text-[#172B4D] mb-1">
               Time Spent <span className="text-red-500">*</span>
             </label>
             <Input
-              placeholder="e.g. 1h 30m, 2h, 45m"
+              placeholder="e.g. 1.5 (hours)"
               value={timeSpent}
-              onChange={(e) => setTimeSpent(e.target.value)}
-              autoFocus={!hasAiKey}
+              onChange={e => setTimeSpent(e.target.value)}
+              autoFocus
+              type="number"
+              min="0"
+              step="0.5"
             />
-            <p className="text-xs text-[#5E6C84] mt-1">
-              Format: 1h, 30m, 1h 30m, 2d
-            </p>
-          </div>
-
-          {/* Date Started */}
-          <div>
-            <label className="block text-xs font-semibold text-[#172B4D] mb-1">
-              Date Started
-            </label>
-            <Input
-              type="date"
-              value={dateStarted}
-              onChange={(e) => setDateStarted(e.target.value)}
-            />
-          </div>
-
-          {/* Comment */}
-          <div>
-            <label className="block text-xs font-semibold text-[#172B4D] mb-1">
-              Comment{' '}
-              <span className="text-[#5E6C84] font-normal">(optional)</span>
-            </label>
-            <textarea
-              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm resize-none placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 transition-colors"
-              rows={3}
-              placeholder="What did you work on?"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
+            <p className="text-[10px] text-[#5E6C84] mt-1">Hours (e.g. 2, 1.5, 0.5)</p>
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
+            <Button variant="outline" size="sm" type="button" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button size="sm" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" />
-                  Logging…
-                </>
-              ) : (
-                'Log Work'
-              )}
+              {isSubmitting ? <><Loader2 size={12} className="animate-spin" /> Logging…</> : 'Log Work'}
             </Button>
           </div>
         </form>

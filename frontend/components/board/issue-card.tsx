@@ -6,6 +6,7 @@ import { PriorityIcon } from '@/components/shared/priority-icon';
 import { cn } from '@/lib/utils';
 import { useDndContext } from '@dnd-kit/core';
 import { useBoardEdit } from '@/contexts/board-edit';
+import { LogWorkModal } from '@/components/issue/log-work-modal';
 
 export interface IssueCardProps {
   issue: JiraIssue;
@@ -198,6 +199,9 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
   const onFieldRevert = ctx?.onFieldRevert ? (field: string) => ctx.onFieldRevert!(issue.key, field) : undefined;
   const onToggleEditing = ctx?.onToggleEditing ? () => ctx.onToggleEditing!(issue.key) : undefined;
 
+  // Quick log modal state
+  const [logModalOpen, setLogModalOpen] = useState(false);
+
   const typeColor = issueTypeColors[issue.fields.issuetype?.name ?? ''] ?? 'bg-gray-400 text-white';
   const statusCat = issue.fields.status.statusCategory.key;
   const dueDateStatus = statusCat === 'done' ? null : getDueDateStatus(issue.fields.duedate);
@@ -352,6 +356,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
   }, [issue.key, dueDateInput, onIssueUpdate, editingCard, onFieldDraft]);
 
   return (
+    <>
     <div
       onClick={!editMode ? () => onCardClick?.(issue.key) : undefined}
       className={cn(
@@ -419,6 +424,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         </button>
         {/* Pencil icon — toggle edit mode for this card */}
         {editMode && (
+          <>
           <button
             type="button"
             onClick={e => { e.stopPropagation(); onToggleEditing?.(); }}
@@ -432,6 +438,19 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           >
             <Pencil size={11} />
           </button>
+          {/* Quick log — opens create-only LogWorkModal */}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setLogModalOpen(true); }}
+            className={cn(
+              'flex-shrink-0 transition-colors opacity-0 group-hover:opacity-60 text-[#5E6C84] hover:text-[#36B37E]',
+              editingCard && 'opacity-60',
+            )}
+            title="Quick log work"
+          >
+            <Timer size={11} />
+          </button>
+          </>
         )}
         {/* Drag handle — only interactive DnD surface */}
         {dragHandleProps && (
@@ -728,5 +747,17 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         </div>
       </div>
     </div>
+    {/* Quick log modal */}
+    {logModalOpen && (
+      <LogWorkModal
+        issueKey={issue.key}
+        onClose={() => setLogModalOpen(false)}
+        onSuccess={() => {
+          setLogModalOpen(false);
+          onIssueUpdate?.();
+        }}
+      />
+    )}
+    </>
   );
 }

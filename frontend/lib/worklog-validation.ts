@@ -1,14 +1,14 @@
 import type { WorklogEntry } from '@/types/jira';
 
-const MORNING_START = 8; // 08:00
-const MORNING_END = 12; // 12:00
-const AFTERNOON_START = 13.5; // 13:30
-const AFTERNOON_END = 17.5; // 17:30
+const MORNING_START = 8;
+const MORNING_END = 12;
+const AFTERNOON_START = 13.5;
+const AFTERNOON_END = 17.5;
 const MAX_HOURS_PER_DAY = 8;
 const MAX_HOURS_PER_TASK_LIFETIME = 8;
 
 interface TimeInterval {
-  startHour: number; // e.g., 8.5 = 08:30
+  startHour: number;
   endHour: number;
 }
 
@@ -52,7 +52,6 @@ function buildIntervals(todayStr: string, worklogs: WorklogEntry[]): TimeInterva
 function findNextSlot(todayStr: string, allTodayWorklogs: WorklogEntry[]): { started: string; maxDurationSeconds: number } | null {
   const intervals = buildIntervals(todayStr, allTodayWorklogs);
 
-  // Morning window
   let cursor = MORNING_START;
   for (const iv of intervals) {
     if (iv.startHour >= MORNING_END) break;
@@ -71,7 +70,6 @@ function findNextSlot(todayStr: string, allTodayWorklogs: WorklogEntry[]): { sta
     };
   }
 
-  // Afternoon window
   cursor = Math.max(AFTERNOON_START, cursor);
   for (const iv of intervals) {
     if (iv.startHour >= AFTERNOON_END) break;
@@ -99,7 +97,6 @@ export function validateWorklogRules(params: WorklogValidationParams): WorklogVa
   const newSeconds = Math.round(newHoursRequested * 3600);
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Sum today's existing contribution for this sub-task
   const existingTodaySeconds = todayWorklogsForIssue.reduce((s, e) => s + e.timeSpentSeconds, 0);
 
   // ── Rule 1: Sub-task lifetime ≤ 8h ─────────────────────────────────────────
@@ -125,7 +122,7 @@ export function validateWorklogRules(params: WorklogValidationParams): WorklogVa
     };
   }
 
-  // ── Existing today worklog → keep its started time (update, not new) ───────
+  // ── Existing today worklog → keep its started time (overwrite model) ────────
   if (todayWorklogsForIssue.length > 0) {
     const earliest = todayWorklogsForIssue.reduce((a, b) =>
       new Date(a.started) < new Date(b.started) ? a : b,
@@ -134,7 +131,9 @@ export function validateWorklogRules(params: WorklogValidationParams): WorklogVa
   }
 
   // ── No existing → calculate next available slot ────────────────────────────
-  const slot = findNextSlot(todayStr, allTodayWorklogs);
+  // Exclude this issue's own worklogs from slot calculation (will be deleted)
+  const otherWorklogs = allTodayWorklogs.filter(e => e.issueKey !== issueKey);
+  const slot = findNextSlot(todayStr, otherWorklogs);
   if (!slot) {
     return { valid: false, error: 'Hôm nay đã hết giờ làm việc (08:00-12:00, 13:30-17:30).' };
   }
