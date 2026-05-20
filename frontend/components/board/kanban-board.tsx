@@ -81,6 +81,8 @@ export interface BoardColumn {
   wipMax?: number;
   /** Status IDs mapped to this column (from board config). Used for transitions. */
   statusIds: string[];
+  /** Sub-groups when KanbanBoard is in flat mode and subGroupBy is active. */
+  subGroups?: SubGroup[];
 }
 
 /** Column definition metadata (without issues array). */
@@ -1006,7 +1008,9 @@ export const KanbanBoard = React.memo(function KanbanBoard({
       )}
       <div className={cn('flex-1 min-h-0 flex flex-col', manyColumns && 'board-scroll overflow-x-auto pb-2')}>
         <div className="grid gap-4 flex-1 min-h-0" style={gridStyle}>
-        {columns.map((col) => (
+        {columns.map((col) => {
+          const flatSubGroups = col.subGroups && col.subGroups.length > 0 ? col.subGroups : undefined;
+          return (
           <DroppableColumn
             key={col.id}
             colId={col.id}
@@ -1018,8 +1022,21 @@ export const KanbanBoard = React.memo(function KanbanBoard({
             isLoading={isLoading}
             onCardClick={onCardClick}
             onIssueUpdate={onIssueUpdate}
+            subGroups={flatSubGroups}
+            subGroupBy={subGroupBy}
+            subSubGroupBy={subSubGroupBy}
+            collapsedSubGroups={collapsedSubGroups}
+            onToggleSubGroup={(key) => {
+              setCollapsedSubGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            }}
           />
-        ))}
+          );
+        })}
       </div>
       </div>
 

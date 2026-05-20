@@ -411,7 +411,6 @@ export default function BoardPage() {
     });
   }, [columns, typeColumnMap, filters.issuetypeIn]);
 
-
   // Helper: resolve sprint from issue fields
   function resolveSprint(issue: JiraIssue): { id: string; name: string } | null {
     const raw = (issue.fields as any).sprint ?? (issue.fields as any).customfield_10020;
@@ -450,6 +449,12 @@ export default function BoardPage() {
       }
       case 'status':
         return { key: issue.fields.status.name, label: issue.fields.status.name };
+      case 'statusCategory': {
+        const cat = issue.fields.status.statusCategory;
+        if (!cat) return { key: '__unknown', label: 'Unknown' };
+        const catLabels: Record<string, string> = { new: 'To Do', indeterminate: 'In Progress', done: 'Done' };
+        return { key: cat.key, label: catLabels[cat.key] ?? cat.key };
+      }
       case 'reporter': {
         const r = issue.fields.reporter;
         if (r) return { key: r.name, label: r.displayName ?? r.name };
@@ -562,6 +567,42 @@ export default function BoardPage() {
 
     return result;
   }, [groupBy, subGroupBy, subSubGroupBy, filteredGrouped, dynamicColumns]);
+
+  // ── Flat-mode sub-groups ───────────────────────────────────────────────
+  // When swimlanes are undefined (groupBy is 'none', 'status', or 'statusCategory')
+  // but subGroupBy is active, nest sub-groups within each column.
+  const columnsWithSubGroups = useMemo(() => {
+    if (swimlanes || subGroupBy === 'none') return visibleColumns;
+
+    return visibleColumns.map(col => {
+      const subMap = new Map<string, JiraIssue[]>();
+      for (const issue of col.issues) {
+        const sg = getFieldValue(issue, subGroupBy);
+        const key = sg?.label ?? 'Other';
+        if (!subMap.has(key)) subMap.set(key, []);
+        subMap.get(key)!.push(issue);
+      }
+      const subGroups: SubGroup[] = Array.from(subMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([label, sgIssues]) => {
+          let subSubGroups: SubSubGroup[] | undefined;
+          if (subSubGroupBy !== 'none') {
+            const ssMap = new Map<string, JiraIssue[]>();
+            for (const issue of sgIssues) {
+              const ssg = getFieldValue(issue, subSubGroupBy);
+              const ssk = ssg?.label ?? 'Other';
+              if (!ssMap.has(ssk)) ssMap.set(ssk, []);
+              ssMap.get(ssk)!.push(issue);
+            }
+            subSubGroups = Array.from(ssMap.entries())
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([ssLabel, ssIssues]) => ({ label: ssLabel, issues: ssIssues }));
+          }
+          return { label, issues: sgIssues, subSubGroups };
+        });
+      return { ...col, subGroups };
+    });
+  }, [visibleColumns, swimlanes, subGroupBy, subSubGroupBy]);
 
   const columnDefs = useMemo(() => {
     // Status-as-columns: derive from unique status names in current data
@@ -775,7 +816,7 @@ export default function BoardPage() {
       <div className="flex-1 min-h-0 flex flex-col">
         <BoardEditContext.Provider value={{ editMode, editingCards, drafts, onToggleEditing: toggleEditing, onFieldDraft, onFieldRevert }}>
           <KanbanBoard
-            columns={visibleColumns}
+            columns={columnsWithSubGroups}
             isLoading={isLoading}
             onMoveRequest={handleMoveRequest}
             onCardClick={setQuickViewKey}
