@@ -10,7 +10,8 @@ import { useBoardState } from '@/hooks/use-board-state';
 import { useStatusColumns } from '@/hooks/use-status-columns';
 import { KanbanBoard, type BoardColumn, type BoardColumnDef, type SwimlaneStats, type ColumnData, type SubGroup } from '@/components/board/kanban-board';
 import { EMPTY_FILTERS, applyFilters, type BoardFilters } from '@/components/board/board-filters';
-import { BoardFilterBar } from '@/components/board/board-filter-bar';
+import { FilterBar } from '@/components/shared/filter-bar';
+import type { UnifiedFilters } from '@/lib/filter-constants';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
 import { BoardEditContext } from '@/contexts/board-edit';
 import type { SubSubGroup } from '@/components/board/kanban-board';
@@ -810,7 +811,26 @@ export default function BoardPage() {
       />
 
 
-      <BoardFilterBar filters={filters} onChange={setFilters} />
+      <FilterBar
+        filters={filters as unknown as UnifiedFilters}
+        onChange={(f) => setFilters(f as unknown as BoardFilters)}
+        period={{
+          options: [
+            { key: 'today', label: 'Today' },
+            { key: 'week', label: 'Week' },
+            { key: 'month', label: 'Month' },
+            { key: 'year', label: 'Year' },
+          ],
+          active: filters.period,
+          onChange: (key) => setFilters(prev => ({ ...prev, period: key as BoardFilters['period'] })),
+        }}
+        quickPills={[
+          { key: 'onlyMyIssues', label: 'Only My Issues', active: filters.onlyMyIssues, onToggle: () => setFilters(prev => ({ ...prev, onlyMyIssues: !prev.onlyMyIssues })) },
+          { key: 'recentlyUpdated', label: 'Recently Updated', active: filters.recentlyUpdated, onToggle: () => setFilters(prev => ({ ...prev, recentlyUpdated: !prev.recentlyUpdated })) },
+          { key: 'dueThisWeek', label: 'Due This Week', active: filters.dueThisWeek, onToggle: () => setFilters(prev => ({ ...prev, dueThisWeek: !prev.dueThisWeek })) },
+          { key: 'highPriority', label: 'High Priority', active: filters.highPriority, onToggle: () => setFilters(prev => ({ ...prev, highPriority: !prev.highPriority })) },
+        ]}
+      />
 
       {/* Board */}
       <div className="flex-1 min-h-0 flex flex-col">

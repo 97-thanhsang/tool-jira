@@ -4,6 +4,8 @@ import { Search, X, Users, Filter, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import type { TeamGroup } from '@/types/jira';
+import { FilterBar } from '@/components/shared/filter-bar';
+import type { UnifiedFilters } from '@/lib/filter-constants';
 
 export interface TeamFiltersState {
   searchText: string;
@@ -12,11 +14,68 @@ export interface TeamFiltersState {
   project: string;
   period: 'week' | 'month' | 'custom';
   quickFilter: 'all' | 'under-8h';
-  filterStatus: string;          // '' = all, or status name
-  filterPriority: string;        // '' = all, or priority name
-  filterType: string;            // '' = all, or issuetype name
+  filterStatus: string;          // '' = all, or status name (kept for backward compat)
+  filterPriority: string;        // '' = all, or priority name (kept for backward compat)
+  filterType: string;            // '' = all, or issuetype name (kept for backward compat)
   filterDueDate: string;         // '' | 'overdue' | 'today' | 'this-week'
   filterHasLog: string;          // '' | 'has-log' | 'no-log'
+  projectIn?: string[];
+  projectExclude?: boolean;
+  issuetypeIn?: string[];
+  issuetypeExclude?: boolean;
+  statusIn?: string[];
+  statusExclude?: boolean;
+  priorityIn?: string[];
+  priorityExclude?: boolean;
+  assigneeIn?: string[];
+  assigneeExclude?: boolean;
+  sprintIn?: string[];
+  sprintExclude?: boolean;
+  reporterIn?: string[];
+  reporterExclude?: boolean;
+}
+
+export function teamToUnified(f: TeamFiltersState): UnifiedFilters {
+  return {
+    searchText: f.searchText,
+    projectIn: f.projectIn ?? (f.project ? [f.project] : undefined),
+    projectExclude: f.projectExclude,
+    issuetypeIn: f.issuetypeIn ?? (f.filterType ? [f.filterType] : undefined),
+    issuetypeExclude: f.issuetypeExclude,
+    statusIn: f.statusIn ?? (f.filterStatus ? [f.filterStatus] : undefined),
+    statusExclude: f.statusExclude,
+    priorityIn: f.priorityIn ?? (f.filterPriority ? [f.filterPriority] : undefined),
+    priorityExclude: f.priorityExclude,
+    assigneeIn: f.assigneeIn,
+    assigneeExclude: f.assigneeExclude,
+    sprintIn: f.sprintIn,
+    sprintExclude: f.sprintExclude,
+    reporterIn: f.reporterIn,
+    reporterExclude: f.reporterExclude,
+  };
+}
+
+export function unifiedToTeam(u: UnifiedFilters): Partial<TeamFiltersState> {
+  return {
+    projectIn: u.projectIn,
+    projectExclude: u.projectExclude,
+    issuetypeIn: u.issuetypeIn,
+    issuetypeExclude: u.issuetypeExclude,
+    statusIn: u.statusIn,
+    statusExclude: u.statusExclude,
+    priorityIn: u.priorityIn,
+    priorityExclude: u.priorityExclude,
+    assigneeIn: u.assigneeIn,
+    assigneeExclude: u.assigneeExclude,
+    sprintIn: u.sprintIn,
+    sprintExclude: u.sprintExclude,
+    reporterIn: u.reporterIn,
+    reporterExclude: u.reporterExclude,
+    project: '',
+    filterStatus: '',
+    filterPriority: '',
+    filterType: '',
+  };
 }
 
 interface TeamFiltersProps {
@@ -116,8 +175,8 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
   const isAllMembers = filters.selectedMembers.length === 0;
 
   return (
-    <div className="space-y-2 flex-shrink-0 pb-3 border-b border-[#DFE1E6] dark:border-gray-700">
-      {/* Row 1: Member picker + Group shortcut + Period */}
+    <div className="space-y-3">
+      {/* Row 1: Member picker + Group shortcut */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Member multi-select + Group shortcut (hidden when external GroupSelector is used) */}
         {!hideGroupSelector && (
@@ -202,66 +261,32 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
           </>
         )}
 
-        {/* Project filter — now always visible */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Project</span>
-          <select className={cn(selectClass, 'w-28')}
-            value={filters.project} onChange={(e) => update({ project: e.target.value })}>
-            <option value="">All</option>
-            {allProjects.map((p) => (<option key={p} value={p}>{p}</option>))}
-          </select>
-        </div>
-
-        {/* Status filter */}
-        {uniqueStatuses.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Status</span>
-            <select className={cn(selectClass, 'w-28')}
-              value={filters.filterStatus} onChange={(e) => update({ filterStatus: e.target.value })}>
-              <option value="">All</option>
-              {uniqueStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
-            </select>
-          </div>
-        )}
-
-        {/* Priority filter */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Priority</span>
-          <select className={cn(selectClass, 'w-24')}
-            value={filters.filterPriority} onChange={(e) => update({ filterPriority: e.target.value })}>
-            <option value="">All</option>
-            {['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'].map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Type filter */}
-        {uniqueTypes.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Type</span>
-            <select className={cn(selectClass, 'w-24')}
-              value={filters.filterType} onChange={(e) => update({ filterType: e.target.value })}>
-              <option value="">All</option>
-              {uniqueTypes.map((t) => (<option key={t} value={t}>{t}</option>))}
-            </select>
-          </div>
-        )}
-
-        {/* Period toggle */}
-        <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden ml-auto">
-          {(['week', 'month', 'custom'] as const).map((p) => (
-            <button key={p} type="button" onClick={() => update({ period: p })}
-              className={cn('text-xs px-3 py-1.5 font-medium transition-colors capitalize',
-                filters.period === p ? 'bg-[#0052CC] text-white' : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
-                p !== 'custom' ? 'border-r border-[#DFE1E6] dark:border-gray-600' : '')}>
-              {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'Custom'}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Row 2: Search + Quick filters */}
+      {/* Row 2: FilterBar — replaces single-select Project/Status/Priority/Type + adds Sprint/Reporter */}
+      <FilterBar
+        filters={teamToUnified(filters)}
+        onChange={(u) => update(unifiedToTeam(u))}
+        hideSearch
+        period={{
+          options: [
+            { key: 'today', label: 'Today' },
+            { key: 'week', label: 'Week' },
+            { key: 'month', label: 'Month' },
+            { key: 'year', label: 'Year' },
+          ],
+          active: filters.period,
+          onChange: (key) => update({ period: (key as TeamFiltersState['period']) ?? 'week' }),
+        }}
+        quickPills={[
+          { key: 'onlyMyIssues', label: 'Only My Issues', active: false, onToggle: () => {} },
+          { key: 'recentlyUpdated', label: 'Recently Updated', active: false, onToggle: () => {} },
+          { key: 'dueThisWeek', label: 'Due This Week', active: false, onToggle: () => {} },
+          { key: 'highPriority', label: 'High Priority', active: false, onToggle: () => {} },
+        ]}
+      />
+
+      {/* Row 3: Search + Quick filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#5E6C84] dark:text-gray-500 pointer-events-none" />
@@ -277,14 +302,6 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
           )}
         </div>
 
-        {(['all', 'under-8h'] as const).map((qf) => (
-          <button key={qf} type="button" onClick={() => update({ quickFilter: qf })}
-            className={cn('text-xs px-2 py-1 rounded-full border transition-colors font-medium',
-              filters.quickFilter === qf ? 'bg-[#0052CC] text-white border-[#0052CC]' : 'border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800')}>
-            {chipLabels[qf]}
-          </button>
-        ))}
-
         {/* More filters toggle */}
         <button onClick={() => setShowMoreFilters(!showMoreFilters)}
           className={cn('text-xs px-2 py-1 rounded border transition-colors flex items-center gap-1 ml-auto',
@@ -297,7 +314,7 @@ export function TeamFilters({ groups, filters, onChange, allProjects, uniqueStat
         </button>
       </div>
 
-      {/* Row 3: More Filters (collapsible — Due Date, Has Log) */}
+      {/* Row 4: More Filters (collapsible — Due Date, Has Log) */}
       {showMoreFilters && (
         <div className="flex items-center gap-3 flex-wrap pt-1">
           {/* Due Date */}

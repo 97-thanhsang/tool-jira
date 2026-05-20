@@ -11,12 +11,15 @@ export interface IssueFilters {
   priorityExclude?: boolean;
   issuetypeIn?: string[];
   issuetypeExclude?: boolean;
+  projectIn?: string[];
+  projectExclude?: boolean;
   // ── Multi-value person/sprint ────────────────────────────────────
   assigneeIn?: string[];        // 'currentUser()' | 'EMPTY' | username
+  assigneeExclude?: boolean;
   reporterIn?: string[];        // 'currentUser()' | username
+  reporterExclude?: boolean;
   sprintIn?: string[];          // sprint names
-  // ── Multi-value project ──────────────────────────────────────────
-  projectIn?: string[];
+  sprintExclude?: boolean;
   // ── Legacy single-value (kept for backward compat) ──────────────
   project?: string;
   assignee?: string;
@@ -31,6 +34,13 @@ export interface IssueFilters {
   component?: string;
   fixVersion?: string;
   createdAfter?: string;
+  // ── Quick filters ──────────────────────────────────────────────────
+  onlyMyIssues?: boolean;
+  recentlyUpdated?: boolean;
+  dueThisWeek?: boolean;
+  highPriority?: boolean;
+  // ── Period ─────────────────────────────────────────────────────────
+  period?: string;
   // ── Sorting ──────────────────────────────────────────────────────
   sortField?: string;
   sortDir?: 'ASC' | 'DESC';
@@ -77,7 +87,9 @@ function buildJql(filters: IssueFilters): string {
   // ── Project: projectIn takes priority over project ──
   if (filters.projectIn?.length) {
     const vals = filters.projectIn.map(p => `"${p}"`).join(', ');
-    parts.push(`project IN (${vals})`);
+    parts.push(filters.projectExclude
+      ? `project NOT IN (${vals})`
+      : `project IN (${vals})`);
   } else if (filters.project) {
     parts.push(`project = "${filters.project}"`);
   }
@@ -95,7 +107,8 @@ function buildJql(filters: IssueFilters): string {
       const vals = users.map(a => a === 'currentUser()' ? 'currentUser()' : `"${a}"`).join(', ');
       clauses.push(`assignee IN (${vals})`);
     }
-    parts.push(clauses.length === 1 ? clauses[0] : `(${clauses.join(' OR ')})`);
+    const joined = clauses.length === 1 ? clauses[0] : `(${clauses.join(' OR ')})`;
+    parts.push(filters.assigneeExclude ? `NOT ${joined}` : joined);
   } else if (filters.assignee === 'currentUser()') {
     parts.push('assignee = currentUser()');
   } else if (filters.assignee === 'EMPTY') {
@@ -109,7 +122,9 @@ function buildJql(filters: IssueFilters): string {
     const vals = filters.reporterIn
       .map(r => r === 'currentUser()' ? 'currentUser()' : `"${r}"`)
       .join(', ');
-    parts.push(`reporter IN (${vals})`);
+    parts.push(filters.reporterExclude
+      ? `reporter NOT IN (${vals})`
+      : `reporter IN (${vals})`);
   } else if (filters.reporter === 'currentUser()') {
     parts.push('reporter = currentUser()');
   } else if (filters.reporter) {
@@ -119,7 +134,9 @@ function buildJql(filters: IssueFilters): string {
   // ── Sprint: sprintIn > sprint ──
   if (filters.sprintIn?.length) {
     const vals = filters.sprintIn.map(s => `"${s}"`).join(', ');
-    parts.push(`sprint IN (${vals})`);
+    parts.push(filters.sprintExclude
+      ? `sprint NOT IN (${vals})`
+      : `sprint IN (${vals})`);
   } else if (filters.sprint) {
     parts.push(`sprint = "${filters.sprint}"`);
   }

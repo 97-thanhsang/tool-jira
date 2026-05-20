@@ -56,7 +56,18 @@ function projectColor(key: string): string {
   return PROJECT_PALETTE[Math.abs(hash) % PROJECT_PALETTE.length];
 }
 
+function matchesMulti(values: string[] | undefined, exclude: boolean | undefined, actual: string): boolean {
+  if (!values || values.length === 0) return true;
+  const inList = values.includes(actual);
+  return exclude ? !inList : inList;
+}
+
 function filterTask(task: TaskReport, filters: TeamFiltersState): boolean {
+  if (!matchesMulti(filters.projectIn, filters.projectExclude, task.projectKey)) return false;
+  if (!matchesMulti(filters.statusIn, filters.statusExclude, task.status ?? '')) return false;
+  if (!matchesMulti(filters.priorityIn, filters.priorityExclude, task.priority ?? '')) return false;
+  if (!matchesMulti(filters.issuetypeIn, filters.issuetypeExclude, task.issueTypeName ?? '')) return false;
+
   if (filters.filterStatus && task.status !== filters.filterStatus) return false;
   if (filters.filterPriority && task.priority !== filters.filterPriority) return false;
   if (filters.filterType && task.issueTypeName !== filters.filterType) return false;

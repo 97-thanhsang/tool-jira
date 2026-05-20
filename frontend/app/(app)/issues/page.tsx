@@ -4,11 +4,43 @@ import { useState, useEffect } from 'react';
 import { useIssuesList } from '@/hooks/use-issues-list';
 import type { IssueFilters } from '@/hooks/use-issues-list';
 import { IssuesTable } from '@/components/issues/issues-table';
-import { FilterPanel } from '@/components/issues/filter-panel';
+import { FilterBar } from '@/components/shared/filter-bar';
+import type { UnifiedFilters } from '@/lib/filter-constants';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
 import { GroupByControls } from '@/components/shared/group-by-controls';
 import type { TeamGroup } from '@/types/jira';
+
+// ─── Adapters: IssueFilters ↔ UnifiedFilters ─────────────────────────────────
+
+function issueToUnified(f: IssueFilters): UnifiedFilters {
+  return {
+    searchText: f.text ?? '',
+    projectIn: f.projectIn,
+    issuetypeIn: f.issuetypeIn,
+    issuetypeExclude: f.issuetypeExclude,
+    statusIn: f.statusIn,
+    statusExclude: f.statusExclude,
+    priorityIn: f.priorityIn,
+    priorityExclude: f.priorityExclude,
+    assigneeIn: f.assigneeIn,
+    sprintIn: f.sprintIn,
+    reporterIn: f.reporterIn,
+  };
+}
+
+function unifiedToIssue(u: UnifiedFilters): Partial<IssueFilters> {
+  return {
+    text: u.searchText || undefined,
+    projectIn: u.projectIn, projectExclude: u.projectExclude,
+    issuetypeIn: u.issuetypeIn, issuetypeExclude: u.issuetypeExclude,
+    statusIn: u.statusIn, statusExclude: u.statusExclude,
+    priorityIn: u.priorityIn, priorityExclude: u.priorityExclude,
+    assigneeIn: u.assigneeIn, assigneeExclude: u.assigneeExclude,
+    sprintIn: u.sprintIn, sprintExclude: u.sprintExclude,
+    reporterIn: u.reporterIn, reporterExclude: u.reporterExclude,
+  };
+}
 
 export default function IssuesPage() {
   const [filters, setFilters] = useState<IssueFilters>({});
@@ -125,10 +157,25 @@ export default function IssuesPage() {
         </div>
       ) : (
         <>
-            <FilterPanel
-              filters={filters}
-              onUpdate={updateFilters}
-              onClear={clearFilters}
+            <FilterBar
+              filters={issueToUnified(filters)}
+              onChange={(u) => setFilters(prev => ({ ...prev, ...unifiedToIssue(u) }))}
+              period={{
+                options: [
+                  { key: 'today', label: 'Today' },
+                  { key: 'week', label: 'Week' },
+                  { key: 'month', label: 'Month' },
+                  { key: 'year', label: 'Year' },
+                ],
+                active: filters.period as string | undefined,
+                onChange: (key) => setFilters(prev => ({ ...prev, period: key })),
+              }}
+              quickPills={[
+                { key: 'onlyMyIssues', label: 'Only My Issues', active: !!filters.onlyMyIssues, onToggle: () => setFilters(prev => ({ ...prev, onlyMyIssues: !prev.onlyMyIssues })) },
+                { key: 'recentlyUpdated', label: 'Recently Updated', active: !!filters.recentlyUpdated, onToggle: () => setFilters(prev => ({ ...prev, recentlyUpdated: !prev.recentlyUpdated })) },
+                { key: 'dueThisWeek', label: 'Due This Week', active: !!filters.dueThisWeek, onToggle: () => setFilters(prev => ({ ...prev, dueThisWeek: !prev.dueThisWeek })) },
+                { key: 'highPriority', label: 'High Priority', active: !!filters.highPriority, onToggle: () => setFilters(prev => ({ ...prev, highPriority: !prev.highPriority })) },
+              ]}
             />
             <IssuesTable
               issues={issues}

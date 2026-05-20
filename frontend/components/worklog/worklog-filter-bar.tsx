@@ -12,6 +12,7 @@ import type { JiraProject, WorklogEntry } from '@/types/jira';
 export interface WorklogFilterBarFilters {
   searchText: string;
   projectIn?: string[];
+  projectExclude?: boolean;
   issuetypeIn?: string[];
   issuetypeExclude?: boolean;
   statusIn?: string[];
@@ -19,10 +20,15 @@ export interface WorklogFilterBarFilters {
   priorityIn?: string[];
   priorityExclude?: boolean;
   assigneeIn?: string[];
+  assigneeExclude?: boolean;
   sprintIn?: string[];
   reporterIn?: string[];
   groupBy?: 'Project' | 'Type' | 'Assignee' | 'Status' | 'None';
   period?: 'today' | 'week' | 'month' | 'year';
+  onlyMyIssues?: boolean;
+  recentlyUpdated?: boolean;
+  dueThisWeek?: boolean;
+  highPriority?: boolean;
 }
 
 export const EMPTY_WORKLOG_FILTERS: WorklogFilterBarFilters = {
@@ -697,7 +703,8 @@ export function applyWorklogFilters(
 
     // ── Project (multi-select) ───────────────────────────────────────────
     if (filters.projectIn?.length) {
-      if (!filters.projectIn.includes(entry.projectKey)) return false;
+      const match = filters.projectIn.includes(entry.projectKey);
+      if (filters.projectExclude ? match : !match) return false;
     }
 
     // ── Issue type (multi-select) ────────────────────────────────────────
@@ -734,14 +741,14 @@ export function applyWorklogFilters(
           match = true; break;
         }
       }
-      if (!match) return false;
+      if (filters.assigneeExclude ? match : !match) return false;
     }
 
     // ── Sprint — not available on WorklogEntry, skip ─────────────────────
-    // (sprintIn filtering is intentionally skipped — worklog entries have no sprint field)
+    // (sprintIn + sprintExclude filtering is intentionally skipped — worklog entries have no sprint field)
 
     // ── Reporter — not available on WorklogEntry, skip ───────────────────
-    // (reporterIn filtering is intentionally skipped — worklog entries have no reporter field)
+    // (reporterIn + reporterExclude filtering is intentionally skipped — worklog entries have no reporter field)
 
     // ── Period / Date range (filter by started date) ─────────────────────
     if (filters.period) {

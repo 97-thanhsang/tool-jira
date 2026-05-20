@@ -8,6 +8,7 @@ export interface BoardFilters {
   searchText: string;
   // Multi-select filters
   projectIn?: string[];        // project keys
+  projectExclude?: boolean;
   issuetypeIn?: string[];
   issuetypeExclude?: boolean;
   statusIn?: string[];
@@ -15,8 +16,11 @@ export interface BoardFilters {
   priorityIn?: string[];
   priorityExclude?: boolean;
   assigneeIn?: string[];       // 'currentUser()' | 'EMPTY' | username
+  assigneeExclude?: boolean;
   sprintIn?: string[];         // sprint names
+  sprintExclude?: boolean;
   reporterIn?: string[];       // 'currentUser()' | username
+  reporterExclude?: boolean;
   // Period / Due date filter
   period?: 'today' | 'week' | 'month' | 'year';
   dateFrom?: string;           // yyyy-MM-dd (derived from period)
@@ -82,8 +86,9 @@ export function applyFilters(
 
     // ── Project (multi-select) ──────────────────────────────────────
     if (filters.projectIn?.length) {
-      if (!issue.fields.project || !filters.projectIn.includes(issue.fields.project.key))
-        return false;
+      if (!issue.fields.project) return false;
+      const match = filters.projectIn.includes(issue.fields.project.key);
+      if (filters.projectExclude ? match : !match) return false;
     }
 
     // ── Issue type (multi-select) ───────────────────────────────────
@@ -121,7 +126,7 @@ export function applyFilters(
           match = true; break;
         }
       }
-      if (!match) return false;
+      if (filters.assigneeExclude ? match : !match) return false;
     }
 
     // ── Sprint (multi-select) ───────────────────────────────────────
@@ -147,7 +152,7 @@ export function applyFilters(
       }
 
       const hasSprint = filters.sprintIn.some(s => issueSprints.has(s));
-      if (!hasSprint) return false;
+      if (filters.sprintExclude ? hasSprint : !hasSprint) return false;
     }
 
     // ── Reporter (multi-select) ─────────────────────────────────────
@@ -162,7 +167,7 @@ export function applyFilters(
           match = true; break;
         }
       }
-      if (!match) return false;
+      if (filters.reporterExclude ? match : !match) return false;
     }
 
     // ── Period / Due date filter ────────────────────────────────────

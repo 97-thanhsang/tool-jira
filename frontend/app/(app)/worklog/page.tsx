@@ -7,7 +7,9 @@ import { updateWorklog } from '@/lib/worklog-api';
 import { useWorklogs } from '@/hooks/use-worklogs';
 import { useWorklogMutations } from '@/hooks/use-worklog-mutations';
 import { WorklogCalendar } from '@/components/worklog/worklog-calendar';
-import { WorklogFilterBar, EMPTY_WORKLOG_FILTERS, applyWorklogFilters, type WorklogFilterBarFilters } from '@/components/worklog/worklog-filter-bar';
+import { EMPTY_WORKLOG_FILTERS, applyWorklogFilters, type WorklogFilterBarFilters } from '@/components/worklog/worklog-filter-bar';
+import { FilterBar } from '@/components/shared/filter-bar';
+import type { UnifiedFilters } from '@/lib/filter-constants';
 import { WorklogDrawer } from '@/components/worklog/worklog-drawer';
 import { SWIMLANE_PALETTE, type GroupByField } from '@/components/worklog/worklog-day-cell';
 import type { WorklogEntry } from '@/types/jira';
@@ -270,10 +272,25 @@ export default function WorklogPage() {
       />
 
       {/* Filters */}
-      <WorklogFilterBar
-        filters={filters}
-        onChange={setFilters}
-        hideGroupBy
+      <FilterBar
+        filters={filters as unknown as UnifiedFilters}
+        onChange={(f) => setFilters(f as unknown as WorklogFilterBarFilters)}
+        period={{
+          options: [
+            { key: 'today', label: 'Today' },
+            { key: 'week', label: 'Week' },
+            { key: 'month', label: 'Month' },
+            { key: 'year', label: 'Year' },
+          ],
+          active: filters.period,
+          onChange: (key) => setFilters(prev => ({ ...prev, period: key as WorklogFilterBarFilters['period'] })),
+        }}
+        quickPills={[
+          { key: 'onlyMyIssues', label: 'Only My Issues', active: filters.onlyMyIssues ?? false, onToggle: () => setFilters(prev => ({ ...prev, onlyMyIssues: !prev.onlyMyIssues })) },
+          { key: 'recentlyUpdated', label: 'Recently Updated', active: filters.recentlyUpdated ?? false, onToggle: () => setFilters(prev => ({ ...prev, recentlyUpdated: !prev.recentlyUpdated })) },
+          { key: 'dueThisWeek', label: 'Due This Week', active: filters.dueThisWeek ?? false, onToggle: () => setFilters(prev => ({ ...prev, dueThisWeek: !prev.dueThisWeek })) },
+          { key: 'highPriority', label: 'High Priority', active: filters.highPriority ?? false, onToggle: () => setFilters(prev => ({ ...prev, highPriority: !prev.highPriority })) },
+        ]}
       />
 
       {/* Calendar */}

@@ -5,7 +5,7 @@ import { startOfWeek, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, for
 import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTeamDashboard } from '@/hooks/use-team-dashboard';
 import { fetchTeamFilterMeta } from '@/lib/team-api';
-import { TeamFilters, type TeamFiltersState } from '@/components/team/team-filters';
+import { TeamFilters, type TeamFiltersState, teamToUnified } from '@/components/team/team-filters';
 import { TeamReportTable } from '@/components/team/team-report-table';
 import type { TeamGroup } from '@/types/jira';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
@@ -97,7 +97,7 @@ export default function TeamPage() {
     usernames,
     dateFrom: dateRange.dateFrom,
     dateTo: dateRange.dateTo,
-    project: filters.project || undefined,
+    project: (filters.projectIn?.length ? filters.projectIn[0] : filters.project) || undefined,
     allUsers: isAllMembers,
   });
 
