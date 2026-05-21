@@ -1,13 +1,13 @@
 # Tool-Jira — AI Context Entry Point
 
-> **Generated:** 2026-05-15 | **Branch:** main | **Commit:** d2e23e3
+> **Generated:** 2026-05-21 | **Branch:** main | **Commit:** 8a1ab0f
 
 ---
 
 ## OVERVIEW
 
 Personal Jira UI replacement connecting to `https://task.ascvn.com.vn` via proxy backend.
-Stack: **Next.js 15 App Router** + **Express v5** + **Drizzle ORM** (SQLite/PG) + **@base-ui/react** + **SWR** + **Tailwind v4**.
+Stack: **Next.js 16 App Router** + **Express v5** + **Drizzle ORM** (SQLite/PG) + **@base-ui/react** + **SWR** + **Tailwind v4** + **React 19**.
 
 ---
 

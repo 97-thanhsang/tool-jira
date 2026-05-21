@@ -23,7 +23,7 @@
 
 ```
 Project: Tool-Jira — Jira alternative UI cá nhân
-Stack:   Next.js 14 (App Router) + Express v5 + SQLite/Drizzle
+Stack:   Next.js 16 (App Router) + Express v5 + Drizzle ORM (SQLite/PG) + @base-ui/react + SWR + Tailwind v4
 Auth:    Basic Auth → localStorage → X-Jira-Auth header
 Jira:    https://task.ascvn.com.vn (REST API v2)
 Repo:    https://github.com/97-thanhsang/tool-jira

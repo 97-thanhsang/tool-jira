@@ -1,10 +1,10 @@
-# frontend/ — Next.js 15 App Router
+# frontend/ — Next.js 16 App Router
 
-> **Generated:** 2026-05-15 | Parent: `../AGENTS.md`
+> **Generated:** 2026-05-21 | Parent: `../AGENTS.md`
 
 ## OVERVIEW
 
-Next.js 15 App Router SPA — no server components with data, all data fetching via SWR + axios in client components. UI: `@base-ui/react` primitives + Tailwind v4 + cva variants.
+Next.js 16 App Router SPA — no server components with data, all data fetching via SWR + axios in client components. UI: `@base-ui/react` primitives + Tailwind v4 + cva variants.
 
 ## STRUCTURE
 
