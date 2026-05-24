@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useDndContext } from '@dnd-kit/core';
 import { useBoardEdit } from '@/contexts/board-edit';
 import { LogWorkModal } from '@/components/issue/log-work-modal';
+import { PencilV2Modal } from '@/components/issue/pencil-v2-modal';
 
 export interface IssueCardProps {
   issue: JiraIssue;
@@ -201,6 +202,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
 
   // Quick log modal state
   const [logModalOpen, setLogModalOpen] = useState(false);
+  const [pencilV2Open, setPencilV2Open] = useState(false);
 
   const typeColor = issueTypeColors[issue.fields.issuetype?.name ?? ''] ?? 'bg-gray-400 text-white';
   const statusCat = issue.fields.status.statusCategory.key;
@@ -384,7 +386,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             draft?.status != null && 'ring-2 ring-[#36B37E]',
           )}
           title={editingCard ? 'Change status' : issue.fields.status.name}
-          onClick={(editMode || editingCard) ? (e) => handleToggleInlinePopover('status', e) : undefined}
+          onClick={undefined}
         >
           {issue.fields.status.name}
         </button>
@@ -422,19 +424,16 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         >
           {issue.fields.project.key}
         </button>
-        {/* Pencil icon — toggle edit mode for this card */}
+        {/* Pencil icon — opens PencilV2 modal */}
         {editMode && (
           <>
           <button
             type="button"
-            onClick={e => { e.stopPropagation(); onToggleEditing?.(); }}
+            onClick={e => { e.stopPropagation(); setPencilV2Open(true); }}
             className={cn(
-              'flex-shrink-0 transition-colors',
-              editingCard
-                ? 'text-[#0052CC] dark:text-blue-400'
-                : 'opacity-0 group-hover:opacity-60 text-[#5E6C84] hover:text-[#0052CC]',
+              'flex-shrink-0 transition-colors opacity-0 group-hover:opacity-60 text-[#5E6C84] hover:text-[#0052CC]',
             )}
-            title={editingCard ? 'Close edit' : 'Edit this card'}
+            title="Edit this card"
           >
             <Pencil size={11} />
           </button>
@@ -539,7 +538,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           {/* Due date — always visible, only editable when pencil active */}
           {editingCard ? (
             <div className="relative">
-              <button type="button" onClick={(e) => handleToggleInlinePopover('duedate', e)} className={cn('inline-flex items-center gap-1 text-[#0052CC] hover:underline', draftHighlight('duedate', draft))}>
+              <button type="button" onClick={undefined} className={cn('inline-flex items-center gap-1 text-[#0052CC]')}>
                 <Calendar size={10} /> {draft?.duedate !== undefined ? (draft.duedate ? formatDate(draft.duedate as string) : 'None') : (issue.fields.duedate ? formatDate(issue.fields.duedate) : 'Set due')}
               </button>
               {draft?.duedate !== undefined && (
@@ -582,7 +581,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
       {/* Row 5: Labels + Components (only when has tags or popover open) */}
       {(hasTags || openPopover === 'labels') && (
       <div className="relative mb-2">
-        <button type="button" className={cn('w-full text-left cursor-pointer', editingCard && 'ring-2 ring-[#0052CC]/30 rounded', draftHighlight('labels', draft))} onClick={(e) => handleTogglePopover('labels', e)} onPointerDown={e => e.stopPropagation()}>
+          <button type="button" className={cn('w-full text-left cursor-pointer', editingCard && 'ring-2 ring-[#0052CC]/30 rounded', draftHighlight('labels', draft))} onClick={undefined}>
           {hasTags && (
             <div className="flex items-center gap-1 flex-wrap">
               {components.map(c => (
@@ -749,6 +748,19 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           setLogModalOpen(false);
           onIssueUpdate?.();
         }}
+      />
+    )}
+    {/* Pencil V2 modal */}
+    {pencilV2Open && (
+      <PencilV2Modal
+        issue={issue}
+        estimated={estimated}
+        onConfirm={(drafts) => {
+          for (const [field, value] of Object.entries(drafts)) {
+            ctx?.onFieldDraft(issue.key, field, value);
+          }
+        }}
+        onClose={() => setPencilV2Open(false)}
       />
     )}
     </>
