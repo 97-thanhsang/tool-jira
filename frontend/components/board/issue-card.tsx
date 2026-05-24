@@ -78,6 +78,10 @@ function formatHours(seconds: number): string {
   return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
 }
 
+function draftChanged(draft: Record<string, unknown> | undefined, field: string): boolean {
+  return draft != null && draft[field] !== undefined;
+}
+
 /** Parse Jira duration string like "2h 30m" or "1d 4h" to seconds. */
 function parseJiraDuration(dur: string): number {
   let total = 0;
@@ -182,7 +186,9 @@ function FieldActions({ onConfirm, onCancel }: { onConfirm: () => void; onCancel
 }
 
 function draftHighlight(field: string, draft?: Record<string, unknown>) {
-  return draft?.[field] !== undefined ? 'bg-[#E3FCEF] dark:bg-green-900/20 rounded px-1 -mx-0.5' : '';
+  return draft?.[field] !== undefined
+    ? '!text-[#1B7C44] !font-semibold bg-[#E3FCEF] dark:bg-green-900/25 rounded px-1 -mx-0.5 ring-1 ring-[#36B37E]/40'
+    : '';
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -367,7 +373,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         !editMode && 'cursor-pointer',
         editMode && 'ring-1 ring-[#0052CC]/25',
         editingCard && '!ring-2 !ring-[#36B37E] !border-[#36B37E]/40 bg-[#F0FFF4] dark:bg-green-950/20',
-        hasDraft && '!border-r-[3px] !border-r-[#36B37E]',
+        hasDraft && '!border-[#36B37E] !bg-[#F0FFF4] dark:!bg-green-950/20 shadow-[inset_0_0_0_1px_#36B37E]',
         isDraggingActive && 'hover:shadow-md',
         (dueDateStatus === 'overdue' || (statusCat !== 'done' && !estimated))
           ? 'bg-red-50 dark:bg-red-950/20 border-l-2 border-l-red-500'
@@ -385,7 +391,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             STATUS_CATEGORY_COLORS[statusCat] ?? 'bg-gray-400 text-white',
             (editMode || editingCard) && 'cursor-pointer ring-1 ring-[#0052CC]/40',
             editingCard && 'ring-2 ring-[#0052CC]',
-            draft?.status != null && 'ring-2 ring-[#36B37E]',
+            draft?.status != null && '!ring-2 !ring-[#36B37E]',
           )}
           title={editingCard ? 'Change status' : issue.fields.status.name}
           onClick={undefined}
@@ -406,6 +412,11 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         <button type="button" onClick={() => onCardClick?.(issue.key)} className="text-xs text-[#0052CC] dark:text-blue-400 font-medium hover:underline">
           {issue.key}
         </button>
+        {hasDraft && (
+          <span className="text-[9px] font-semibold bg-[#36B37E] text-white px-1.5 py-0.5 rounded-sm leading-none ml-auto flex-shrink-0">
+            Edited
+          </span>
+        )}
         {/* Parent task — for sub-tasks */}
         {issue.fields.parent && (
           <button
@@ -506,10 +517,11 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           )}
         </div>
       ) : (
-        <button type="button" onClick={() => onCardClick?.(issue.key)} className="w-full text-left mb-2">
-          <p className="text-sm text-[#172B4D] dark:text-gray-200 leading-snug line-clamp-2 hover:text-[#0052CC] dark:hover:text-blue-400 transition-colors">
+        <button type="button" onClick={() => onCardClick?.(issue.key)} className={cn('w-full text-left mb-2', draft?.summary != null && 'relative')}>
+          <p className={cn('text-sm leading-snug line-clamp-2 transition-colors', draft?.summary != null ? 'text-[#1B7C44] font-semibold' : 'text-[#172B4D] dark:text-gray-200 hover:text-[#0052CC] dark:hover:text-blue-400')}>
             {issue.fields.summary}
           </p>
+          {draft?.summary != null && <span className="text-[9px] text-[#36B37E] font-medium">(edited)</span>}
         </button>
       )}
 
@@ -540,7 +552,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
           {/* Due date — always visible, only editable when pencil active */}
           {editingCard ? (
             <div className="relative">
-              <button type="button" onClick={undefined} className={cn('inline-flex items-center gap-1 text-[#0052CC]')}>
+              <button type="button" onClick={undefined} className={cn('inline-flex items-center gap-1 text-[#0052CC]', draftChanged(draft, 'duedate') && '!text-[#1B7C44] font-semibold')}>
                 <Calendar size={10} /> {draft?.duedate !== undefined ? (draft.duedate ? formatDate(draft.duedate as string) : 'None') : (issue.fields.duedate ? formatDate(issue.fields.duedate) : 'Set due')}
               </button>
               {draft?.duedate !== undefined && (
@@ -574,7 +586,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
               {draft?.originalEstimate != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('originalEstimate')} />}
             </span>
           ) : (estimated > 0 && (
-            <span className={cn('inline-flex items-center gap-1', estColor)}><Timer size={10} /> {formatHours(estimated)}</span>
+            <span className={cn('inline-flex items-center gap-1', draft?.originalEstimate != null ? 'text-[#1B7C44] font-semibold' : estColor)}><Timer size={10} /> {formatHours(estimated)}</span>
           ))}
         </div>
       </div>
