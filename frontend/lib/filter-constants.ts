@@ -48,6 +48,8 @@ export interface UnifiedFilters {
   sprintExclude?: boolean;
   reporterIn?: string[];
   reporterExclude?: boolean;
+  epicIn?: string[];
+  epicExclude?: boolean;
 }
 
 export const EMPTY_UNIFIED_FILTERS: UnifiedFilters = {

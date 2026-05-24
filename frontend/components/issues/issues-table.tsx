@@ -58,10 +58,11 @@ export type ColumnKey =
   | 'assignee' | 'reporter' | 'sprint' | 'est' | 'logged'
   | 'labels' | 'due' | 'updated';
 
-export type GroupBy = 'none' | 'project' | 'status' | 'type' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter' | 'parent';
+export type GroupBy = 'none' | 'epic' | 'project' | 'status' | 'type' | 'sprint' | 'assignee' | 'priority' | 'statusCategory' | 'reporter' | 'parent';
 
 export type SubGroupBy =
   | 'none'
+  | 'epic'
   | 'type'
   | 'status'
   | 'statusCategory'
@@ -74,6 +75,7 @@ export type SubGroupBy =
 
 export type SubSubGroupBy =
   | 'none'
+  | 'epic'
   | 'type'
   | 'status'
   | 'priority'
@@ -122,14 +124,14 @@ const EDIT_MODE_EDITABLE: ColumnKey[] = ['summary', 'status', 'due', 'assignee',
 const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
-  none: 'None', status: 'Status', priority: 'Priority',
+  none: 'None', epic: 'Epic', status: 'Status', priority: 'Priority',
   type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
   parent: 'Parent',
 };
 
 const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
-  none: 'None', status: 'Status', priority: 'Priority',
+  none: 'None', epic: 'Epic', status: 'Status', priority: 'Priority',
   type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
   sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
   parent: 'Parent',
@@ -137,7 +139,7 @@ const SUB_GROUP_BY_LABELS: Record<SubGroupBy, string> = {
 
 /** SubGroupBy options that are compatible with a given GroupBy (excludes the same field) */
 function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
-  const all: SubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
+  const all: SubGroupBy[] = ['none', 'epic', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
   // Map groupBy → SubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy, SubGroupBy[]>> = {
     status:    ['status', 'statusCategory'],
@@ -153,15 +155,15 @@ function getSubGroupOptions(groupBy: GroupBy): SubGroupBy[] {
 }
 
 const SUB_SUB_GROUP_BY_LABELS: Record<SubSubGroupBy, string> = {
-  none: 'None', status: 'Status', priority: 'Priority',
-  type: 'Type', assignee: 'Assignee', reporter: 'Reporter',
-  sprint: 'Sprint', project: 'Project', statusCategory: 'Status Category',
+  none: 'None', epic: 'Epic', status: 'Status', priority: 'Priority',
+  type: 'Type', sprint: 'Sprint', assignee: 'Assignee',
+  reporter: 'Reporter', project: 'Project', statusCategory: 'Status Category',
   parent: 'Parent',
 };
 
 /** SubSubGroupBy options compatible with a given GroupBy and SubGroupBy (excludes overlapping fields) */
 function getSubSubGroupOptions(groupBy: GroupBy, subGroupBy: SubGroupBy): SubSubGroupBy[] {
-  const all: SubSubGroupBy[] = ['none', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
+  const all: SubSubGroupBy[] = ['none', 'epic', 'status', 'priority', 'type', 'assignee', 'reporter', 'sprint', 'project', 'statusCategory', 'parent'];
   // Map field → SubSubGroupBy keys that overlap (to exclude)
   const exclude: Partial<Record<GroupBy | SubGroupBy, SubSubGroupBy[]>> = {
     status:         ['status'],
@@ -248,7 +250,7 @@ function getCellText(key: ColumnKey, issue: JiraIssue): string {
   }
 }
 
-function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
+function groupIssues(issues: JiraIssue[], groupBy: GroupBy, epicSummaries?: Record<string, string>) {
   if (groupBy === 'none') return [{ key: '__all', label: '', issues }];
   const map = new Map<string, { label: string; issues: JiraIssue[] }>();
 
@@ -260,7 +262,6 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
       case 'project':
         gKey = f.project.key; gLabel = `${f.project.name} (${f.project.key})`; break;
       case 'status':
-        // Group by actual status name (not just category)
         gKey = f.status.name;
         gLabel = f.status.name;
         break;
@@ -294,6 +295,17 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
           gLabel = 'No Parent';
         }
         break;
+      case 'epic': {
+        const epicKey = (f as unknown as Record<string, unknown>).customfield_10107 as string | undefined;
+        if (epicKey && epicSummaries?.[epicKey]) {
+          gKey = epicKey;
+          gLabel = `${epicKey} — ${epicSummaries[epicKey]}`;
+        } else {
+          gKey = epicKey || '__no_epic';
+          gLabel = epicKey || 'No Epic';
+        }
+        break;
+      }
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -305,7 +317,7 @@ function groupIssues(issues: JiraIssue[], groupBy: GroupBy) {
   return Array.from(map.entries()).map(([key, val]) => ({ key, label: val.label, issues: val.issues }));
 }
 
-function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: string; label: string; issues: JiraIssue[] }[] {
+function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy, epicSummaries?: Record<string, string>): { key: string; label: string; issues: JiraIssue[] }[] {
   if (subGroupBy === 'none') return [{ key: '__all', label: '', issues }];
   const map = new Map<string, { label: string; issues: JiraIssue[] }>();
 
@@ -342,7 +354,7 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
         gKey = f.reporter?.name ?? '__noreporter';
         gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
       case 'project':
-        gKey = f.project.key; gLabel = f.project.name; break;
+        gKey = f.project.key; gLabel = `${f.project.name} (${f.project.key})`; break;
       case 'parent':
         if (f.parent) {
           gKey = f.parent.key;
@@ -352,6 +364,17 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
           gLabel = 'No Parent';
         }
         break;
+      case 'epic': {
+        const epicKey = (f as unknown as Record<string, unknown>).customfield_10107 as string | undefined;
+        if (epicKey && epicSummaries?.[epicKey]) {
+          gKey = epicKey;
+          gLabel = `${epicKey} — ${epicSummaries[epicKey]}`;
+        } else {
+          gKey = epicKey || '__no_epic';
+          gLabel = epicKey || 'No Epic';
+        }
+        break;
+      }
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -363,7 +386,7 @@ function subGroupIssues(issues: JiraIssue[], subGroupBy: SubGroupBy): { key: str
   return Array.from(map.entries()).map(([key, val]) => ({ key, label: val.label, issues: val.issues }));
 }
 
-function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): { key: string; label: string; issues: JiraIssue[] }[] {
+function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy, epicSummaries?: Record<string, string>): { key: string; label: string; issues: JiraIssue[] }[] {
   if (subSubGroupBy === 'none') return [{ key: '__all', label: '', issues }];
   const map = new Map<string, { label: string; issues: JiraIssue[] }>();
 
@@ -400,7 +423,7 @@ function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): {
         gKey = f.reporter?.name ?? '__noreporter';
         gLabel = f.reporter?.displayName ?? 'No Reporter'; break;
       case 'project':
-        gKey = f.project.key; gLabel = f.project.name; break;
+        gKey = f.project.key; gLabel = `${f.project.name} (${f.project.key})`; break;
       case 'parent':
         if (f.parent) {
           gKey = f.parent.key;
@@ -410,6 +433,17 @@ function subSubGroupIssues(issues: JiraIssue[], subSubGroupBy: SubSubGroupBy): {
           gLabel = 'No Parent';
         }
         break;
+      case 'epic': {
+        const epicKey = (f as unknown as Record<string, unknown>).customfield_10107 as string | undefined;
+        if (epicKey && epicSummaries?.[epicKey]) {
+          gKey = epicKey;
+          gLabel = `${epicKey} — ${epicSummaries[epicKey]}`;
+        } else {
+          gKey = epicKey || '__no_epic';
+          gLabel = epicKey || 'No Epic';
+        }
+        break;
+      }
       default:
         gKey = '__all'; gLabel = '';
     }
@@ -1029,6 +1063,12 @@ interface IssuesTableProps {
   groupBy?: string;
   subGroupBy?: string;
   subSubGroupBy?: string;
+  toolBarEditMode?: boolean;
+  onToolBarEditMode?: (edit: boolean) => void;
+  hideInternalToolbar?: boolean;
+  /** Callback to expose the exportXlsx function for ToolBar usage */
+  onExportReady?: (wrapper: () => void) => void;
+  epicSummaries?: Record<string, string>;
 }
 
 // ─── Group header helpers ──────────────────────────────────────────
@@ -1262,7 +1302,7 @@ function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
   }
 }
 
-export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy }: IssuesTableProps) {
+export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy, toolBarEditMode, onToolBarEditMode, hideInternalToolbar, onExportReady, epicSummaries }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
   const [transitionDropOpen, setTransDropOpen]  = useState(false);
@@ -1310,6 +1350,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
 
   // ── Inline Edit State (batch edit system) ──────────────────────
   const [editMode, setEditMode] = useState(false);
+  useEffect(() => { if (toolBarEditMode !== undefined) setEditMode(toolBarEditMode); }, [toolBarEditMode]);
+  function handleEditModeToggle(next: boolean) { setEditMode(next); onToolBarEditMode?.(next); }
   const [edits, setEdits] = useState<EditEntry[]>([]);
   const [editingKey, setEditingKey] = useState<string | null>(null); // "ISSUE-KEY:columnKey"
   const [showConfirm, setShowConfirm] = useState(false);
@@ -1449,7 +1491,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     [visibleColumns, columnOrder],
   );
 
-  const groups = useMemo(() => groupIssues(issues, effectiveGroupBy), [issues, effectiveGroupBy]);
+  const groups = useMemo(() => groupIssues(issues, effectiveGroupBy, epicSummaries), [issues, effectiveGroupBy, epicSummaries]);
 
   const rowEditProps = useMemo((): RowEditProps | undefined => {
     if (!editMode) return undefined;
@@ -1593,6 +1635,8 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
     XLSX.writeFile(wb, `issues-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  useEffect(() => { onExportReady?.(() => exportXlsx()); }, [onExportReady, visibleColumns]);
+
   if (isLoading) {
     return (
       <div className="space-y-3 mt-4">
@@ -1709,11 +1753,12 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         </div>
         )}
 
+        {!hideInternalToolbar && (
         <div className="flex items-center gap-2">
           {/* VIEW / EDIT toggle */}
           <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden">
             <button
-              onClick={() => { setEditMode(false); setEditingKey(null); }}
+              onClick={() => { handleEditModeToggle(false); setEditingKey(null); }}
               className={cn(
                 'text-xs px-3 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
                 !editMode
@@ -1724,7 +1769,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               VIEW
             </button>
             <button
-              onClick={() => setEditMode(true)}
+              onClick={() => handleEditModeToggle(true)}
               className={cn(
                 'text-xs px-3 py-1.5 font-medium transition-colors',
                 editMode
@@ -1827,6 +1872,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
             Export
           </button>
         </div>
+        )}
       </div>
 
       {/* ── Bulk action bar ───────────────────────────────────── */}
@@ -2030,7 +2076,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
         ) : (
           groups.map(group => {
             const collapsed = collapsedGroups.has(group.key);
-            const subGroups = subGroupIssues(group.issues, effectiveSubGroupBy);
+                    const subGroups = subGroupIssues(group.issues, effectiveSubGroupBy, epicSummaries);
             return (
               <div key={group.key}>
                 {effectiveGroupBy !== 'none' && (
@@ -2065,7 +2111,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                   ))
                   : !collapsed && subGroups.map(sub => {
                     const subCollapsed = collapsedGroups.has(`${group.key}::${sub.key}`);
-                    const subSubGroups = subSubGroupIssues(sub.issues, effectiveSubSubGroupBy);
+                      const subSubGroups = subSubGroupIssues(sub.issues, effectiveSubSubGroupBy, epicSummaries);
                     return (
                       <div key={sub.key}>
                         {/* Sub-group header */}

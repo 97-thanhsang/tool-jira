@@ -8,6 +8,7 @@ import type { JiraProject } from '@/types/jira';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 import { EMPTY_UNIFIED_FILTERS, ISSUE_TYPES, PRIORITY_OPTIONS } from '@/lib/filter-constants';
 import { useSprints, useStatuses, CATEGORY_ORDER, CATEGORY_LABEL } from '@/hooks/use-filter-data';
+import { useEpics } from '@/hooks/use-epics';
 import { MultiSelectFilter, inputClass, type MultiSelectOption } from './multi-select-filter';
 import { UserMultiFilter } from './user-multi-filter';
 
@@ -73,6 +74,7 @@ export function FilterBar({ filters, onChange, hideSearch, period, quickPills }:
   );
   const sprints = useSprints();
   const { statuses, loading: statusesLoading } = useStatuses();
+  const epics = useEpics();
 
   // Build grouped status options sorted by category then name
   const statusOptions: MultiSelectOption[] = statuses
@@ -99,7 +101,8 @@ export function FilterBar({ filters, onChange, hideSearch, period, quickPills }:
     (filters.priorityIn?.length ?? 0) > 0 ||
     (filters.assigneeIn?.length ?? 0) > 0 ||
     (filters.sprintIn?.length ?? 0) > 0 ||
-    (filters.reporterIn?.length ?? 0) > 0;
+    (filters.reporterIn?.length ?? 0) > 0 ||
+    (filters.epicIn?.length ?? 0) > 0;
 
   return (
     <div className="mb-4 rounded-sm border border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800/60 relative z-20">
@@ -131,6 +134,24 @@ export function FilterBar({ filters, onChange, hideSearch, period, quickPills }:
             projectExclude: exc || undefined,
           })}
         />
+
+        {/* Epic */}
+        {(() => {
+          const epicOptions = epics.map(e => ({ value: e.key, label: `${e.key} — ${e.summary}` }));
+          return (
+            <MultiSelectFilter
+              label="Epic"
+              options={epicOptions}
+              selectedValues={filters.epicIn ?? []}
+              exclude={filters.epicExclude ?? false}
+              onChange={(values, exc) => onChange({
+                ...filters,
+                epicIn: values.length ? values : undefined,
+                epicExclude: exc || undefined,
+              })}
+            />
+          );
+        })()}
 
         {/* Type */}
         <MultiSelectFilter
@@ -297,6 +318,12 @@ export function FilterBar({ filters, onChange, hideSearch, period, quickPills }:
             <FilterChip key={`r-${r}`} label={`Reporter ${filters.reporterExclude ? '≠' : '='} ${r === 'currentUser()' ? 'Me' : r}`} onRemove={() => {
               const next = filters.reporterIn?.filter(v => v !== r);
               onChange({ ...filters, reporterIn: next?.length ? next : undefined, reporterExclude: undefined });
+            }} />
+          ))}
+          {filters.epicIn?.map(e => (
+            <FilterChip key={`e-${e}`} label={`Epic ${filters.epicExclude ? '≠' : '='} ${e}`} onRemove={() => {
+              const next = filters.epicIn?.filter(v => v !== e);
+              onChange({ ...filters, epicIn: next?.length ? next : undefined, epicExclude: undefined });
             }} />
           ))}
           <button

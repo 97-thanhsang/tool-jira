@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useIssuesList } from '@/hooks/use-issues-list';
 import type { IssueFilters } from '@/hooks/use-issues-list';
 import { IssuesTable } from '@/components/issues/issues-table';
@@ -10,6 +10,7 @@ import type { UnifiedFilters } from '@/lib/filter-constants';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
 import { GroupByControls } from '@/components/shared/group-by-controls';
+import { ToolBar } from '@/components/shared/tool-bar';
 import { RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TeamGroup } from '@/types/jira';
@@ -19,16 +20,14 @@ import type { TeamGroup } from '@/types/jira';
 function issueToUnified(f: IssueFilters): UnifiedFilters {
   return {
     searchText: f.text ?? '',
-    projectIn: f.projectIn,
-    issuetypeIn: f.issuetypeIn,
-    issuetypeExclude: f.issuetypeExclude,
-    statusIn: f.statusIn,
-    statusExclude: f.statusExclude,
-    priorityIn: f.priorityIn,
-    priorityExclude: f.priorityExclude,
-    assigneeIn: f.assigneeIn,
-    sprintIn: f.sprintIn,
-    reporterIn: f.reporterIn,
+    projectIn: f.projectIn, projectExclude: f.projectExclude,
+    issuetypeIn: f.issuetypeIn, issuetypeExclude: f.issuetypeExclude,
+    statusIn: f.statusIn, statusExclude: f.statusExclude,
+    priorityIn: f.priorityIn, priorityExclude: f.priorityExclude,
+    assigneeIn: f.assigneeIn, assigneeExclude: f.assigneeExclude,
+    sprintIn: f.sprintIn, sprintExclude: f.sprintExclude,
+    reporterIn: f.reporterIn, reporterExclude: f.reporterExclude,
+    epicIn: f.epicIn, epicExclude: f.epicExclude,
   };
 }
 
@@ -42,12 +41,15 @@ function unifiedToIssue(u: UnifiedFilters): Partial<IssueFilters> {
     assigneeIn: u.assigneeIn, assigneeExclude: u.assigneeExclude,
     sprintIn: u.sprintIn, sprintExclude: u.sprintExclude,
     reporterIn: u.reporterIn, reporterExclude: u.reporterExclude,
+    epicIn: u.epicIn, epicExclude: u.epicExclude,
   };
 }
 
 export default function IssuesPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filters, setFilters] = useState<IssueFilters>({});
+  const [editMode, setEditMode] = useState(false);
+  const exportRef = useRef<(() => void) | null>(null);
   const [sortField, setSortField] = useState('updated');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
 
@@ -64,9 +66,19 @@ export default function IssuesPage() {
     },
   );
   // ── Group-by controls state ──
-  const [groupBy, setGroupBy] = useState<string>('none');
-  const [subGroupBy, setSubGroupBy] = useState<string>('none');
-  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
+  const [groupBy, setGroupBy] = useState<string>('project');
+  const [subGroupBy, setSubGroupBy] = useState<string>('epic');
+  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
+  // ── Default filters after mount (avoid SSR hydration issues) ──
+  useEffect(() => {
+    setFilters(prev => ({
+      ...prev,
+      period: 'month',
+      statusIn: ['Cancelled', 'Closed', 'Done', 'Rejected'],
+      statusExclude: true,
+      assigneeIn: ['currentUser()'],
+    }));
+  }, []);
   // ── Group / member helpers ──
   function addMember(username: string, displayName: string) {
     if (selectedMembers.includes(username)) return;
@@ -89,13 +101,16 @@ export default function IssuesPage() {
     setMemberDisplayNames((prev) => ({ ...prev, ...names }));
   }
 
-  const { issues, total, isLoading, error, mutate } = useIssuesList({
+  const { issues, total, isLoading, error, mutate, epicSummaries } = useIssuesList({
     ...filters,
     sortField,
     sortDir,
-    ...(selectedMembers.length > 0
-      ? { assigneeIn: selectedMembers }
-      : { assignee: 'currentUser()' }),
+    // Only apply team default assignee when FilterBar hasn't set an assignee filter
+    ...(!filters.assigneeIn && !filters.assignee ? (
+      selectedMembers.length > 0
+        ? { assigneeIn: selectedMembers }
+        : { assignee: 'currentUser()' }
+    ) : {}),
   });
 
   function handleSortChange(field: string, dir: 'ASC' | 'DESC') {
@@ -123,22 +138,23 @@ export default function IssuesPage() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
-          Issues
+          Issue List
         </h1>
         {!isLoading && (
           <span className="text-xs bg-[#DFE1E6] dark:bg-gray-700 text-[#42526E] dark:text-gray-300 px-2 py-0.5 rounded-full font-medium">
             {total}
           </span>
         )}
-        <button
-          type="button"
-          onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
-          disabled={isRefreshing}
-          className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors shrink-0"
-        >
-          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-          <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
-        </button>
+        <div className="ml-auto">
+          <ToolBar
+            editMode={editMode}
+            onToggleEditMode={setEditMode}
+            onRefresh={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+            refreshing={isRefreshing}
+            onExport={() => exportRef.current?.()}
+            onConfigColumns={() => {}}
+          />
+        </div>
       </div>
 
       <GroupSelector
@@ -158,8 +174,8 @@ export default function IssuesPage() {
         onGroupByChange={setGroupBy}
         onSubGroupByChange={setSubGroupBy}
         onSubSubGroupByChange={setSubSubGroupBy}
-        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
-        subSubGroupByOptions={['none', 'priority', 'type', 'status', 'sprint']}
+        groupByOptions={['none', 'epic', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
+        subSubGroupByOptions={['none', 'epic', 'parent', 'priority', 'type', 'status', 'sprint']}
       />
 
       {error ? (
@@ -201,6 +217,10 @@ export default function IssuesPage() {
               groupBy={groupBy}
               subGroupBy={subGroupBy}
               subSubGroupBy={subSubGroupBy}
+              toolBarEditMode={editMode}
+              hideInternalToolbar
+              epicSummaries={epicSummaries}
+              onExportReady={(fn) => { exportRef.current = fn; }}
             />
           </>
         )}

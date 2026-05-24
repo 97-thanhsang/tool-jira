@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import useSWR from 'swr';
 import { api } from '@/lib/api';
 import type { JiraSearchResult } from '@/types/jira';
@@ -20,6 +21,9 @@ export interface IssueFilters {
   reporterExclude?: boolean;
   sprintIn?: string[];          // sprint names
   sprintExclude?: boolean;
+  // ── Epic filter ──────────────────────────────────────────────────
+  epicIn?: string[];
+  epicExclude?: boolean;
   // ── Legacy single-value (kept for backward compat) ──────────────
   project?: string;
   assignee?: string;
@@ -141,6 +145,14 @@ function buildJql(filters: IssueFilters): string {
     parts.push(`sprint = "${filters.sprint}"`);
   }
 
+  // ── Epic Link ──
+  if (filters.epicIn?.length) {
+    const vals = filters.epicIn.map(k => `"${k}"`).join(', ');
+    parts.push(filters.epicExclude
+      ? `"Epic Link" NOT IN (${vals})`
+      : `"Epic Link" IN (${vals})`);
+  }
+
   if (filters.component)  parts.push(`component = "${filters.component}"`);
   if (filters.fixVersion) parts.push(`fixVersion = "${filters.fixVersion}"`);
 
@@ -178,7 +190,7 @@ export function useIssuesList(filters: IssueFilters = {}) {
             maxResults: 500,
             fields:
               'summary,status,priority,issuetype,project,updated,created,assignee,reporter,' +
-              'labels,duedate,resolution,fixVersions,components,sprint,customfield_10020,timetracking,parent',
+              'labels,duedate,resolution,fixVersions,components,sprint,customfield_10020,timetracking,parent,customfield_10107',
           },
         })
         .then((r) => r.data),
@@ -188,11 +200,38 @@ export function useIssuesList(filters: IssueFilters = {}) {
     }
   );
 
+  // ── Batch fetch epic summaries ───────────────────────────────────────────
+  const epicKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const issue of data?.issues ?? []) {
+      const ek = (issue.fields as unknown as Record<string, unknown>).customfield_10107 as string | undefined;
+      if (ek) keys.add(ek);
+    }
+    return Array.from(keys);
+  }, [data]);
+
+  const { data: epicData } = useSWR(
+    epicKeys.length > 0 ? ['epic-summaries', ...epicKeys.sort()] : null,
+    async () => {
+      const jql = `issue IN (${epicKeys.map(k => `"${k}"`).join(', ')})`;
+      const r = await api.get<JiraSearchResult>('/search', {
+        params: { jql, maxResults: epicKeys.length, fields: 'summary' },
+      });
+      const map: Record<string, string> = {};
+      for (const issue of r.data.issues ?? []) {
+        map[issue.key] = issue.fields.summary ?? '';
+      }
+      return map;
+    },
+    { revalidateOnFocus: false, dedupingInterval: 60_000 },
+  );
+
   return {
     issues: data?.issues ?? [],
     total: data?.total ?? 0,
     isLoading,
     error,
     mutate,
+    epicSummaries: epicData ?? {},
   };
 }
