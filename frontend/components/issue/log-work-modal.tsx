@@ -287,9 +287,9 @@ export function LogWorkModal({ issueKey, issueSummary, issueDuedate, onClose, on
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
 
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 min-h-[620px]">
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col" style={{ minHeight: '620px' }}>
         {/* ── Header ────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-[#DFE1E6]">
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-[#DFE1E6] flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-[#E6F0FF] flex items-center justify-center flex-shrink-0">
               <Clock size={16} className="text-[#0052CC]" />
@@ -312,8 +312,9 @@ export function LogWorkModal({ issueKey, issueSummary, issueDuedate, onClose, on
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
-          {/* ── Row 1: Date ──────────────────────────────────────────────── */}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col px-6 py-4 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
+            {/* ── Row 1: Date ────────────────────────────────────────────── */}
           <div>
             <label className="block text-[11px] font-semibold text-[#5E6C84] uppercase tracking-wide mb-1.5">
               Date
@@ -577,8 +578,10 @@ export function LogWorkModal({ issueKey, issueSummary, issueDuedate, onClose, on
             </div>
           )}
 
+          </div>
+
           {/* ── Actions ──────────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#DFE1E6]">
+          <div className="flex items-center justify-end gap-2 pt-3 mt-auto border-t border-[#DFE1E6]">
             <div className="text-[10px] text-[#8993A4]">
               Work hours: 08:00–12:00 · 13:30–17:30
             </div>

@@ -255,8 +255,16 @@ export default function BoardPage() {
   const { grouped, dynamicColumns, isLoading, error, mutate, moveCard, toast } =
     useBoardState(statusColumnMap, boardJql);
 
-  const onIssueUpdate = useCallback(() => { mutate(); }, [mutate]);
+  // Build issueKey → issue lookup for Review Changes popup
+  const issueMap = useMemo(() => {
+    const map = new Map<string, JiraIssue>();
+    for (const issues of Object.values(grouped)) {
+      for (const issue of issues) map.set(issue.key, issue);
+    }
+    return map;
+  }, [grouped]);
 
+  const onIssueUpdate = useCallback(() => { mutate(); }, [mutate]);
 
 
   function addMember(username: string, displayName: string) {
@@ -915,65 +923,124 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
       {/* ── Confirm apply popup ── */}
       {confirmOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40" onClick={() => !applying && setConfirmOpen(false)}>
-          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-lg shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#DFE1E6] dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">Review Changes</h3>
-              <button onClick={() => !applying && setConfirmOpen(false)} className="text-[#5E6C84] hover:text-[#172B4D] dark:hover:text-gray-200"><X size={16} /></button>
+          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col" style={{ minHeight: '620px', maxHeight: '85vh' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#DFE1E6] dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#DEEBFF] dark:bg-blue-900/40 flex items-center justify-center">
+                  <CheckCircle2 size={14} className="text-[#0052CC]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">Review Changes</h3>
+                  <p className="text-[10px] text-[#5E6C84] dark:text-gray-400">
+                    {Object.keys(drafts).length} issue(s) with {Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0)} change(s)
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => !applying && setConfirmOpen(false)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] transition-colors"><X size={15} /></button>
             </div>
-            <div className="p-4 space-y-3">
-              {Object.entries(drafts).map(([issueKey, issueDrafts]) => (
-                <div key={issueKey} className="border border-[#DFE1E6] dark:border-gray-600 rounded p-3">
-                  <p className="text-xs font-semibold text-[#0052CC] dark:text-blue-400 mb-2">{issueKey}</p>
-                  <div className="space-y-1.5">
+
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+              {Object.entries(drafts).map(([issueKey, issueDrafts]) => {
+                const issue = issueMap.get(issueKey);
+                const issueSummary = issue?.fields?.summary ?? '';
+
+                // Helpers to get human-readable value
+                const getBeforeValue = (field: string): string => {
+                  if (!issue) return '—';
+                  switch (field) {
+                    case 'summary': return issue.fields.summary ?? '';
+                    case 'duedate': return issue.fields.duedate ?? 'not set';
+                    case 'originalEstimate': return issue.fields.timetracking?.originalEstimateSeconds ? `${(issue.fields.timetracking.originalEstimateSeconds / 3600).toFixed(1)}h` : '0h';
+                    case 'priority': return issue.fields.priority?.name ?? 'None';
+                    case 'status': return issue.fields.status.name;
+                    case 'assignee': return issue.fields.assignee?.displayName ?? 'Unassigned';
+                    case 'timeSpent': return '—';
+                    default: return '—';
+                  }
+                };
+
+                const getAfterValue = (field: string, value: unknown): string => {
+                  switch (field) {
+                    case 'summary': return String(value);
+                    case 'duedate': return String(value || 'cleared');
+                    case 'originalEstimate': return `${String(value)}h`;
+                    case 'status': return String(value);
+                    case 'priority':
+                      if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).name);
+                      return String(value);
+                    case 'assignee':
+                      if (value === null || value === undefined) return 'Unassigned';
+                      if (typeof value === 'object' && 'displayName' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).displayName);
+                      return String(value);
+                    case 'timeSpent': return `${String(value)}h`;
+                    default: return String(value);
+                  }
+                };
+
+                return (
+                <div key={issueKey} className="border border-[#DFE1E6] dark:border-gray-600 rounded-lg overflow-hidden">
+                  {/* Issue header */}
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 bg-[#FAFBFC] dark:bg-gray-800 border-b border-[#DFE1E6] dark:border-gray-600">
+                    <div className="w-2 h-2 rounded-full bg-[#0052CC] flex-shrink-0" />
+                    <span className="text-xs font-semibold text-[#0052CC] dark:text-blue-400">{issueKey}</span>
+                    <span className="text-[11px] text-[#5E6C84] dark:text-gray-400 truncate">{issueSummary}</span>
+                    <span className="text-[10px] text-[#8993A4] dark:text-gray-500 ml-auto font-medium">{Object.keys(issueDrafts).length} change(s)</span>
+                  </div>
+
+                  {/* Changes table */}
+                  <div className="divide-y divide-[#F4F5F7] dark:divide-gray-700">
                     {Object.entries(issueDrafts).map(([field, value]) => (
-                      <div key={field} className="flex items-center gap-2 text-xs">
-                        <span className="font-medium capitalize text-[#5E6C84] dark:text-gray-400 w-20">{field}</span>
-                        <span className="text-[#36B37E] dark:text-green-400 font-medium">
-                          {(() => {
-                            if (field === 'assignee') {
-                              if (value && typeof value === 'object' && 'displayName' in value) return String((value as Record<string, unknown>).displayName);
-                              return String(value ?? 'Unassigned');
-                            }
-                            if (field === 'status') {
-                              if (value && typeof value === 'object' && 'targetName' in value) return String((value as Record<string, unknown>).targetName);
-                              return String(value);
-                            }
-                            if (field === 'duedate') return String(value || 'cleared');
-                            if (field === 'originalEstimate') return `${String(value)}h`;
-                            if (field === 'timeSpent') return `${String(value)}h`;
-                            if (field === 'summary') {
-                              const s = String(value);
-                              return s.length > 60 ? s.slice(0, 60) + '…' : s;
-                            }
-                            if (Array.isArray(value)) return (value as string[]).join(', ') || 'cleared';
-                            return String(value);
-                          })()}
+                      <div key={field} className="grid grid-cols-[100px_1fr_28px_1fr] gap-2 px-3.5 py-2.5 items-start">
+                        {/* Field name */}
+                        <span className="text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide pt-0.5 capitalize">
+                          {field === 'originalEstimate' ? 'Estimate' : field}
                         </span>
+                        {/* Before */}
+                        <div className="min-w-0">
+                          <span className="text-[11px] text-[#DE350B] dark:text-red-400 line-through block leading-tight break-words">
+                            {getBeforeValue(field) || '—'}
+                          </span>
+                        </div>
+                        {/* Arrow */}
+                        <div className="flex items-center justify-center pt-0.5">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6h7.5M7 3.5L9.5 6 7 8.5" stroke="#36B37E" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        {/* After */}
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-[#36B37E] dark:text-green-400 block leading-tight break-words">
+                            {getAfterValue(field, value) || '—'}
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              ))}
+              );})}
               {applyError && (
-                <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded p-2">
-                  <AlertTriangle size={12} /> {applyError}
+                <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <AlertTriangle size={14} /> {applyError}
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 px-4 py-3 border-t border-[#DFE1E6] dark:border-gray-700 bg-[#F4F5F7] dark:bg-gray-800">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={confirmApply}
-                disabled={applying}
-                className="bg-[#36B37E] hover:bg-[#2D9B6C] text-white"
-              >
-                {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                <span className="ml-1">Apply All Changes</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={applying}>
-                Cancel
-              </Button>
+
+            {/* Footer */}
+            <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-[#DFE1E6] dark:border-gray-700 px-5 py-3.5 flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={applying}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={confirmApply}
+                  disabled={applying}
+                  className="bg-[#36B37E] hover:bg-[#2D9B6C] text-white"
+                >
+                  {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  <span className="ml-1.5">Apply All Changes</span>
+                </Button>
             </div>
           </div>
         </div>

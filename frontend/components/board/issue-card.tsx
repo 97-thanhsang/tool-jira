@@ -196,6 +196,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
   const editMode = ctx?.editMode ?? false;
   const editingCard = ctx?.editingCards.has(issue.key) ?? false;
   const draft = ctx?.drafts[issue.key];
+  const hasDraft = draft && Object.keys(draft).length > 0;
   const onFieldDraft = ctx?.onFieldDraft ? (field: string, value: unknown) => ctx.onFieldDraft!(issue.key, field, value) : undefined;
   const onFieldRevert = ctx?.onFieldRevert ? (field: string) => ctx.onFieldRevert!(issue.key, field) : undefined;
   const onToggleEditing = ctx?.onToggleEditing ? () => ctx.onToggleEditing!(issue.key) : undefined;
@@ -366,6 +367,7 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
         !editMode && 'cursor-pointer',
         editMode && 'ring-1 ring-[#0052CC]/25',
         editingCard && '!ring-2 !ring-[#36B37E] !border-[#36B37E]/40 bg-[#F0FFF4] dark:bg-green-950/20',
+        hasDraft && '!border-r-[3px] !border-r-[#36B37E]',
         isDraggingActive && 'hover:shadow-md',
         (dueDateStatus === 'overdue' || (statusCat !== 'done' && !estimated))
           ? 'bg-red-50 dark:bg-red-950/20 border-l-2 border-l-red-500'
