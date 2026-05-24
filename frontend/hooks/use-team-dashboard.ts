@@ -161,7 +161,7 @@ export function useTeamDashboard(params: UseTeamDashboardParams | null) {
   const worklogKey = (allUsers || usernames?.length) ? ['team-worklogs', allUsers ? 'all' : usernames, dateFrom, dateTo] : null;
   const dueDateKey = (allUsers || usernames?.length) ? ['team-duedates', allUsers ? 'all' : usernames, dateFrom] : null;
 
-  const { data: worklogData, error: wlError, isLoading: wlLoading } = useSWR(
+  const { data: worklogData, error: wlError, isLoading: wlLoading, mutate: worklogMutate } = useSWR(
     worklogKey,
     () => fetchTeamWorklogs(usernames ?? [], dateFrom!, dateTo!, allUsers),
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
@@ -200,5 +200,6 @@ export function useTeamDashboard(params: UseTeamDashboardParams | null) {
     dueTasks: dueTasks ?? [],
     isLoading: wlLoading || dueLoading,
     error: wlError,
+    mutate: worklogMutate,
   };
 }

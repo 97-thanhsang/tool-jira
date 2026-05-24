@@ -29,6 +29,7 @@ export function useTeamPlan(params: UseTeamPlanParams | null) {
     data: planData,
     error,
     isLoading,
+    mutate: planMutate,
   } = useSWR<TeamReportData>(
     planKey,
     () => fetchTeamPlan(usernames ?? [], dateFrom, dateTo, allUsers),
@@ -111,5 +112,5 @@ export function useTeamPlan(params: UseTeamPlanParams | null) {
     };
   }, [planData, wlData, project]);
 
-  return { data: filteredData, isLoading, error };
+  return { data: filteredData, isLoading, error, mutate: planMutate };
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { startOfWeek, subWeeks, addWeeks, addDays, subDays, startOfMonth, subMonths, addMonths, format } from 'date-fns';
-import { CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { getStoredUser, api } from '@/lib/api';
 import { updateWorklog } from '@/lib/worklog-api';
 import { useWorklogs } from '@/hooks/use-worklogs';
@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES, type TeamGroup } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
 import { GroupByControls } from '@/components/shared/group-by-controls';
+import { LoadingOverlay } from '@/components/shared/loading-overlay';
 
 // ─── Page component ──────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ export default function WorklogPage() {
 
   // ── Group / member filter ────────────────────────────────────────────────
   const [groups] = useState<TeamGroup[]>(DEFAULT_GROUPS);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     () => DEFAULT_GROUPS[0]?.members ?? [],
   );
@@ -214,7 +216,7 @@ export default function WorklogPage() {
   const totalFilteredHours = filteredEntries.reduce((s, e) => s + e.timeSpentSeconds / 3600, 0);
 
   return (
-    <div className="flex flex-col h-screen p-6">
+    <div className="flex flex-col h-screen p-6 relative">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div>
@@ -235,6 +237,15 @@ export default function WorklogPage() {
             )}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors shrink-0"
+        >
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
       </div>
 
       <GroupSelector
@@ -328,6 +339,7 @@ export default function WorklogPage() {
           {toast.message}
         </div>
       )}
+      <LoadingOverlay loading={isRefreshing} message="Refreshing…" />
     </div>
   );
 }

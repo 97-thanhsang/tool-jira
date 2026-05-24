@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { startOfWeek, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, format } from 'date-fns';
-import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useTeamDashboard } from '@/hooks/use-team-dashboard';
 import { fetchTeamFilterMeta } from '@/lib/team-api';
 import { TeamFilters, type TeamFiltersState, teamToUnified } from '@/components/team/team-filters';
@@ -10,6 +10,7 @@ import { TeamReportTable } from '@/components/team/team-report-table';
 import type { TeamGroup } from '@/types/jira';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
+import { LoadingOverlay } from '@/components/shared/loading-overlay';
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function TeamPage() {
     };
   }, [filters.period, customDateFrom, customDateTo]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Use local selectedMembers state
   const { usernames, isAllMembers } = useMemo(() => {
     if (selectedMembers.length === 0) {
@@ -93,6 +96,7 @@ export default function TeamPage() {
     dueTasks,
     isLoading,
     error,
+    mutate,
   } = useTeamDashboard({
     usernames,
     dateFrom: dateRange.dateFrom,
@@ -146,7 +150,7 @@ export default function TeamPage() {
   const dueTasksCount = dueTasks.length;
 
   return (
-    <div className="p-6 max-w-full mx-auto">
+    <div className="p-6 max-w-full mx-auto relative">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100 flex items-center gap-2">
@@ -191,6 +195,15 @@ export default function TeamPage() {
             </button>
           </div>
         )}
+        <button
+          type="button"
+          onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+          disabled={isRefreshing}
+          className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors shrink-0"
+        >
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
       </div>
 
       {/* Group Selector */}
@@ -261,6 +274,7 @@ export default function TeamPage() {
           />
         </div>
       )}
+      <LoadingOverlay loading={isRefreshing} message="Refreshing…" />
     </div>
   );
 }

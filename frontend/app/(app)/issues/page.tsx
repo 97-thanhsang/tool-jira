@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useIssuesList } from '@/hooks/use-issues-list';
 import type { IssueFilters } from '@/hooks/use-issues-list';
 import { IssuesTable } from '@/components/issues/issues-table';
 import { FilterBar } from '@/components/shared/filter-bar';
+import { LoadingOverlay } from '@/components/shared/loading-overlay';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 import { GroupSelector } from '@/components/shared/group-selector';
 import { GroupByControls } from '@/components/shared/group-by-controls';
+import { RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { TeamGroup } from '@/types/jira';
 
 // ─── Adapters: IssueFilters ↔ UnifiedFilters ─────────────────────────────────
@@ -43,6 +46,7 @@ function unifiedToIssue(u: UnifiedFilters): Partial<IssueFilters> {
 }
 
 export default function IssuesPage() {
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filters, setFilters] = useState<IssueFilters>({});
   const [sortField, setSortField] = useState('updated');
   const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC');
@@ -115,7 +119,7 @@ export default function IssuesPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 relative">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
@@ -126,6 +130,15 @@ export default function IssuesPage() {
             {total}
           </span>
         )}
+        <button
+          type="button"
+          onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+          disabled={isRefreshing}
+          className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors shrink-0"
+        >
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
       </div>
 
       <GroupSelector
@@ -191,6 +204,7 @@ export default function IssuesPage() {
             />
           </>
         )}
+        <LoadingOverlay loading={isRefreshing} message="Refreshing…" />
     </div>
   );
 }

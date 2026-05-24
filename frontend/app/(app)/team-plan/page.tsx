@@ -2,12 +2,13 @@
 import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { startOfWeek, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, format } from 'date-fns';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useTeamPlan } from '@/hooks/use-team-plan';
 import { fetchTeamFilterMeta } from '@/lib/team-api';
 import { TeamFilters, type TeamFiltersState, teamToUnified } from '@/components/team/team-filters';
 import { TeamReportTable } from '@/components/team/team-report-table';
 import { GroupSelector } from '@/components/shared/group-selector';
+import { LoadingOverlay } from '@/components/shared/loading-overlay';
 import type { TeamGroup } from '@/types/jira';
 import { DEFAULT_GROUPS, MEMBER_DISPLAY_NAMES } from '@/lib/team-constants';
 
@@ -60,10 +61,10 @@ export default function TeamPlanPage() {
     const start = startOfWeek(new Date(), { weekStartsOn: 1 });
     return format(start, 'yyyy-MM-dd');
   });
-  const [customDateTo, setCustomDateTo] = useState(() => {
-    const start = startOfWeek(new Date(), { weekStartsOn: 1 });
-    return format(addDays(start, 6), 'yyyy-MM-dd');
+const [customDateTo, setCustomDateTo] = useState(() => {
+    return format(addWeeks(new Date(), 1), 'yyyy-MM-dd');
   });
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   function addMember(username: string, displayName: string) {
     if (selectedMembers.includes(username)) return;
@@ -122,6 +123,7 @@ export default function TeamPlanPage() {
     data,
     isLoading,
     error,
+    mutate,
   } = useTeamPlan({
     usernames,
     dateFrom: dateRange.dateFrom,
@@ -154,7 +156,7 @@ export default function TeamPlanPage() {
   const totalEstDisplay = data ? formatEstTotal(data.totalEstSeconds) : '0h';
 
   return (
-    <div className="p-6 max-w-full mx-auto">
+    <div className="p-6 max-w-full mx-auto relative">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100 flex items-center gap-2">
@@ -167,22 +169,30 @@ export default function TeamPlanPage() {
               onClick={() => {
                 const start = subWeeks(new Date(customDateFrom), 1);
                 setCustomDateFrom(format(start, 'yyyy-MM-dd'));
-                setCustomDateTo(format(addDays(start, 6), 'yyyy-MM-dd'));
+                setCustomDateTo(format(addWeeks(start, 1), 'yyyy-MM-dd'));
               }}
               className="p-0.5 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-800 text-[#5E6C84] dark:text-gray-400"
             >
               <ChevronLeft size={14} />
             </button>
-            <input type="date" value={customDateFrom} onChange={(e) => setCustomDateFrom(e.target.value)}
-              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]" />
+            <input
+              type="date"
+              value={customDateFrom}
+              onChange={(e) => setCustomDateFrom(e.target.value)}
+              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+            />
             <span className="text-xs text-[#5E6C84] dark:text-gray-400">–</span>
-            <input type="date" value={customDateTo} onChange={(e) => setCustomDateTo(e.target.value)}
-              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]" />
+            <input
+              type="date"
+              value={customDateTo}
+              onChange={(e) => setCustomDateTo(e.target.value)}
+              className="text-xs border border-[#DFE1E6] dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-100 focus:outline-none focus:border-[#0052CC]"
+            />
             <button
               onClick={() => {
                 const start = addWeeks(new Date(customDateFrom), 1);
                 setCustomDateFrom(format(start, 'yyyy-MM-dd'));
-                setCustomDateTo(format(addDays(start, 6), 'yyyy-MM-dd'));
+                setCustomDateTo(format(addWeeks(start, 1), 'yyyy-MM-dd'));
               }}
               className="p-0.5 rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-800 text-[#5E6C84] dark:text-gray-400"
             >
@@ -190,6 +200,15 @@ export default function TeamPlanPage() {
             </button>
           </div>
         )}
+        <button
+          type="button"
+          onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+          disabled={isRefreshing}
+          className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors shrink-0"
+        >
+          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+          <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
       </div>
 
       <GroupSelector
@@ -252,6 +271,7 @@ export default function TeamPlanPage() {
           <TeamReportTable data={reportData} filters={filters} />
         </div>
       )}
+      <LoadingOverlay loading={isRefreshing} message="Refreshing…" />
     </div>
   );
 }

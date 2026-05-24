@@ -14,6 +14,7 @@ import { FilterBar } from '@/components/shared/filter-bar';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
 import { BoardEditContext } from '@/contexts/board-edit';
+import { LoadingOverlay } from '@/components/shared/loading-overlay';
 import type { SubSubGroup } from '@/components/board/kanban-board';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -56,6 +57,7 @@ export default function BoardPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const totalDraftFields = useMemo(
     () => Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0),
@@ -687,12 +689,12 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
   }
 
   return (
-    <div className="flex flex-col h-screen p-6">
-      {/* Header */}
+    <div className="flex flex-col h-screen p-6 relative">
+      {/* ── Header ── */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-<h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
-  Kanban Board
-</h1>
+        <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
+          Kanban Board
+        </h1>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
             <button
@@ -796,12 +798,12 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
           <Button
             variant="outline"
             size="sm"
-            onClick={() => mutate()}
-            disabled={isLoading}
+            onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
+            disabled={isLoading || isRefreshing}
             className="border-[#DFE1E6] dark:border-gray-700 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-800 shrink-0"
           >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-            <span className="ml-1.5">Refresh</span>
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <span className="ml-1.5">{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
           </Button>
         </div>
       </div>
@@ -1061,6 +1063,7 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
           {toast.message}
         </div>
       )}
+      <LoadingOverlay loading={isRefreshing} message="Refreshing…" />
     </div>
   );
 }
