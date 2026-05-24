@@ -173,25 +173,41 @@ export function PencilV2Modal({ issue, estimated, onConfirm, onClose }: PencilV2
                 </button>
                 {statusOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-[#DFE1E6] rounded-lg shadow-xl z-30 max-h-48 overflow-y-auto">
-                    {transitions.length === 0 ? (
-                      <div className="px-3 py-2 text-[11px] text-[#5E6C84]">No transitions available</div>
-                    ) : (
-                      transitions.filter(t => t.to).map(t => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => { setSelectedStatus(t.to!.name); setStatusOpen(false); }}
-                          className={cn(
-                            'w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-[#F4F5F7] transition-colors',
-                            selectedStatus === t.to!.name && 'bg-[#E6F0FF]',
-                          )}
-                        >
-                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', STATUS_CATEGORY_COLORS[t.to!.statusCategory?.key ?? ''])}>
-                            {t.to!.name}
-                          </span>
-                        </button>
-                      ))
-                    )}
+                    {(() => {
+                      // Current status + all unique transition targets
+                      const seen = new Set<string>();
+                      const options: { name: string; categoryKey: string }[] = [];
+                      // Always include current issue status
+                      const currentCat = issue.fields.status?.statusCategory?.key ?? '';
+                      options.push({ name: issue.fields.status.name, categoryKey: currentCat });
+                      seen.add(issue.fields.status.name);
+                      // Add unique transitions
+                      for (const t of transitions) {
+                        if (t.to && !seen.has(t.to.name)) {
+                          seen.add(t.to.name);
+                          options.push({ name: t.to.name, categoryKey: t.to.statusCategory?.key ?? '' });
+                        }
+                      }
+                      return options.length === 0 ? (
+                        <div className="px-3 py-2 text-[11px] text-[#5E6C84]">No transitions available</div>
+                      ) : (
+                        options.map((opt, i) => (
+                          <button
+                            key={`${opt.name}-${i}`}
+                            type="button"
+                            onClick={() => { setSelectedStatus(opt.name); setStatusOpen(false); }}
+                            className={cn(
+                              'w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-[#F4F5F7] transition-colors',
+                              selectedStatus === opt.name && 'bg-[#E6F0FF]',
+                            )}
+                          >
+                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', STATUS_CATEGORY_COLORS[opt.categoryKey] ?? '')}>
+                              {opt.name}
+                            </span>
+                          </button>
+                        ))
+                      );
+                    })()}
                   </div>
                 )}
               </div>
