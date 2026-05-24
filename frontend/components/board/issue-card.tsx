@@ -558,20 +558,11 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
             issue.fields.duedate && <span>📅 {formatDate(issue.fields.duedate)}</span>
           )}
         </div>
-        {/* Log + Est — right side with icons */}
+        {/* Log (read-only) + Est (editable when editingCard) */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {editingCard ? (
-            <span className="inline-flex items-center gap-1">
-              <Clock size={10} />
-              <input type="number" min="0" step="0.5" defaultValue={logged / 3600}
-                onBlur={e => { const v = parseFloat(e.target.value); if (v > 0) onFieldDraft?.('timeSpent', v); }}
-                onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) onFieldDraft?.('timeSpent', v); } }}
-                placeholder="h"                 className="w-14 text-[10px] border border-[#0052CC] rounded px-1 py-0.5 bg-white dark:bg-gray-800 text-[#172B4D]" />
-              {draft?.timeSpent != null && <FieldActions onConfirm={() => {}} onCancel={() => onFieldRevert?.('timeSpent')} />}
-            </span>
-          ) : (logged > 0 && (
+          {logged > 0 && (
             <span className={cn('inline-flex items-center gap-1', logColor)}><Clock size={10} /> {formatHours(logged)}</span>
-          ))}
+          )}
           {editingCard ? (
             <span className="inline-flex items-center gap-1">
               <Timer size={10} />
@@ -751,6 +742,8 @@ export function IssueCard({ issue, onCardClick, onIssueUpdate, dragHandleProps }
     {logModalOpen && (
       <LogWorkModal
         issueKey={issue.key}
+        issueSummary={issue.fields.summary}
+        issueDuedate={issue.fields.duedate}
         onClose={() => setLogModalOpen(false)}
         onSuccess={() => {
           setLogModalOpen(false);

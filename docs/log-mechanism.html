@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cơ chế Log — Kanban Board</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #F4F5F7; color: #172B4D; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #5E6C84; font-size: 13px; margin-bottom: 24px; }
+  .card { background: white; border: 1px solid #DFE1E6; border-radius: 8px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .card h2 { font-size: 14px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px; }
+  .card h2 .badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .badge-green { background: #E3FCEF; color: #006644; }
+  .badge-blue { background: #DEEBFF; color: #0747A6; }
+  .badge-red { background: #FFEBE6; color: #BF2600; }
+  .badge-orange { background: #FFF0E0; color: #A54800; }
+  .step { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #EBECF0; }
+  .step:last-child { border-bottom: none; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; background: #0052CC; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .step-num.green { background: #36B37E; }
+  .step-num.red { background: #BF2600; }
+  .step-num.orange { background: #FF8B00; }
+  .step-content { flex: 1; }
+  .step-title { font-weight: 600; font-size: 13px; }
+  .step-desc { font-size: 12px; color: #5E6C84; margin-top: 2px; }
+  .code { background: #F4F5F7; border: 1px solid #DFE1E6; border-radius: 4px; padding: 8px 12px; font-size: 12px; font-family: 'SF Mono', Monaco, monospace; margin-top: 6px; overflow-x: auto; }
+  .flow { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .flow-box { background: #F4F5F7; border: 1px solid #DFE1E6; border-radius: 6px; padding: 10px 14px; font-size: 12px; text-align: center; min-width: 80px; }
+  .flow-arrow { color: #5E6C84; font-size: 18px; padding-top: 10px; }
+  .flow-box.active { background: #DEEBFF; border-color: #0052CC; }
+  .flow-box.done { background: #E3FCEF; border-color: #36B37E; }
+  .flow-box.error { background: #FFEBE6; border-color: #BF2600; }
+  .row { display: flex; gap: 20px; align-items: stretch; }
+  .col { flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #EBECF0; }
+  th { background: #F4F5F7; font-weight: 600; color: #5E6C84; font-size: 11px; text-transform: uppercase; }
+  .highlight { background: #FFF0B3; padding: 1px 4px; border-radius: 2px; }
+  .vs-table td { vertical-align: top; padding: 10px; width: 50%; }
+  .vs-table { border: 1px solid #DFE1E6; border-radius: 6px; overflow: hidden; }
+  .vs-table th { padding: 10px; font-size: 13px; }
+  .vs-before { background: #FFEBE6; }
+  .vs-after { background: #E3FCEF; }
+  ul { font-size: 12px; padding-left: 16px; margin: 4px 0; }
+  li { margin-bottom: 4px; }
+  strong { color: #172B4D; }
+  .icon-row { display: flex; align-items: center; gap: 16px; margin: 8px 0; }
+  .icon-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid #DFE1E6; background: white; }
+  .icon-item .icon { width: 16px; height: 16px; }
+  .note { background: #FFF0B3; border-left: 3px solid #FF8B00; padding: 8px 12px; font-size: 12px; border-radius: 4px; margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<h1>⏱️ Cơ chế Log Work trên Kanban Board</h1>
+<p class="subtitle">Chỉ có 1 cách log duy nhất: bấm <strong>Timer icon</strong> trên card → mở <strong>LogWorkModal</strong></p>
+
+<!-- Icon Legend -->
+<div class="card">
+  <h2>🔑 Các icon trên Issue Card</h2>
+  <div class="icon-row">
+    <div class="icon-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#5E6C84" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <strong>Clock</strong> — Logged time <span style="color:#5E6C84;font-size:11px;">(read-only, không edit được)</span></div>
+    <div class="icon-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#5E6C84" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <strong>Timer</strong> — Estimate <span style="color:#5E6C84;font-size:11px;">(edit được khi bấm Pencil)</span></div>
+    <div class="icon-item"><span class="icon" style="font-size:14px;text-align:center;">⌛</span> <strong>Timer icon</strong> — Quick Log <span style="color:#36B37E;font-size:11px;">(chỉ hiện khi Edit Mode ON)</span></div>
+    <div class="icon-item"><span class="icon" style="font-size:14px;text-align:center;">✏️</span> <strong>Pencil</strong> — Edit card fields <span style="color:#5E6C84;font-size:11px;">(chỉ hiện khi Edit Mode ON)</span></div>
+  </div>
+</div>
+
+<!-- Flow Diagram -->
+<div class="card">
+  <h2>🔄 Flow: User bấm Timer icon → Log xong</h2>
+  <div class="flow">
+    <div class="flow-box active">Bấm ⌛ Timer<br><span style="font-size:10px;color:#5E6C84;">(chỉ khi Edit Mode ON)</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">Mở LogWorkModal<br><span style="font-size:10px;color:#5E6C84;">issueKey + duedate</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">User chọn <strong>Date</strong><br><span style="font-size:10px;color:#5E6C84;">default = duedate</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">User nhập <strong>Hours</strong><br><span style="font-size:10px;color:#5E6C84;">e.g. "4"</span></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">Submit</div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">Nhập Date + Hours</div>
+      <div class="step-desc">Date picker mặc định = duedate của issue. Nếu không có duedate hoặc duedate trong quá khứ → mặc định = hôm nay. User có thể chọn ngày khác.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">Fetch lifetimeTotal</div>
+      <div class="step-desc">Gọi <code>fetchIssueWorklogTotal(issueKey)</code> → GET /issue/{key}/worklog → sum tất cả worklog của issue này (lifetime).</div>
+      <div class="code">lifetimeTotal = 7200  // 2h đã log từ trước đến nay</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num green">3</div>
+    <div class="step-content">
+      <div class="step-title">Rule 1: Lifetime ≤ 8h</div>
+      <div class="step-desc"><code>(lifetimeTotal + newSeconds) ≤ 8 * 3600</code></div>
+      <div class="code">(7200 + 14400) ≤ 28800  →  true ✅</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num green">4</div>
+    <div class="step-content">
+      <div class="step-title">ADDITIVE: Tạo worklog mới</div>
+      <div class="step-desc">Gọi <code>addWorklog({ issueKey, timeSpentSeconds: newSeconds, started })</code> — <strong>KHÔNG xoá worklog cũ</strong>. Cơ chế cộng dồn.</div>
+      <div class="code">POST /issue/PROJ-123/worklog  { timeSpentSeconds: 14400, started: "2026-05-24T08:30:00.000+0700" }</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num green">5</div>
+    <div class="step-content">
+      <div class="step-title">onSuccess() → mutate() board</div>
+      <div class="step-desc">Đóng modal, refresh toàn bộ board để cập nhật số liệu logged time trên card.</div>
+    </div>
+  </div>
+</div>
+
+<!-- LogWorkModal UI -->
+<div class="card">
+  <h2>📋 LogWorkModal UI</h2>
+  <div style="border:1px solid #DFE1E6;border-radius:8px;padding:20px;max-width:340px;background:white;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <span style="font-size:14px;font-weight:600;">Log Work — PROJ-123</span>
+      <span style="color:#5E6C84;cursor:pointer;">✕</span>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">Date <span style="color:red;">*</span></label>
+      <input type="date" value="2026-05-24" style="width:100%;padding:6px 8px;border:1px solid #DFE1E6;border-radius:4px;font-size:13px;">
+      <div style="font-size:10px;color:#5E6C84;margin-top:2px;">Default: due date (2026-05-28)</div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block;">Time Spent <span style="color:red;">*</span></label>
+      <input type="number" min="0" step="0.5" placeholder="e.g. 1.5 (hours)" style="width:100%;padding:6px 8px;border:1px solid #DFE1E6;border-radius:4px;font-size:13px;">
+      <div style="font-size:10px;color:#5E6C84;margin-top:2px;">Hours (e.g. 2, 1.5, 0.5)</div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button style="padding:6px 12px;border:1px solid #DFE1E6;border-radius:4px;background:white;font-size:12px;cursor:pointer;">Cancel</button>
+      <button style="padding:6px 12px;border:none;border-radius:4px;background:#0052CC;color:white;font-size:12px;cursor:pointer;">Log Work</button>
+    </div>
+  </div>
+</div>
+
+<!-- Additive Model vs Overwrite Model -->
+<div class="card">
+  <h2>📊 So sánh: Trước đây (Overwrite) vs Bây giờ (Additive)</h2>
+  <table class="vs-table">
+    <tr>
+      <th class="vs-before">❌ Trước đây — Overwrite</th>
+      <th class="vs-after">✅ Bây giờ — Additive</th>
+    </tr>
+    <tr>
+      <td class="vs-before">
+        <strong>Kịch bản:</strong> Sub-task A có 2h ngày hôm nay<br>
+        User muốn log thêm 4h cho A<br><br>
+        <div class="code" style="border-color:#BF2600;">
+          // Xoá worklog cũ (2h)
+          deleteWorklog(A, wl_id)<br><br>
+          // Tạo mới (4h)<br>
+          addWorklog({ issueKey: A, timeSpentSeconds: 14400 })<br><br>
+          // Kết quả: A = 4h ❌ (mất 2h)
+        </div>
+      </td>
+      <td class="vs-after">
+        <strong>Kịch bản:</strong> Sub-task A có 2h ngày hôm nay<br>
+        User muốn log thêm 4h cho A<br><br>
+        <div class="code" style="border-color:#36B37E;">
+          // Không xoá gì cả<br><br>
+          // Tạo worklog mới (4h)<br>
+          addWorklog({ issueKey: A, timeSpentSeconds: 14400 })<br><br>
+          // Kết quả: A = 2h + 4h = 6h ✅
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td class="vs-before">
+        ⚠️ <strong>Vấn đề:</strong><br>
+        <ul>
+          <li>Mỗi sub-task chỉ có 1 worklog/ngày</li>
+          <li>Log đè lên nhau → mất dữ liệu cũ</li>
+          <li>User phải nhập tổng số, không phải số thêm</li>
+        </ul>
+      </td>
+      <td class="vs-after">
+        ✅ <strong>Lợi ích:</strong><br>
+        <ul>
+          <li>Sub-task có thể có nhiều worklog/ngày</li>
+          <li>Cộng dồn → giữ nguyên lịch sử</li>
+          <li>User nhập số muốn thêm, không cần tính tổng</li>
+        </ul>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- Validation -->
+<div class="card">
+  <h2>✅ Validation Rules</h2>
+  <table>
+    <tr><th>Rule</th><th>Formular</th><th>Khi fail</th></tr>
+    <tr>
+      <td><span class="badge badge-green">Lifetime ≤ 8h</span></td>
+      <td><code>lifetimeTotal + newSeconds ≤ 8 * 3600</code></td>
+      <td>Báo lỗi: "Sub-task PROJ-123 lifetime: đã log 2.0h, còn 6.0h. Không thể log 8h."</td>
+    </tr>
+  </table>
+  
+  <div class="note">
+    <strong>Lưu ý:</strong> Daily total check (≤ 8h/ngày) được xử lý ở Jira backend + worklog page. Modal chỉ check lifetime để tránh request phức tạp.
+  </div>
+</div>
+
+<!-- Scenario Example -->
+<div class="card">
+  <h2>🎬 Ví dụ thực tế</h2>
+  
+  <div style="font-size:13px;margin-bottom:12px;"><strong>Giả sử:</strong> Hôm nay (24/05), bạn có:</div>
+  <table>
+    <tr><th>Sub-task</th><th>Đã log</th><th>Duedate</th><th>Hành động</th></tr>
+    <tr>
+      <td>PROJ-101 (Task A)</td>
+      <td>2h</td>
+      <td>28/05</td>
+      <td><span class="highlight">Bấm ⌛ → Date = 28/05 (duedate) → nhập 4h → Log</span></td>
+    </tr>
+    <tr>
+      <td>PROJ-102 (Task B)</td>
+      <td>1h</td>
+      <td>—</td>
+      <td>Bấm ⌛ → Date = 24/05 (today) → nhập 2h → Log</td>
+    </tr>
+  </table>
+  
+  <div style="margin-top:12px;font-size:12px;">
+    <strong>Kết quả:</strong><br>
+    - PROJ-101: lifetime = 2h + 4h = <strong>6h</strong> (worklog ngày 28/05: 4h)<br>
+    - PROJ-102: lifetime = 1h + 2h = <strong>3h</strong> (worklog ngày 24/05: 2h)<br>
+    - Cả 2 đều ≤ 8h → ✅
+  </div>
+</div>
+
+<!-- Pencil Edit -->
+<div class="card">
+  <h2>✏️ Pencil Edit Mode — Chỉ edit được Est, không log</h2>
+  <div class="step">
+    <div class="step-num orange">!</div>
+    <div class="step-content">
+      <div class="step-title">Khi bấm Pencil</div>
+      <div class="step-desc">
+        <ul>
+          <li><strong>Clock icon (logged time)</strong> → hiển thị <span class="highlight">read-only</span>. Không có input, không edit được.</li>
+          <li><strong>Timer icon (Estimate)</strong> → hiển thị <span class="highlight">editable input</span> (type=number). User có thể sửa originalEstimate.</li>
+          <li><strong>⌛ Quick Log</strong> → vẫn hoạt động bình thường (song song với Pencil).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

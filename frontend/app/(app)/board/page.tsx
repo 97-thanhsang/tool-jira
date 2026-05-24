@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { api, getStoredUser } from '@/lib/api';
 import { startOfWeek, addDays, startOfMonth, endOfMonth, startOfYear, endOfYear, format } from 'date-fns';
 import { RefreshCw, CheckCircle2, XCircle, X, Loader2, Pencil, Check, Undo2, AlertTriangle, Info } from 'lucide-react';
@@ -31,8 +31,18 @@ export default function BoardPage() {
   // Status-based 5-column mapping
   const { statusColumnMap } = useStatusColumns();
 
-  // Filter state
-  const [filters, setFilters] = useState<BoardFilters>({ ...EMPTY_FILTERS, period: 'month' });
+  // Filter state — don't set assigneeIn initially (prevents SSR hydration mismatch)
+  const [filters, setFilters] = useState<BoardFilters>({
+    ...EMPTY_FILTERS,
+    period: 'week',
+  });
+
+  // After mount, default assignee filter = current user
+  useEffect(() => {
+    if (currentUsername && !filters.assigneeIn && !filters.assigneeExclude) {
+      setFilters(prev => ({ ...prev, assigneeIn: ['currentUser()'] }));
+    }
+  }, [currentUsername]); // eslint-disable-line react-hooks/exhaustive-deps
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -312,9 +322,9 @@ export default function BoardPage() {
   }, [grouped, effectiveFilters, currentUsername]);
 
   // ── 3-level grouping state ──────────────────────────────────────────────
-  const [groupBy, setGroupBy]             = useState<string>('none');
-  const [subGroupBy, setSubGroupBy]       = useState<string>('none');
-  const [subSubGroupBy, setSubSubGroupBy] = useState<string>('none');
+const [groupBy, setGroupBy]             = useState<string>('status');
+const [subGroupBy, setSubGroupBy]       = useState<string>('project');
+const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
 
   // Unique status names from current data — used when groupBy='status' as columns
   const statusColumns = useMemo(() => {
@@ -672,9 +682,9 @@ export default function BoardPage() {
     <div className="flex flex-col h-screen p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
-          My Board
-        </h1>
+<h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100">
+  Kanban Board
+</h1>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
             <button
