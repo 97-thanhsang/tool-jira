@@ -68,6 +68,7 @@ export default function BoardPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [applySuccess, setApplySuccess] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const totalDraftFields = useMemo(
@@ -203,11 +204,13 @@ export default function BoardPage() {
     }
     if (issuesWithErrors.length > 0) {
       setApplyError(`Failed for: ${issuesWithErrors.join(', ')}. Other changes applied.`);
+      setApplySuccess(false);
     } else {
       setDrafts({});
       setEditingCards(new Set());
-      setConfirmOpen(false);
       mutate();
+      setApplyError(null);
+      setApplySuccess(true);
     }
     setApplying(false);
   }
@@ -944,27 +947,61 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
 
       {/* ── Confirm apply popup ── */}
       {confirmOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40" onClick={() => !applying && setConfirmOpen(false)}>
-          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col" style={{ minHeight: '620px', maxHeight: '85vh' }}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40" onClick={() => { if (!applying) { setConfirmOpen(false); setApplySuccess(false); setApplyError(null); } }}>
+          <div className="bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col" style={{ minHeight: '620px', maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#DFE1E6] dark:border-gray-700 flex-shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#DEEBFF] dark:bg-blue-900/40 flex items-center justify-center">
-                  <CheckCircle2 size={14} className="text-[#0052CC]" />
+                <div className={cn(
+                  'w-7 h-7 rounded-lg flex items-center justify-center',
+                  applySuccess ? 'bg-[#E3FCEF]' : applyError ? 'bg-[#FFEBE6]' : 'bg-[#DEEBFF]',
+                )}>
+                  {applySuccess ? (
+                    <CheckCircle2 size={14} className="text-[#36B37E]" />
+                  ) : applyError ? (
+                    <AlertTriangle size={14} className="text-[#DE350B]" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-[#0052CC]" />
+                  )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">Review Changes</h3>
+                  <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">
+                    {applySuccess ? 'Changes Applied' : applyError ? 'Apply Failed' : 'Review Changes'}
+                  </h3>
                   <p className="text-[10px] text-[#5E6C84] dark:text-gray-400">
-                    {Object.keys(drafts).length} issue(s) with {Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0)} change(s)
+                    {applySuccess
+                      ? 'All changes have been applied successfully.'
+                      : applyError ? 'Some changes could not be applied.'
+                      : `${Object.keys(drafts).length} issue(s) with ${Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0)} change(s)`
+                    }
                   </p>
                 </div>
               </div>
-              <button onClick={() => !applying && setConfirmOpen(false)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] transition-colors"><X size={15} /></button>
+              <button onClick={() => { if (!applying) { setConfirmOpen(false); setApplySuccess(false); setApplyError(null); } }} className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] transition-colors"><X size={15} /></button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
-              {Object.entries(drafts).map(([issueKey, issueDrafts]) => {
+            {applySuccess ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-5 py-12">
+                <div className="w-14 h-14 rounded-full bg-[#E3FCEF] flex items-center justify-center mb-4">
+                  <Check size={28} className="text-[#36B37E]" />
+                </div>
+                <p className="text-sm font-semibold text-[#172B4D] dark:text-gray-100 mb-1">
+                  All changes applied successfully
+                </p>
+                <p className="text-xs text-[#5E6C84] dark:text-gray-400">
+                  {Object.keys(drafts).length} issue(s) updated with {Object.values(drafts).reduce((s, d) => s + Object.keys(d).length, 0)} change(s).
+                </p>
+              </div>
+            ) : applyError ? (
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+                <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <AlertTriangle size={14} /> {applyError}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+                {Object.entries(drafts).map(([issueKey, issueDrafts]) => {
                 const issue = issueMap.get(issueKey);
                 const issueSummary = issue?.fields?.summary ?? '';
 
@@ -1038,31 +1075,36 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
                           </span>
                         </div>
                       </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
-              );})}
-              {applyError && (
-                <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <AlertTriangle size={14} /> {applyError}
-                </div>
-              )}
-            </div>
+              );
+            })}
+          </div>
+        )}
 
             {/* Footer */}
             <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-[#DFE1E6] dark:border-gray-700 px-5 py-3.5 flex items-center justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={applying}>
-                  Cancel
+              {applySuccess || applyError ? (
+                <Button size="sm" onClick={() => { setConfirmOpen(false); setApplySuccess(false); setApplyError(null); }} className="bg-[#0052CC] text-white">
+                  Close
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={confirmApply}
-                  disabled={applying}
-                  className="bg-[#36B37E] hover:bg-[#2D9B6C] text-white"
-                >
-                  {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  <span className="ml-1.5">Apply All Changes</span>
-                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={applying}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={confirmApply}
+                    disabled={applying}
+                    className="bg-[#36B37E] hover:bg-[#2D9B6C] text-white"
+                  >
+                    {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    <span className="ml-1.5">{applying ? 'Applying…' : 'Apply All Changes'}</span>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
