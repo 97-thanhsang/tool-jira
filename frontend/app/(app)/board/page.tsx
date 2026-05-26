@@ -32,10 +32,14 @@ export default function BoardPage() {
   // Status-based 5-column mapping
   const { statusColumnMap } = useStatusColumns();
 
-  // Filter state — don't set assigneeIn initially (prevents SSR hydration mismatch)
+  // Filter state
   const [filters, setFilters] = useState<BoardFilters>({
     ...EMPTY_FILTERS,
     period: 'week',
+    dateRangeMode: 'old',
+    issuetypeIn: ['Sub-task'],
+    statusIn: ['Cancelled', 'Closed', 'Done', 'Rejected'],
+    statusExclude: true,
   });
 
   // After mount, default assignee filter = current user
@@ -332,7 +336,7 @@ export default function BoardPage() {
   }, [grouped, effectiveFilters, currentUsername]);
 
   // ── 3-level grouping state ──────────────────────────────────────────────
-const [groupBy, setGroupBy]             = useState<string>('status');
+const [groupBy, setGroupBy]             = useState<string>('assignee');
 const [subGroupBy, setSubGroupBy]       = useState<string>('project');
 const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
 
