@@ -51,6 +51,7 @@ export default function BoardPage() {
   }, [currentUsername]); // eslint-disable-line react-hooks/exhaustive-deps
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [displayMode, setDisplayMode] = useState<'full' | 'focus'>('full');
   const [legendOpen, setLegendOpen] = useState(false);
   const epics = useEpics();
   const epicMap = useMemo(() => {
@@ -719,6 +720,34 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
           Kanban Board
         </h1>
         <div className="flex items-center gap-2">
+          {/* Display mode toggle */}
+          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setDisplayMode('full')}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                displayMode === 'full'
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              Full
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayMode('focus')}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors',
+                displayMode === 'focus'
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              Focus
+            </button>
+          </div>
+          {/* Edit/View toggle */}
           <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
             <button
               type="button"
@@ -832,6 +861,9 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
       </div>
 
       {/* ── Group selector ── */}
+      {/* ── Sections hidden in minimal mode ── */}
+      {displayMode === 'full' && (
+        <>
       <GroupSelector
         groups={groups}
         selectedMembers={selectedMembers}
@@ -874,6 +906,8 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
           { key: 'highPriority', label: 'High Priority', active: filters.highPriority, onToggle: () => setFilters(prev => ({ ...prev, highPriority: !prev.highPriority })) },
         ]}
       />
+      </>
+      )}
 
       {/* Board */}
       <div className="flex-1 min-h-0 flex flex-col">
