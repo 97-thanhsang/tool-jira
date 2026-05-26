@@ -15,6 +15,7 @@ import type { UnifiedFilters } from '@/lib/filter-constants';
 import { IssueDetailPanel } from '@/components/issues/issue-detail-panel';
 import { BoardEditContext } from '@/contexts/board-edit';
 import { LoadingOverlay } from '@/components/shared/loading-overlay';
+import { useEpics } from '@/hooks/use-epics';
 import type { SubSubGroup } from '@/components/board/kanban-board';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,12 @@ export default function BoardPage() {
   const [quickViewKey, setQuickViewKey] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const epics = useEpics();
+  const epicMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const e of epics) map[e.key] = e.summary;
+    return map;
+  }, [epics]);
 
   // ── Staged edit state ──────────────────────────────────────────────────
   /** Per-issue draft changes: { [issueKey]: { [field]: newValue } } */
@@ -485,6 +492,15 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
         if (r) return { key: r.name, label: r.displayName ?? r.name };
         return { key: '__noreporter', label: 'No Reporter' };
       }
+      case 'epic': {
+        const epicKey = (issue.fields as unknown as Record<string, unknown>).customfield_10107 as string | undefined;
+        if (epicKey) {
+          const summary = epicMap[epicKey];
+          if (summary) return { key: epicKey, label: `${epicKey} — ${summary}` };
+          return { key: epicKey, label: epicKey };
+        }
+        return { key: '__no_epic', label: 'No Epic' };
+      }
       default:
         return null;
     }
@@ -830,8 +846,8 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
         onGroupByChange={setGroupBy}
         onSubGroupByChange={setSubGroupBy}
         onSubSubGroupByChange={setSubSubGroupBy}
-        groupByOptions={['none', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
-        subSubGroupByOptions={['none', 'priority', 'type', 'parent']}
+        groupByOptions={['none', 'epic', 'project', 'assignee', 'priority', 'type', 'parent', 'status', 'sprint', 'statusCategory', 'reporter']}
+        subSubGroupByOptions={['none', 'epic', 'priority', 'type', 'parent']}
       />
 
 
