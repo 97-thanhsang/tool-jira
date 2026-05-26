@@ -138,9 +138,22 @@ export default function BoardPage() {
         const fields: Record<string, unknown> = {};
         for (const [field, value] of Object.entries(issueDrafts)) {
           switch (field) {
-            case 'status':
-              await api.post(`/issue/${issueKey}/transitions`, { transition: { id: value as string } });
+            case 'status': {
+              const statusObj = value && typeof value === 'object' ? value as { id?: string; name?: string } : null;
+              // Fetch fresh transitions to get current valid transition IDs
+              const { data: transData } = await api.get<{ transitions: Array<{ id: string; to?: { name: string } }> }>(
+                `/issue/${issueKey}/transitions`,
+              );
+              const freshTransition = statusObj?.name
+                ? transData.transitions.find(t => t.to?.name === statusObj.name)
+                : statusObj?.id
+                  ? transData.transitions.find(t => t.id === statusObj.id)
+                  : null;
+              if (freshTransition) {
+                await api.post(`/issue/${issueKey}/transitions`, { transition: { id: Number(freshTransition.id) } });
+              }
               break;
+            }
             case 'assignee':
               fields.assignee = value ? { name: value } : null;
               break;
@@ -1054,23 +1067,25 @@ const [subSubGroupBy, setSubSubGroupBy] = useState<string>('parent');
                   }
                 };
 
-                const getAfterValue = (field: string, value: unknown): string => {
-                  switch (field) {
-                    case 'summary': return String(value);
-                    case 'duedate': return String(value || 'cleared');
-                    case 'originalEstimate': return `${String(value)}h`;
-                    case 'status': return String(value);
-                    case 'priority':
-                      if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).name);
-                      return String(value);
-                    case 'assignee':
-                      if (value === null || value === undefined) return 'Unassigned';
-                      if (typeof value === 'object' && 'displayName' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).displayName);
-                      return String(value);
-                    case 'timeSpent': return `${String(value)}h`;
-                    default: return String(value);
-                  }
-                };
+            const getAfterValue = (field: string, value: unknown): string => {
+              switch (field) {
+                case 'summary': return String(value);
+                case 'duedate': return String(value || 'cleared');
+                case 'originalEstimate': return `${String(value)}h`;
+                case 'status':
+                  if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).name);
+                  return String(value);
+                case 'priority':
+                  if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).name);
+                  return String(value);
+                case 'assignee':
+                  if (value === null || value === undefined) return 'Unassigned';
+                  if (typeof value === 'object' && 'displayName' in (value as Record<string, unknown>)) return String((value as Record<string, unknown>).displayName);
+                  return String(value);
+                case 'timeSpent': return `${String(value)}h`;
+                default: return String(value);
+              }
+            };
 
                 return (
                 <div key={issueKey} className="border border-[#DFE1E6] dark:border-gray-600 rounded-lg overflow-hidden">

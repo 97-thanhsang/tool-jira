@@ -116,7 +116,7 @@ export function PencilV2Modal({ issue, estimated, onConfirm, onClose }: PencilV2
     }
     if (selectedStatus !== issue.fields.status.name) {
       const t = transitions.find(tr => tr.to?.name === selectedStatus);
-      if (t) drafts.status = selectedStatus;
+      if (t) drafts.status = { id: t.id, name: selectedStatus };
     }
 
     onConfirm(drafts);
