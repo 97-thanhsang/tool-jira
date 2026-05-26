@@ -13,7 +13,7 @@ import {
   Loader2, X, ChevronDown, ChevronRight,
   ChevronUp, ChevronsUpDown,
   Columns, Download, Check, User, Calendar, GripVertical,
-  AlertTriangle, Pencil, Save,
+  AlertTriangle, Pencil, Save, MoreVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatusEditor, InlineTextEditor, DateEditor, EstEditor } from '../team/inline-editors';
@@ -105,7 +105,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'reporter', label: 'Reporter', widthClass: 'w-40',  sortField: 'reporter', defaultVisible: true  },
   { key: 'sprint',   label: 'Sprint',   widthClass: 'w-32',                          defaultVisible: true  },
   { key: 'est',      label: 'Est',      widthClass: 'w-20',                          defaultVisible: true  },
-  { key: 'logged',   label: 'Logged',   widthClass: 'w-20',                          defaultVisible: false },
+  { key: 'logged',   label: 'Logged',   widthClass: 'w-20',                          defaultVisible: true },
   { key: 'labels',   label: 'Labels',   widthClass: 'w-40',                          defaultVisible: false },
   { key: 'due',      label: 'Due',      widthClass: 'w-24',  sortField: 'duedate',  defaultVisible: true  },
   { key: 'updated',  label: 'Updated',  widthClass: 'w-24',  sortField: 'updated',  defaultVisible: true, align: 'right' },
@@ -117,9 +117,9 @@ const DEFAULT_VISIBLE = new Set<ColumnKey>(
 
 const DEFAULT_ORDER: ColumnKey[] = COLUMNS.map(c => c.key);
 
-const INLINE_EDITABLE: ColumnKey[] = ['status', 'priority', 'due'];
+const INLINE_EDITABLE: ColumnKey[] = [];
 
-const EDIT_MODE_EDITABLE: ColumnKey[] = ['summary', 'status', 'due', 'assignee', 'est'];
+const EDIT_MODE_EDITABLE: ColumnKey[] = [];
 
 const PRIORITY_NAMES = ['Highest', 'High', 'Medium', 'Low', 'Lowest', 'Blocker', 'Minor'];
 
@@ -520,7 +520,7 @@ function SortableHeader({ label, field, sortField, sortDir, onSort, className }:
   );
 }
 
-function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
+function CellContent({ col, issue, hasDraft }: { col: ColumnDef; issue: JiraIssue; hasDraft?: boolean }) {
   const f = issue.fields;
 
   switch (col.key) {
@@ -536,6 +536,11 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
             ? <Image src={f.issuetype.iconUrl} alt={f.issuetype.name} width={14} height={14} className="flex-shrink-0" unoptimized />
             : <IssueTypeFallback name={f.issuetype.name} />}
           <span className="text-xs text-[#0052CC] dark:text-blue-400 font-medium truncate">{issue.key}</span>
+          {hasDraft && (
+            <span className="text-[9px] font-semibold bg-[#36B37E] text-white px-1.5 py-0.5 rounded-sm leading-none flex-shrink-0">
+              Edited
+            </span>
+          )}
         </a>
       );
 
@@ -556,7 +561,7 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
       return <StatusBadge status={f.status} />;
 
     case 'priority':
-      return <PriorityIcon priority={f.priority} />;
+      return <div className="flex items-center gap-1.5"><PriorityIcon priority={f.priority} /><span className="text-xs text-[#5E6C84] dark:text-gray-400">{f.priority?.name ?? ''}</span></div>;
 
     case 'assignee':
       return f.assignee ? (
@@ -587,7 +592,8 @@ function CellContent({ col, issue }: { col: ColumnDef; issue: JiraIssue }) {
       return <span className="text-xs text-[#5E6C84] dark:text-gray-400">{f.timetracking?.originalEstimate ?? '—'}</span>;
 
     case 'logged':
-      return <span className="text-xs text-[#5E6C84] dark:text-gray-400">{f.timetracking?.timeSpent ?? '—'}</span>;
+      const secs = f.timetracking?.timeSpentSeconds;
+      return <span className="text-xs text-[#5E6C84] dark:text-gray-400">{secs != null ? `${(secs / 3600).toFixed(1)}h` : '—'}</span>;
 
     case 'labels':
       return (f.labels?.length ?? 0) > 0 ? (
@@ -870,15 +876,42 @@ function editDisplayValue(edits: EditEntry[], issueKey: string, field: string, o
 
 // ─────────────────────────────────────────────────────────────────
 
-function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved, onInlineError, editProps }: {
+function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, onInlineSaved, onInlineError, editProps, onOpenPencilV2, onOpenLogWork, issueDrafts }: {
   issue: JiraIssue; selected: boolean; onToggle: () => void;
   visibleCols: ColumnDef[];
   onOpenPanel: (key: string) => void;
   onInlineSaved: (msg: string) => void;
   onInlineError: (msg: string) => void;
   editProps?: RowEditProps;
+  onOpenPencilV2?: (issueKey: string, issue: JiraIssue) => void;
+  onOpenLogWork?: (issueKey: string, issue: JiraIssue) => void;
+  issueDrafts?: Record<string, unknown>;
 }) {
   const [inlineEdit, setInlineEdit] = useState<ColumnKey | null>(null);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const actionRef = useRef<HTMLDivElement>(null);
+  const hasDraft = issueDrafts && Object.keys(issueDrafts).length > 0;
+
+  // Map column keys to draft field names
+  const DRAFT_FIELD_MAP: Record<string, string> = {
+    summary: 'summary',
+    status: 'status',
+    priority: 'priority',
+    assignee: 'assignee',
+    due: 'duedate',
+    est: 'originalEstimate',
+  };
+
+  useEffect(() => {
+    if (!actionMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (actionRef.current && !actionRef.current.contains(e.target as Node)) {
+        setActionMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [actionMenuOpen]);
   const ed = editProps;
 
   function handleCellClick(e: React.MouseEvent, col: ColumnDef) {
@@ -919,6 +952,7 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
       className={cn(
         'flex items-center gap-3 px-4 py-2.5 border-b border-[#DFE1E6] dark:border-gray-700 last:border-b-0 hover:bg-[#F4F5F7] dark:hover:bg-gray-700/50 transition-colors cursor-pointer min-w-0',
         selected && 'bg-[#E6F0FF] dark:bg-blue-900/20',
+        hasDraft && '!bg-[#F0FFF4] dark:!bg-green-950/20 !border-l-2 !border-l-[#36B37E]',
       )}
       onClick={handleRowClick}
     >
@@ -932,6 +966,49 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
         aria-label={`Select ${issue.key}`}
       />
 
+      {editProps && onOpenPencilV2 && (
+        <div className="relative flex-shrink-0 px-0.5" ref={actionRef} onClick={e => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setActionMenuOpen(v => !v); }}
+            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#5E6C84] dark:text-gray-400 hover:text-[#172B4D] dark:hover:text-gray-200 transition-all"
+            title="Actions"
+          >
+            <MoreVertical size={15} />
+          </button>
+          {actionMenuOpen && (
+          <div className="absolute left-0 top-full mt-1.5 bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-xl shadow-xl z-30 min-w-[180px] overflow-hidden py-1">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setActionMenuOpen(false); onOpenPencilV2(issue.key, issue); }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-left hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 transition-colors"
+            >
+              <span className="w-6 h-6 rounded-md bg-[#E6F0FF] dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Pencil size={12} className="text-[#0052CC]" />
+              </span>
+              <div className="flex flex-col">
+                <span className="text-xs font-medium">Edit Issue</span>
+                <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Modify fields of this issue</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setActionMenuOpen(false); onOpenLogWork?.(issue.key, issue); }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-left hover:bg-[#F4F5F7] dark:hover:bg-gray-700 text-[#172B4D] dark:text-gray-200 transition-colors"
+            >
+              <span className="w-6 h-6 rounded-md bg-[#E3FCEF] dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-[11px]">⏱</span>
+              </span>
+              <div className="flex flex-col">
+                <span className="text-xs font-medium">Log Work</span>
+                <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">Add time spent on this issue</span>
+              </div>
+            </button>
+          </div>
+          )}
+        </div>
+      )}
+
       {visibleCols.map(col => {
         const isViewEditable = !ed && INLINE_EDITABLE.includes(col.key);
         const isEditingView = !ed && inlineEdit === col.key;
@@ -944,7 +1021,7 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
             className={cn(
               col.widthClass,
               col.key !== 'summary' && 'flex-shrink-0',
-              col.key === 'summary' && 'min-w-0 overflow-hidden',
+              col.key === 'summary' && 'min-w-0',
               col.align === 'right' && 'text-right',
               isViewEditable && !isEditingView && 'group/cell relative cursor-pointer',
               isEditingView && 'relative',
@@ -1034,7 +1111,12 @@ function IssueTableRow({ issue, selected, onToggle, visibleCols, onOpenPanel, on
                     <span className="text-xs text-[#B45309] dark:text-amber-400 truncate">{ed.getAssigneeEditValue(issue.key)}</span>
                   </div>
                 ) : (
-                  <CellContent col={col} issue={issue} />
+                  <div className={cn(
+                    'flex items-center min-w-0',
+                    issueDrafts && DRAFT_FIELD_MAP[col.key] && issueDrafts[DRAFT_FIELD_MAP[col.key]] !== undefined && 'rounded px-0.5 bg-[#E3FCEF] dark:bg-green-900/30 text-[#1B7C44] dark:text-green-300 font-medium',
+                  )}>
+                    <CellContent col={col} issue={issue} hasDraft={hasDraft} />
+                  </div>
                 )}
                 {isViewEditable && col.key !== 'status' && (
                   <span className="ml-1 flex-shrink-0 opacity-0 group-hover/cell:opacity-60 transition-opacity">
@@ -1069,6 +1151,9 @@ interface IssuesTableProps {
   /** Callback to expose the exportXlsx function for ToolBar usage */
   onExportReady?: (wrapper: () => void) => void;
   epicSummaries?: Record<string, string>;
+  drafts?: Record<string, Record<string, unknown>>;
+  onOpenPencilV2?: (issueKey: string, issue: JiraIssue) => void;
+  onOpenLogWork?: (issueKey: string, issue: JiraIssue) => void;
 }
 
 // ─── Group header helpers ──────────────────────────────────────────
@@ -1302,7 +1387,7 @@ function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
   }
 }
 
-export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy, toolBarEditMode, onToolBarEditMode, hideInternalToolbar, onExportReady, epicSummaries }: IssuesTableProps) {
+export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy, toolBarEditMode, onToolBarEditMode, hideInternalToolbar, onExportReady, epicSummaries, drafts, onOpenPencilV2, onOpenLogWork }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
   const [transitionDropOpen, setTransDropOpen]  = useState(false);
@@ -1487,7 +1572,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   const visibleCols = useMemo(
     () => columnOrder
       .map(k => COLUMNS.find(c => c.key === k))
-      .filter((c): c is ColumnDef => c !== undefined && visibleColumns.has(c.key)),
+      .filter((c): c is ColumnDef => c !== undefined && (visibleColumns.has(c.key) || c.key === 'summary')),
     [visibleColumns, columnOrder],
   );
 
@@ -2042,6 +2127,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
             className="w-3.5 h-3.5 rounded border-[#DFE1E6] flex-shrink-0 cursor-pointer accent-[#0052CC]"
             aria-label="Select all"
           />
+          {editMode && (
+            <span className="w-7 flex-shrink-0 text-xs font-semibold text-[#5E6C84] dark:text-gray-400 text-center">
+              ⋮
+            </span>
+          )}
           {visibleCols.map(col => col.sortField ? (
             <SortableHeader
               key={col.key}
@@ -2052,7 +2142,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               onSort={onSortChange}
               className={cn(
                 col.widthClass,
-                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0 overflow-hidden',
+                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0',
               )}
             />
           ) : (
@@ -2061,7 +2151,7 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
               className={cn(
                 'text-xs font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide',
                 col.widthClass,
-                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0 overflow-hidden',
+                col.key !== 'summary' ? 'flex-shrink-0' : 'min-w-0',
               )}
             >
               {col.label}
@@ -2107,6 +2197,9 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                       onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
                       onInlineError={msg => showToast(msg, 'error')}
                       editProps={rowEditProps}
+                      onOpenPencilV2={onOpenPencilV2}
+                      onOpenLogWork={onOpenLogWork}
+                      issueDrafts={drafts?.[issue.key]}
                     />
                   ))
                   : !collapsed && subGroups.map(sub => {
@@ -2140,8 +2233,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                               onOpenPanel={setPanelKey}
                               onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
                               onInlineError={msg => showToast(msg, 'error')}
-                              editProps={rowEditProps}
-                            />
+                                      editProps={rowEditProps}
+                                      onOpenPencilV2={onOpenPencilV2}
+                                      onOpenLogWork={onOpenLogWork}
+                                      issueDrafts={drafts?.[issue.key]}
+                                    />
                           ))
                           : !subCollapsed && subSubGroups.map(subSub => {
                             const subSubCollapsed = collapsedGroups.has(`${group.key}::${sub.key}::${subSub.key}`);
@@ -2172,8 +2268,11 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
                                     onOpenPanel={setPanelKey}
                                     onInlineSaved={msg => { showToast(msg); window.dispatchEvent(new CustomEvent('issues-bulk-transitioned')); }}
                                     onInlineError={msg => showToast(msg, 'error')}
-                                    editProps={rowEditProps}
-                                  />
+                                      editProps={rowEditProps}
+                                      onOpenPencilV2={onOpenPencilV2}
+                                      onOpenLogWork={onOpenLogWork}
+                                      issueDrafts={drafts?.[issue.key]}
+                                    />
                                 ))}
                               </div>
                             );

@@ -24,6 +24,8 @@ export interface IssueFilters {
   // ── Epic filter ──────────────────────────────────────────────────
   epicIn?: string[];
   epicExclude?: boolean;
+  // ── Date range mode ──────────────────────────────────────────────
+  dateRangeMode?: 'current' | 'old';
   // ── Legacy single-value (kept for backward compat) ──────────────
   project?: string;
   assignee?: string;
