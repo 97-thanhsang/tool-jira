@@ -17,10 +17,11 @@ export interface BoardFilters {
   priorityExclude?: boolean;
   assigneeIn?: string[];       // 'currentUser()' | 'EMPTY' | username
   assigneeExclude?: boolean;
-  sprintIn?: string[];         // sprint names
+  sprintIn?: string[];
   sprintExclude?: boolean;
-  reporterIn?: string[];       // 'currentUser()' | username
+  reporterIn?: string[];
   reporterExclude?: boolean;
+  dateRangeMode?: 'current' | 'old';
   // Period / Due date filter
   period?: 'today' | 'week' | 'month' | 'year';
   dateFrom?: string;           // yyyy-MM-dd (derived from period)

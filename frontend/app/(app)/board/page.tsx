@@ -294,25 +294,25 @@ export default function BoardPage() {
   const dateFiltered = useMemo(() => {
     if (!filters.period) return filters;
     const now = new Date();
-    let dateFrom: string;
-    let dateTo: string;
+    let dateFrom: string | undefined;
+    let dateTo: string | undefined;
 
     switch (filters.period) {
       case 'today':
-        dateFrom = format(now, 'yyyy-MM-dd');
-        dateTo = dateFrom;
+        dateTo = format(now, 'yyyy-MM-dd');
+        if (filters.dateRangeMode !== 'old') dateFrom = dateTo;
         break;
       case 'week':
-        dateFrom = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
         dateTo = format(addDays(startOfWeek(now, { weekStartsOn: 1 }), 6), 'yyyy-MM-dd');
+        if (filters.dateRangeMode !== 'old') dateFrom = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
         break;
       case 'month':
-        dateFrom = format(startOfMonth(now), 'yyyy-MM-dd');
         dateTo = format(endOfMonth(now), 'yyyy-MM-dd');
+        if (filters.dateRangeMode !== 'old') dateFrom = format(startOfMonth(now), 'yyyy-MM-dd');
         break;
       case 'year':
-        dateFrom = format(startOfYear(now), 'yyyy-MM-dd');
         dateTo = format(endOfYear(now), 'yyyy-MM-dd');
+        if (filters.dateRangeMode !== 'old') dateFrom = format(startOfYear(now), 'yyyy-MM-dd');
         break;
     }
 

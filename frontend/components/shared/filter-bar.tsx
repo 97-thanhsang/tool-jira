@@ -232,22 +232,52 @@ export function FilterBar({ filters, onChange, hideSearch, period, quickPills }:
 
         {/* Period quick-pick buttons (inline, right-aligned) */}
         {period && (
-          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden ml-auto">
-            {period.options.map((po, i) => (
+          <div className="flex items-center gap-1 ml-auto">
+            {/* Current/Old toggle */}
+            <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0 mr-0.5">
               <button
-                key={po.key}
-                onClick={() => period.onChange(period.active === po.key ? undefined : po.key)}
+                type="button"
+                onClick={() => onChange({ ...filters, dateRangeMode: 'current' })}
                 className={cn(
-                  'text-xs px-2.5 py-1.5 font-medium transition-colors',
-                  period.active === po.key
+                  'text-[10px] px-2 py-1 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                  (filters.dateRangeMode ?? 'current') === 'current'
                     ? 'bg-[#0052CC] text-white'
                     : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
-                  i < period.options.length - 1 && 'border-r border-[#DFE1E6] dark:border-gray-600',
                 )}
               >
-                {po.label}
+                Current
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => onChange({ ...filters, dateRangeMode: 'old' })}
+                className={cn(
+                  'text-[10px] px-2 py-1 font-medium transition-colors',
+                  filters.dateRangeMode === 'old'
+                    ? 'bg-[#0052CC] text-white'
+                    : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+                )}
+              >
+                Old
+              </button>
+            </div>
+            {/* Period buttons */}
+            <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden">
+              {period.options.map((po, i) => (
+                <button
+                  key={po.key}
+                  onClick={() => period.onChange(period.active === po.key ? undefined : po.key)}
+                  className={cn(
+                    'text-xs px-2.5 py-1.5 font-medium transition-colors',
+                    period.active === po.key
+                      ? 'bg-[#0052CC] text-white'
+                      : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+                    i < period.options.length - 1 && 'border-r border-[#DFE1E6] dark:border-gray-600',
+                  )}
+                >
+                  {po.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

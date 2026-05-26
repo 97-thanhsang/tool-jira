@@ -50,6 +50,7 @@ export interface UnifiedFilters {
   reporterExclude?: boolean;
   epicIn?: string[];
   epicExclude?: boolean;
+  dateRangeMode?: 'current' | 'old';
 }
 
 export const EMPTY_UNIFIED_FILTERS: UnifiedFilters = {
