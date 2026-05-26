@@ -1152,6 +1152,7 @@ interface IssuesTableProps {
   onExportReady?: (wrapper: () => void) => void;
   epicSummaries?: Record<string, string>;
   drafts?: Record<string, Record<string, unknown>>;
+  onBulkDraft?: (issueKeys: string[], fields: Record<string, unknown>) => void;
   onOpenPencilV2?: (issueKey: string, issue: JiraIssue) => void;
   onOpenLogWork?: (issueKey: string, issue: JiraIssue) => void;
 }
@@ -1387,7 +1388,7 @@ function SubSubGroupHeaderContent({ subSubGroupBy, subSub, firstIssue }: {
   }
 }
 
-export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy, toolBarEditMode, onToolBarEditMode, hideInternalToolbar, onExportReady, epicSummaries, drafts, onOpenPencilV2, onOpenLogWork }: IssuesTableProps) {
+export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSortChange, onIssueUpdate, groupBy, subGroupBy, subSubGroupBy, toolBarEditMode, onToolBarEditMode, hideInternalToolbar, onExportReady, epicSummaries, drafts, onOpenPencilV2, onOpenLogWork, onBulkDraft }: IssuesTableProps) {
   const [selected, setSelected]                 = useState<Set<string>>(new Set());
   const [transitioning, setTransitioning]       = useState(false);
   const [transitionDropOpen, setTransDropOpen]  = useState(false);
@@ -1553,20 +1554,42 @@ export function IssuesTable({ issues, total, isLoading, sortField, sortDir, onSo
   }, [bulkAssignOpen, bulkPriorityOpen, bulkDueOpen]);
 
   // Bulk apply fields
-  async function applyBulkField(fields: Record<string, unknown>, successMsg: string) {
-    setBulkApplying(true);
-    let errors = 0;
-    for (const issue of selectedIssues) {
-      try { await api.put(`/issue/${issue.key}`, { fields }); }
-      catch { errors++; }
+  async function applyBulkField(fields: Record<string, unknown>, _successMsg: string) {
+    const selectedIssues = issues.filter(i => selected.has(i.id));
+    if (selectedIssues.length === 0) return;
+    if (onBulkDraft) {
+      // Convert API fields to draft format
+      const draftFields: Record<string, unknown> = {};
+      if ('assignee' in fields) {
+        const a = fields.assignee as { name?: string } | null;
+        draftFields.assignee = a?.name ? { name: a.name, displayName: a.name } : null;
+      }
+      if ('priority' in fields) {
+        const p = fields.priority as { name?: string };
+        draftFields.priority = { name: p.name ?? '', id: '' };
+      }
+      if ('duedate' in fields) {
+        draftFields.duedate = (fields.duedate as string) || undefined;
+      }
+      onBulkDraft(selectedIssues.map(i => i.key), draftFields);
+    } else {
+      // Fallback: direct submit
+      setBulkApplying(true);
+      let errors = 0;
+      for (const issue of selectedIssues) {
+        try { await api.put(`/issue/${issue.key}`, { fields }); }
+        catch { errors++; }
+      }
+      if (errors === 0) showToast(_successMsg);
+      else showToast(`${errors} error(s)`, 'error');
+      setBulkApplying(false);
     }
-    setBulkApplying(false);
-    setBulkAssignOpen(false); setBulkPriorityOpen(false); setBulkDueOpen(false);
-    setBulkAssignQuery(''); setBulkPriority(''); setBulkDue('');
-    setSelected(new Set());
-    window.dispatchEvent(new CustomEvent('issues-bulk-transitioned'));
-    if (errors === 0) showToast(successMsg);
-    else showToast(`${errors} issue(s) failed to update`, 'error');
+    setBulkAssignOpen(false);
+    setBulkPriorityOpen(false);
+    setBulkDueOpen(false);
+    setBulkAssignQuery('');
+    setBulkPriority('');
+    setBulkDue('');
   }
 
   const visibleCols = useMemo(

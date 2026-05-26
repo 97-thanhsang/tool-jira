@@ -181,7 +181,11 @@ export default function IssuesPage() {
               break;
             }
             case 'assignee':
-              fields.assignee = value ? { name: value } : null;
+              if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) {
+                fields.assignee = { name: (value as Record<string, unknown>).name };
+              } else if (value === null) {
+                fields.assignee = null;
+              }
               break;
             case 'priority':
               if (value && typeof value === 'object' && 'name' in (value as Record<string, unknown>)) {
@@ -337,6 +341,15 @@ export default function IssuesPage() {
               hideInternalToolbar
               epicSummaries={epicSummaries}
               drafts={drafts}
+              onBulkDraft={(issueKeys, fields) => {
+                setDrafts(prev => {
+                  const next = { ...prev };
+                  for (const key of issueKeys) {
+                    next[key] = { ...next[key], ...fields };
+                  }
+                  return next;
+                });
+              }}
               onExportReady={(fn) => { exportRef.current = fn; }}
               onOpenPencilV2={(issueKey, issue) => setPencilV2Issue(issue)}
               onOpenLogWork={(issueKey, issue) => setLogWorkIssue({ key: issueKey, summary: issue.fields.summary ?? '', duedate: issue.fields.duedate ?? undefined })}
@@ -387,14 +400,40 @@ export default function IssuesPage() {
                         <span className="text-[10px] text-[#8993A4] ml-auto font-medium">{Object.keys(issueDrafts).length} change(s)</span>
                       </div>
                       <div className="divide-y divide-[#F4F5F7] dark:divide-gray-700">
-                        {Object.entries(issueDrafts).map(([field, value]) => (
+                          {Object.entries(issueDrafts).map(([field, value]) => {
+                            const issue = issues.find(i => i.key === issueKey);
+                            const beforeVal = (() => {
+                              if (!issue) return '—';
+                              switch (field) {
+                                case 'summary': return issue.fields.summary ?? '';
+                                case 'duedate': return issue.fields.duedate ?? 'not set';
+                                case 'originalEstimate': return issue.fields.timetracking?.originalEstimateSeconds ? `${(issue.fields.timetracking.originalEstimateSeconds / 3600).toFixed(1)}h` : '0h';
+                                case 'priority': return issue.fields.priority?.name ?? 'None';
+                                case 'status': return issue.fields.status.name;
+                                case 'assignee': return issue.fields.assignee?.displayName ?? 'Unassigned';
+                                default: return '—';
+                              }
+                            })();
+                            const afterVal = (() => {
+                              switch (field) {
+                                case 'summary': return String(value);
+                                case 'duedate': return String(value || 'cleared');
+                                case 'originalEstimate': return `${String(value)}h`;
+                                case 'status': return typeof value === 'object' && value && 'name' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).name) : String(value);
+                                case 'priority': return typeof value === 'object' && value && 'name' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).name) : String(value);
+                                case 'assignee': return value === null ? 'Unassigned' : typeof value === 'object' && value && 'displayName' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).displayName) : String(value);
+                                default: return String(value);
+                              }
+                            })();
+                            return (
                           <div key={field} className="grid grid-cols-[100px_1fr_28px_1fr] gap-2 px-3.5 py-2.5 items-start">
                             <span className="text-[11px] font-semibold text-[#5E6C84] uppercase tracking-wide pt-0.5 capitalize">{field === 'originalEstimate' ? 'Estimate' : field}</span>
-                            <span className="text-[11px] text-[#DE350B] line-through block leading-tight break-words">{String(field === 'originalEstimate' ? `${(issues.find(i => i.key === issueKey)?.fields.timetracking?.originalEstimateSeconds ?? 0) / 3600}h` : '—')}</span>
+                            <span className="text-[11px] text-[#DE350B] line-through block leading-tight break-words">{beforeVal}</span>
                             <div className="flex items-center justify-center pt-0.5"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h7.5M7 3.5L9.5 6 7 8.5" stroke="#36B37E" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
-                            <span className="text-[11px] font-medium text-[#36B37E] block leading-tight break-words">{String(typeof value === 'object' && value && 'name' in (value as Record<string, unknown>) ? (value as Record<string, unknown>).name : value)}</span>
+                            <span className="text-[11px] font-medium text-[#36B37E] block leading-tight break-words">{afterVal}</span>
                           </div>
-                        ))}
+                            );
+                          })}
                       </div>
                     </div>
                   ))}
