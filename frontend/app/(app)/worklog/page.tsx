@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { startOfWeek, subWeeks, addWeeks, addDays, subDays, startOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
 import { getStoredUser, api } from '@/lib/api';
@@ -26,9 +26,18 @@ export default function WorklogPage() {
   const currentUser = getStoredUser() as { name?: string } | null;
   const currentUsername = currentUser?.name;
 
+  // Display mode (Full / Focus)
+  const [displayMode, setDisplayMode] = useState<'full' | 'focus'>('focus');
+  const [editMode, setEditMode] = useState(false);
+  const [showWeekends, setShowWeekends] = useState(true);
+
   // Filters
-  const [filters, setFilters] = useState<WorklogFilterBarFilters>({ ...EMPTY_WORKLOG_FILTERS, period: 'month' });
-  const [groupBy, setGroupBy] = useState<string>('none');
+  const [filters, setFilters] = useState<WorklogFilterBarFilters>({
+    ...EMPTY_WORKLOG_FILTERS,
+    period: 'week',
+    dateRangeMode: 'current',
+  });
+  const [groupBy, setGroupBy] = useState<string>('assignee');
 
   useEffect(() => {
     setFilters(prev => ({
@@ -54,32 +63,41 @@ export default function WorklogPage() {
   );
 
   useEffect(() => {
-    if (currentUsername) {
-      setFilters(prev => prev.assigneeIn?.length ? prev : { ...prev, assigneeIn: [currentUsername] });
-    }
     setInitialized(true);
-  }, [currentUsername]);
+  }, []);
+
+  // Calendar state
+  const [baseDate, setBaseDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [mode, setMode] = useState<'day' | 'week' | 'month'>('week');
+
+  const handleNavigate = useCallback((direction: 'prev' | 'next') => {
+    setBaseDate((prev: Date) => {
+      if (mode === 'day') return direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1);
+      if (mode === 'week') return direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1);
+      return direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1);
+    });
+  }, [mode]);
 
   // Derive date range from period for API fetching
   const activeFilters = useMemo(() => {
-    const now = new Date();
+    const ref = filters.dateRangeMode === 'old' ? baseDate : new Date();
     let from = '';
     let to = '';
 
     if (filters.period === 'today') {
-      from = format(now, 'yyyy-MM-dd');
-      to = format(now, 'yyyy-MM-dd');
+      from = format(ref, 'yyyy-MM-dd');
+      to = format(ref, 'yyyy-MM-dd');
     } else if (filters.period === 'week') {
-      const start = startOfWeek(now, { weekStartsOn: 1 });
+      const start = startOfWeek(ref, { weekStartsOn: 1 });
       from = format(start, 'yyyy-MM-dd');
       to = format(addWeeks(start, 1), 'yyyy-MM-dd');
     } else if (filters.period === 'month') {
-      const start = startOfMonth(now);
+      const start = startOfMonth(ref);
       from = format(start, 'yyyy-MM-dd');
       to = format(addMonths(start, 1), 'yyyy-MM-dd');
     } else if (filters.period === 'year') {
-      from = format(new Date(now.getFullYear(), 0, 1), 'yyyy-MM-dd');
-      to = format(new Date(now.getFullYear(), 11, 31), 'yyyy-MM-dd');
+      from = format(new Date(ref.getFullYear(), 0, 1), 'yyyy-MM-dd');
+      to = format(new Date(ref.getFullYear(), 11, 31), 'yyyy-MM-dd');
     }
 
     return {
@@ -87,7 +105,7 @@ export default function WorklogPage() {
       dateFrom: from,
       dateTo: to,
     };
-  }, [filters, currentUsername, selectedMembers]);
+  }, [filters, currentUsername, selectedMembers, baseDate]);
 
   const { data, entriesByDate: rawEntriesByDate, isLoading, mutate } = useWorklogs(
     initialized ? activeFilters : null,
@@ -139,18 +157,6 @@ export default function WorklogPage() {
     setSelectedMembers(group.members);
     setMemberDisplayNames(prev => ({ ...prev, ...names }));
   }
-
-  // Calendar state
-  const [baseDate, setBaseDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [mode, setMode] = useState<'day' | 'week' | 'month'>('month');
-
-  const handleNavigate = useCallback((direction: 'prev' | 'next') => {
-    setBaseDate((prev: Date) => {
-      if (mode === 'day') return direction === 'prev' ? subDays(prev, 1) : addDays(prev, 1);
-      if (mode === 'week') return direction === 'prev' ? subWeeks(prev, 1) : addWeeks(prev, 1);
-      return direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1);
-    });
-  }, [mode]);
 
   // CRUD
   const { add, update, remove, toast } = useWorklogMutations(() => mutate());
@@ -222,7 +228,7 @@ export default function WorklogPage() {
         <div>
           <h1 className="text-xl font-semibold text-[#172B4D] dark:text-gray-100 flex items-center gap-2">
             <Clock size={20} className="text-[#0052CC]" />
-            Worklog Calendar
+            Timesheet
           </h1>
           <p className="text-sm text-[#5E6C84] dark:text-gray-400 mt-0.5 flex items-center gap-2">
             {totalFiltered} entries · {totalFilteredHours.toFixed(1)}h total
@@ -237,7 +243,75 @@ export default function WorklogPage() {
             )}
           </p>
         </div>
-        <button
+        <div className="flex items-center gap-2">
+          {/* Display mode toggle */}
+          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setDisplayMode('full')}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                displayMode === 'full'
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              Full
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayMode('focus')}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors',
+                displayMode === 'focus'
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              Focus
+            </button>
+          </div>
+          {/* View/Edit toggle */}
+          <div className="flex items-center rounded border border-[#DFE1E6] dark:border-gray-600 overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditMode(false)}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors border-r border-[#DFE1E6] dark:border-gray-600',
+                !editMode
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditMode(true)}
+              className={cn(
+                'text-[10px] px-2 py-1.5 font-medium transition-colors',
+                editMode
+                  ? 'bg-[#0052CC] text-white'
+                  : 'bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700',
+              )}
+            >
+              Edit
+            </button>
+          </div>
+          {/* Weekends toggle */}
+          <button
+            type="button"
+            onClick={() => setShowWeekends(!showWeekends)}
+            className={cn(
+              'text-[10px] px-2 py-1.5 rounded border font-medium transition-colors',
+              showWeekends
+                ? 'border-[#DFE1E6] dark:border-gray-600 bg-white dark:bg-gray-800 text-[#5E6C84] dark:text-gray-400'
+                : 'border-[#0052CC] bg-[#0052CC] text-white',
+            )}
+          >
+            {showWeekends ? 'Sat, Sun' : 'Mon–Fri'}
+          </button>
+          <button
           type="button"
           onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
           disabled={isRefreshing}
@@ -247,7 +321,9 @@ export default function WorklogPage() {
           <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
         </button>
       </div>
+      </div>
 
+      {displayMode === 'full' && (<Fragment>
       <GroupSelector
         groups={groups}
         selectedMembers={selectedMembers}
@@ -304,6 +380,8 @@ export default function WorklogPage() {
         ]}
       />
 
+      </Fragment>)}
+
       {/* Calendar */}
       <div className="flex-1 min-h-0 mt-4">
         <WorklogCalendar
@@ -312,6 +390,8 @@ export default function WorklogPage() {
           entriesByDate={entriesByDate}
           dailyHours={dailyHours}
           groupBy={groupByField}
+          editMode={editMode}
+          showWeekends={showWeekends}
           onNavigate={handleNavigate}
           onModeChange={setMode}
           onEntryClick={setDrawerEntry}

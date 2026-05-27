@@ -25,6 +25,7 @@ export interface WorklogFilterBarFilters {
   reporterIn?: string[];
   groupBy?: 'Project' | 'Type' | 'Assignee' | 'Status' | 'None';
   period?: 'today' | 'week' | 'month' | 'year';
+  dateRangeMode?: 'current' | 'old';
   onlyMyIssues?: boolean;
   recentlyUpdated?: boolean;
   dueThisWeek?: boolean;

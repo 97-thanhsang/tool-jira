@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { format, isToday } from 'date-fns';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
-import { Pencil, Layers } from 'lucide-react';
+import { Pencil, Layers, Calendar, AlertTriangle } from 'lucide-react';
 import type { WorklogEntry } from '@/types/jira';
 
 export type GroupByField = 'project' | 'type' | 'assignee' | 'status' | 'priority' | 'parent' | 'statusCategory' | 'sprint' | 'reporter' | null;
@@ -243,12 +243,14 @@ function DraggableTimelineEntry({
   color,
   style,
   extraLabel,
+  editMode,
   onEntryClick,
 }: {
   entry: LayoutEntry;
   color: string;
   style: React.CSSProperties;
   extraLabel?: string | null;
+  editMode?: boolean;
   onEntryClick?: (e: WorklogEntry) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -273,6 +275,10 @@ function DraggableTimelineEntry({
   const isWhite = color === '#FFFFFF' || color === '#ffffff' || color === '#FFF' || color === '#fff';
   const textClass = isWhite ? 'text-[#172B4D] dark:text-gray-200' : 'text-white';
   const subtitleClass = isWhite ? 'text-[#5E6C84] dark:text-gray-400' : 'text-white/70';
+  const smallClass = isWhite ? 'text-[#8993A4] dark:text-gray-500' : 'text-white/50';
+
+  const estH = entry.estSeconds > 0 ? (entry.estSeconds / 3600).toFixed(1) : null;
+  const isTall = entry.height > 50;
 
   return (
     <div
@@ -292,11 +298,28 @@ function DraggableTimelineEntry({
       title={`${entry.issueKey}: ${entry.comment || entry.issueSummary} (${(entry.timeSpentSeconds / 3600).toFixed(1)}h)`}
     >
       <div className="px-1.5 py-1 flex flex-col h-full" style={{ fontSize: '11px', lineHeight: '1.3' }}>
-        {/* Top row: type icon + key */}
-        <div className="flex items-center gap-1 flex-1 min-h-0">
+        {/* Top row: type icon + key + badges */}
+        <div className="flex items-center gap-1">
           <TypeBadge typeName={entry.issueTypeName} iconUrl={entry.issueTypeIconUrl} />
           <span className={cn('font-semibold truncate flex-1', textClass)}>{entry.issueKey}</span>
+          {entry.priority && (
+            <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium shrink-0', {
+              'bg-red-500/30 text-white': ['Highest','High','Blocker'].includes(entry.priority),
+              'bg-yellow-500/30 text-white': entry.priority === 'Medium',
+              'bg-gray-500/30 text-white': ['Low','Lowest','Minor'].includes(entry.priority),
+            })}>{entry.priority}</span>
+          )}
+          {entry.status && (
+            <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium shrink-0', {
+              'bg-green-500/30 text-white': ['Done','Closed','Resolved','Completed'].includes(entry.status),
+              'bg-blue-500/30 text-white': ['In Progress','In Review','Development','Testing'].some(s => entry.status?.toLowerCase().includes(s.toLowerCase())),
+              'bg-gray-500/30 text-white': true,
+            })}>{entry.status}</span>
+          )}
         </div>
+
+        {/* Summary line — always visible */}
+        <p className={cn('text-[9px] truncate leading-tight mt-0.5', subtitleClass)}>{entry.issueSummary}</p>
 
         {extraLabel && (
           <div className={cn('text-[9px] truncate leading-tight', subtitleClass)}>
@@ -304,24 +327,37 @@ function DraggableTimelineEntry({
           </div>
         )}
 
-        {/* Bottom row: hours + pencil */}
-        <div className="flex items-center justify-between mt-0.5">
+        {/* Est + due date row */}
+        <div className="flex items-center gap-2 mt-0.5">
+          {estH != null && <span className={cn('text-[9px] font-medium', smallClass)}>{estH}h est</span>}
+          {entry.duedate && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] text-red-300 font-medium">
+              <AlertTriangle size={8} />
+              {entry.duedate}
+            </span>
+          )}
+        </div>
+
+        {/* Bottom row: hours + edit button */}
+        <div className="flex items-center justify-between mt-auto pt-0.5">
           <span className={cn('text-[10px] font-medium', subtitleClass)}>
             {(entry.timeSpentSeconds / 3600).toFixed(1)}h
           </span>
-          <button
-            className="opacity-60 hover:opacity-100 transition-opacity hover:bg-white/20 rounded-sm p-0.5 -mr-0.5"
-            onPointerDown={(ev) => ev.stopPropagation()}
-            onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(entry); }}
-            title="Edit worklog"
-          >
-            <Pencil size={10} className="text-white/80" />
-          </button>
+          {editMode && (
+            <button
+              className="opacity-60 hover:opacity-100 transition-opacity hover:bg-white/20 rounded-sm p-0.5 -mr-0.5"
+              onPointerDown={(ev) => ev.stopPropagation()}
+              onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(entry); }}
+              title="Edit worklog"
+            >
+              <Pencil size={10} className="text-white/80" />
+            </button>
+          )}
         </div>
 
         {/* Comment — only if tall enough */}
-        {entry.height > 50 && entry.comment && (
-          <p className="text-white/60 text-[9px] truncate mt-0.5 leading-tight">{entry.comment}</p>
+        {isTall && entry.comment && (
+          <p className={cn('text-[9px] truncate mt-0.5 leading-tight', smallClass)}>{entry.comment}</p>
         )}
       </div>
     </div>
@@ -340,6 +376,7 @@ interface WorklogDayCellProps {
   isDragActive?: boolean;
   isDragSource?: boolean;
   groupBy?: GroupByField;
+  editMode?: boolean;
   onEntryClick?: (entry: WorklogEntry) => void;
   onDayClick?: (date: Date) => void;
 }
@@ -354,6 +391,7 @@ export function WorklogDayCell({
   isDragActive = false,
   isDragSource = false,
   groupBy = null,
+  editMode = false,
   onEntryClick,
   onDayClick,
 }: WorklogDayCellProps) {
@@ -451,10 +489,12 @@ export function WorklogDayCell({
                   <span className="text-[10px] font-semibold text-[#172B4D] dark:text-gray-200 truncate leading-tight">{g.label}</span>
                   <span className="text-[9px] text-[#5E6C84] dark:text-gray-400 ml-auto flex-shrink-0 font-medium">{g.totalHours.toFixed(1)}h</span>
                 </div>
-                {g.entries.slice(0, compact ? 15 : 5).map((e) => (
+                {g.entries.slice(0, compact ? 10 : 5).map((e) => {
+                  const estH = e.estSeconds > 0 ? (e.estSeconds / 3600).toFixed(1) : null;
+                  return (
                 <div
                   key={e.id}
-                  className="px-1.5 py-0.5 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
+                  className="px-1.5 py-1 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
                   style={{ borderLeftColor: g.color, borderLeftWidth: '3px' }}
                   onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
                 >
@@ -464,26 +504,60 @@ export function WorklogDayCell({
                       <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
-                        className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity text-[#5E6C84] hover:text-[#0052CC]"
-                        onPointerDown={(ev) => ev.stopPropagation()}
-                        onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
-                      ><Pencil size={10} /></button>
+                      {estH != null && <span className="text-[9px] text-[#8993A4] dark:text-gray-500 font-medium">{estH}h est</span>}
                       <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">{(e.timeSpentSeconds / 3600).toFixed(1)}h</span>
                     </div>
                   </div>
+                  {/* Summary line */}
+                  <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate leading-tight mt-0.5">{e.issueSummary}</p>
+                  {/* Meta chips */}
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    {e.priority && (
+                      <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
+                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': ['Highest','High','Blocker'].includes(e.priority),
+                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': e.priority === 'Medium',
+                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': ['Low','Lowest','Minor'].includes(e.priority),
+                      })}>{e.priority}</span>
+                    )}
+                    {e.status && (
+                      <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
+                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': ['Done','Closed','Resolved','Completed'].includes(e.status),
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': ['In Progress','In Review','Development','Testing'].some(s => e.status?.toLowerCase().includes(s.toLowerCase())),
+                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': true,
+                      })}>{e.status}</span>
+                    )}
+                    {e.duedate && (
+                      <span className="inline-flex items-center gap-0.5 text-[8px] text-red-500 dark:text-red-400 font-medium">
+                        <AlertTriangle size={8} />
+                        {e.duedate}
+                      </span>
+                    )}
+                  </div>
+                  {/* Edit button */}
+                  {editMode && (
+                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        className="bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-0.5 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
+                        onPointerDown={(ev) => ev.stopPropagation()}
+                        onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
+                        title="Edit worklog"
+                      ><Pencil size={9} className="text-[#5E6C84]" /></button>
+                    </div>
+                  )}
                 </div>
-                ))}
+                );})}
                 {g.entries.length > (compact ? 15 : 5) && (
                   <p className="text-[10px] text-[#0052CC] dark:text-blue-400 px-0.5">+{g.entries.length - (compact ? 15 : 5)} more</p>
                 )}
               </div>
             ))
           ) : (<>
-            {entries.slice(0, compact ? 99 : 10).map((e) => (
+            {entries.slice(0, compact ? 30 : 10).map((e) => {
+              const estH = e.estSeconds > 0 ? (e.estSeconds / 3600).toFixed(1) : null;
+              return (
             <div
               key={e.id}
-              className="px-1.5 py-0.5 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
+              className="relative px-1.5 py-1 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
               style={{
                 borderLeftColor: groupBy ? getEntryColor(e, groupBy) : (PROJECT_COLORS[e.projectKey] ?? '#5E6C84'),
                 borderLeftWidth: '3px',
@@ -501,21 +575,50 @@ export function WorklogDayCell({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity text-[#5E6C84] hover:text-[#0052CC]"
-                    onPointerDown={(ev) => ev.stopPropagation()}
-                    onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
-                    title="Edit worklog"
-                  >
-                    <Pencil size={10} />
-                  </button>
+                  {estH != null && <span className="text-[9px] text-[#8993A4] dark:text-gray-500 font-medium">{estH}h est</span>}
                   <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">
                     {(e.timeSpentSeconds / 3600).toFixed(1)}h
                   </span>
                 </div>
               </div>
+              {/* Summary line */}
+              <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate leading-tight mt-0.5">{e.issueSummary}</p>
+              {/* Meta chips */}
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {e.priority && (
+                  <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
+                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': ['Highest','High','Blocker'].includes(e.priority),
+                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': e.priority === 'Medium',
+                    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': ['Low','Lowest','Minor'].includes(e.priority),
+                  })}>{e.priority}</span>
+                )}
+                {e.status && (
+                  <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
+                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': ['Done','Closed','Resolved','Completed'].includes(e.status),
+                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': ['In Progress','In Review','Development','Testing'].some(s => e.status?.toLowerCase().includes(s.toLowerCase())),
+                    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': true,
+                  })}>{e.status}</span>
+                )}
+                {e.duedate && (
+                  <span className="inline-flex items-center gap-0.5 text-[8px] text-red-500 dark:text-red-400 font-medium">
+                    <AlertTriangle size={8} />
+                    {e.duedate}
+                  </span>
+                )}
+              </div>
+              {/* Edit button */}
+              {editMode && (
+                <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    className="bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-0.5 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
+                    onPointerDown={(ev) => ev.stopPropagation()}
+                    onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
+                    title="Edit worklog"
+                  ><Pencil size={9} className="text-[#5E6C84]" /></button>
+                </div>
+              )}
             </div>
-          ))}
+            );})}
           {!compact && !groupBy && entries.length > 10 && (
             <p className="text-[10px] text-[#0052CC] dark:text-blue-400 pl-1">
               +{entries.length - (compact ? 3 : 10)} more
@@ -638,6 +741,7 @@ export function WorklogDayCell({
                     entry={e}
                     color={color}
                     extraLabel={extraLabel}
+                    editMode={editMode}
                     style={{
                       position: 'absolute',
                       top: e.top,

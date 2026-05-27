@@ -30,6 +30,8 @@ interface WorklogCalendarProps {
   entriesByDate: Record<string, WorklogEntry[]>;
   dailyHours: Record<string, number>;
   groupBy?: GroupByField;
+  editMode?: boolean;
+  showWeekends?: boolean;
   onNavigate: (direction: 'prev' | 'next') => void;
   onModeChange: (mode: 'day' | 'week' | 'month') => void;
   onEntryClick?: (entry: WorklogEntry) => void;
@@ -43,6 +45,8 @@ export function WorklogCalendar({
   entriesByDate,
   dailyHours,
   groupBy,
+  editMode,
+  showWeekends = true,
   onNavigate,
   onModeChange,
   onEntryClick,
@@ -59,16 +63,24 @@ export function WorklogCalendar({
       result.push(baseDate);
     } else if (mode === 'week') {
       const start = startOfWeek(baseDate, { weekStartsOn: 1 });
-      for (let i = 0; i < 7; i++) result.push(addDays(start, i));
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(start, i);
+        if (!showWeekends && (d.getDay() === 0 || d.getDay() === 6)) continue;
+        result.push(d);
+      }
     } else {
       const year = baseDate.getFullYear();
       const month = baseDate.getMonth();
       const firstDay = new Date(year, month, 1);
       const start = startOfWeek(firstDay, { weekStartsOn: 1 });
-      for (let i = 0; i < 42; i++) result.push(addDays(start, i));
+      for (let i = 0; i < 42; i++) {
+        const d = addDays(start, i);
+        if (!showWeekends && (d.getDay() === 0 || d.getDay() === 6)) continue;
+        result.push(d);
+      }
     }
     return result;
-  }, [mode, baseDate]);
+  }, [mode, baseDate, showWeekends]);
 
   // Compute swimlanes from all entries
   const swimlanes = useMemo<Swimlane[] | null>(() => {
@@ -123,7 +135,10 @@ export function WorklogCalendar({
     return allEntries.find((e) => e.id === activeId) ?? null;
   }, [activeId, allEntries]);
 
-  const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const colCount = mode === 'day' ? 1 : !showWeekends ? 5 : 7;
+  const dayHeaders = showWeekends
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
   function toggleCollapse(key: string) {
     setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -135,7 +150,7 @@ export function WorklogCalendar({
         className={cn(
           'grid gap-px bg-[#DFE1E6] dark:bg-gray-700 rounded-sm overflow-hidden',
           swimlanes ? 'min-h-[80px]' : 'flex-1 min-h-0',
-          mode === 'day' ? 'grid-cols-1' : mode === 'month' && !swimlanes ? 'grid-cols-7' : 'grid-cols-7',
+          mode === 'day' ? 'grid-cols-1' : `grid-cols-${colCount}`,
         )}
         style={(!swimlanes && mode !== 'month') || mode === 'day' ? { gridTemplateRows: '1fr' } : undefined}
       >
@@ -155,6 +170,7 @@ export function WorklogCalendar({
               isDragActive={activeId !== null}
               isDragSource={isDragSource}
               groupBy={groupBy}
+              editMode={editMode}
               onEntryClick={onEntryClick}
               onDayClick={onDayClick}
             />
@@ -177,7 +193,7 @@ export function WorklogCalendar({
             {mode === 'day'
               ? format(baseDate, 'EEEE, MMM d, yyyy')
               : mode === 'week'
-                ? `${format(days[0], 'MMM d')} – ${format(days[6], 'MMM d, yyyy')}`
+                ? `${format(days[0], 'MMM d')} – ${format(days[days.length - 1], 'MMM d, yyyy')}`
                 : format(baseDate, 'MMMM yyyy')}
           </h2>
           <Button variant="outline" size="sm" onClick={() => onNavigate('next')}
@@ -198,7 +214,7 @@ export function WorklogCalendar({
 
       {/* Day headers (skip for day mode) */}
       {mode !== 'day' && (
-        <div className="grid grid-cols-7 gap-px mb-1 flex-shrink-0">
+        <div className={cn('grid gap-px mb-1 flex-shrink-0', `grid-cols-${colCount}`)}>
           {dayHeaders.map((d) => (
             <div key={d} className="text-center text-[10px] font-semibold text-[#5E6C84] dark:text-gray-400 py-1">{d}</div>
           ))}
