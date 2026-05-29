@@ -1,8 +1,8 @@
-# Conventions — Tool-Jira
+# Conventions — Jira Power
 
 > Coding standards, naming rules, file structure patterns.
-> AI PHẢI follow conventions này khi thêm code mới.
-> Cập nhật lần cuối: 2026-05-10
+> Phải follow khi thêm code mới.
+> Cập nhật lần cuối: 2026-05-29
 
 ---
 
@@ -13,52 +13,54 @@
 | Page | `page.tsx` | `app/(app)/board/page.tsx` |
 | Layout | `layout.tsx` | `app/(app)/layout.tsx` |
 | Component | `kebab-case.tsx` | `issue-card.tsx`, `kanban-board.tsx` |
-| Hook | `use-kebab-case.ts` | `use-my-issues.ts`, `use-issue.ts` |
-| Lib utility | `kebab-case.ts` | `jira-wiki.ts`, `api.ts` |
+| Hook | `use-kebab-case.ts` | `use-my-issues.ts`, `use-worklogs.ts` |
+| Lib utility | `kebab-case.ts` | `worklog-api.ts`, `jira-wiki.ts` |
 | Type file | `kebab-case.ts` | `jira.ts` |
 
 ---
 
-## Component Conventions
+## Component Export Pattern
 
 ```typescript
-// ✅ Named export (không dùng default export cho components)
+// ✅ Named export (không dùng default cho components)
 export function IssueCard({ issue }: { issue: JiraIssue }) { ... }
 
-// ✅ Props type inline hoặc interface đặt ngay trên component
+// ✅ Props type: inline hoặc interface ngay trên component
 interface IssueCardProps { issue: JiraIssue; onClick?: () => void; }
 export function IssueCard({ issue, onClick }: IssueCardProps) { ... }
 
 // ❌ Default export cho components
-export default function IssueCard() { ... }  // không dùng
+export default function IssueCard() { ... }  // KHÔNG dùng
 ```
 
-**Ngoại lệ:** Pages dùng `default export` (Next.js yêu cầu).
+**Ngoại lệ:** Pages (`page.tsx`) dùng `default export` — Next.js yêu cầu.
 
 ---
 
-## Client vs Server Components
+## Client Components
 
 ```typescript
-// Mọi component dùng hooks/browser APIs → PHẢI có 'use client'
+// Mọi component dùng hooks, browser APIs, hoặc đọc localStorage → PHẢI có directive
 'use client';
 import { useState, useEffect } from 'react';
 
-// Server Components (không có hooks): không cần directive
-// Hiện tại hầu hết là Client Components vì cần auth check
+// Hiện tại toàn bộ codebase là client components (không có RSC data fetching)
 ```
 
 ---
 
-## localStorage Rules (QUAN TRỌNG)
+## localStorage — QUAN TRỌNG
 
 ```typescript
-// ❌ NEVER — đọc localStorage trong render body
-const user = getStoredUser();  // gây hydration mismatch
+// ❌ NEVER — đọc trong render body → hydration mismatch
+const user = getStoredUser();
 
-// ✅ ALWAYS — đọc trong useEffect
-const [user, setUser] = useState(null);
+// ✅ ALWAYS — đọc trong useEffect (sau mount)
+const [user, setUser] = useState<JiraUser | null>(null);
 useEffect(() => { setUser(getStoredUser()); }, []);
+
+// ✅ HOẶC — guard explicit
+if (typeof window !== 'undefined') { ... }
 ```
 
 ---
@@ -66,29 +68,35 @@ useEffect(() => { setUser(getStoredUser()); }, []);
 ## API Calls
 
 ```typescript
-// ✅ Dùng api instance từ lib/api.ts (tự động gắn auth header)
+// ✅ Dùng api instance từ lib/api.ts — tự động gắn X-Jira-Auth header
 import { api } from '@/lib/api';
 const result = await api.get('/search', { params: { jql: '...' } });
 
-// ❌ Không dùng axios trực tiếp hoặc fetch
+// ✅ AI calls — dùng helpers từ lib/ai.ts
+import { aiSummarize } from '@/lib/ai';
+const { bullets } = await aiSummarize({ issueKey, summary, description });
+
+// ❌ KHÔNG dùng axios trực tiếp hoặc fetch (bỏ qua interceptors)
 import axios from 'axios';  // không cần, dùng api instance
 ```
 
 ---
 
-## SWR Hooks Pattern
+## SWR Hook Pattern
 
 ```typescript
-// Pattern chuẩn cho mọi hook mới
+// Pattern chuẩn cho hook mới
 export function useXxx(param: string) {
   const { data, error, isLoading, mutate } = useSWR(
-    param ? `/endpoint/${param}` : null,  // null = không fetch
+    param ? `/endpoint/${param}` : null,  // null = skip fetch
     (url) => api.get(url).then(r => r.data),
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
-
   return { data, isLoading, error, mutate };
 }
+
+// SWR key phải UNIQUE — dùng tuple nếu cần phân biệt
+useSWR(['unique-key', param1, param2], fetcher, options)
 ```
 
 ---
@@ -100,11 +108,11 @@ export function useXxx(param: string) {
 import { cn } from '@/lib/utils';
 className={cn('base-class', isActive && 'active-class', variant === 'x' && 'x-class')}
 
-// ✅ Màu sắc: dùng hex literals cho Jira colors (không hardcode vào tailwind.config)
-className="bg-[#0052CC] text-[#172B4D]"
+// ✅ Màu Jira: dùng hex literals (không thêm vào config)
+className="bg-[#0052CC] text-[#172B4D] border-[#DFE1E6]"
 
-// ❌ Không inline style object khi có thể dùng Tailwind
-style={{ backgroundColor: '#0052CC' }}  // tránh khi có thể
+// ❌ Tránh inline style khi có thể dùng Tailwind
+style={{ backgroundColor: '#0052CC' }}  // chỉ dùng khi dynamic (e.g. project colors)
 ```
 
 ---
@@ -112,7 +120,7 @@ style={{ backgroundColor: '#0052CC' }}  // tránh khi có thể
 ## TypeScript
 
 ```typescript
-// ✅ Typed mọi thứ, không dùng any
+// ✅ Typed mọi thứ
 const user: JiraUser = response.data;
 
 // ❌ Cấm tuyệt đối
@@ -120,10 +128,10 @@ as any
 // @ts-ignore
 // @ts-expect-error
 
-// ✅ Khi type Jira response: dùng types từ types/jira.ts
+// ✅ Import types từ types/jira.ts
 import type { JiraIssue, JiraSearchResult } from '@/types/jira';
 
-// ✅ Catch errors: cast đúng cách
+// ✅ Error handling trong catch
 } catch (err: unknown) {
   const error = err as { response?: { status: number; data: unknown } };
 }
@@ -134,13 +142,13 @@ import type { JiraIssue, JiraSearchResult } from '@/types/jira';
 ## Import Aliases
 
 ```typescript
-// ✅ Dùng @/ alias (configured trong tsconfig.json)
+// ✅ Luôn dùng @/ alias (configured trong tsconfig.json)
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/shared/status-badge';
 import type { JiraIssue } from '@/types/jira';
 
 // ❌ Relative imports cho cross-directory
-import { api } from '../../lib/api';
+import { api } from '../../lib/api';  // KHÔNG dùng
 ```
 
 ---
@@ -148,32 +156,24 @@ import { api } from '../../lib/api';
 ## Backend Routes
 
 ```typescript
-// ✅ Express v5: wildcard phải có tên
-router.all('/*path', handler)
-req.params['path']
+// ✅ Express v5: wildcard phải có tên, path là array
+router.all('/*path', async (req, res) => {
+  const raw = req.params['path'];
+  const path = Array.isArray(raw) ? raw.join('/') : (raw ?? '');
+  return res.json({ data });
+});
 
-// ✅ Async handlers: return res để TypeScript satisfied
+// ✅ Async handlers: luôn return res
 router.get('/path', async (req, res) => {
   return res.json({ data });
 });
 
-// ✅ Error handling: luôn return status + json
+// ✅ Error handling: luôn có status + json
 return res.status(500).json({ error: 'message' });
 ```
 
 ---
 
-## Docs Update Rule
+## Docs Update
 
-Sau mỗi thay đổi, AI PHẢI cập nhật docs liên quan:
-
-| Thay đổi | Docs cần update |
-|---------|----------------|
-| Thêm component | `docs/frontend.md` — Component Map |
-| Thêm hook | `docs/frontend.md` — Hooks section |
-| Thêm page | `docs/frontend.md` — Route Structure |
-| Thêm API route BE | `docs/backend.md` |
-| Thay đổi auth/data flow | `docs/data-flow.md` |
-| Fix bug | `docs/known-issues.md` |
-| Feature xong | `docs/roadmap.md` — đánh ✅ + cập nhật Changelog |
-| Convention mới | `docs/conventions.md` |
+Sau mỗi thay đổi, cập nhật docs liên quan (xem `AGENTS.md` — Quy tắc cập nhật docs).

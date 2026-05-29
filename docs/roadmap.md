@@ -1,95 +1,85 @@
-# Roadmap — Tool-Jira
+# Roadmap — Jira Power
 
-> Kế hoạch phát triển đầy đủ. Cập nhật status sau mỗi feature hoàn thành.
-> Cập nhật lần cuối: 2026-05-10
+> Kế hoạch phát triển và trạng thái hiện tại.
+> Cập nhật lần cuối: 2026-05-29
 
 ---
 
-## ✅ Phase 1 — MVP Tracer Bullet (DONE)
+## ✅ Phase 1 — MVP
 
 | # | Feature | Files | Status |
 |---|---------|-------|--------|
-| 1.1 | Backend proxy Express v5 + SQLite | `backend/src/` | ✅ Done |
+| 1.1 | Backend proxy Express v5 + SQLite/Drizzle | `backend/src/` | ✅ Done |
 | 1.2 | Login page với Basic Auth | `app/(auth)/login/` | ✅ Done |
-| 1.3 | App Shell — Sidebar, protected layout | `app/(app)/layout.tsx`, `components/sidebar.tsx` | ✅ Done |
-| 1.4 | My Board — Kanban 3 cột | `app/(app)/board/`, `components/board/` | ✅ Done |
+| 1.3 | App shell — Sidebar, protected layout | `app/(app)/layout.tsx`, `components/sidebar.tsx` | ✅ Done |
+| 1.4 | My Board — Kanban 3 cột, drag-drop | `app/(app)/board/`, `components/board/` | ✅ Done |
 | 1.5 | Issue Detail — wiki, transitions, metadata | `app/(app)/issues/[key]/` | ✅ Done |
-| 1.6 | Git setup + push GitHub | — | ✅ Done |
-| 1.7 | Hydration bug fix (Sidebar localStorage) | `components/sidebar.tsx` | ✅ Done |
-| 1.8 | Docs folder (`docs/`) | `docs/` | ✅ Done |
 
 ---
 
-## ✅ Phase 2 — Core Workflow (DONE)
+## ✅ Phase 2 — Core Workflow
 
-> Goal: Dùng hàng ngày thay Jira được.
-
-| # | Feature | Files cần tạo/sửa | Status |
-|---|---------|-------------------|--------|
-| 2.1 | **My Issues page** `/issues` — bảng filter+sort | `app/(app)/issues/page.tsx`, `components/issues/issues-table.tsx`, `components/issues/issue-row.tsx`, `hooks/use-issues-list.ts` | ✅ Done |
-| 2.2 | **Log Work modal** — từ Issue Detail | `components/issue/log-work-modal.tsx` | ✅ Done |
-| 2.3 | **Comment** — xem + thêm comment | `components/issue/comment-section.tsx` | ✅ Done |
-| 2.4 | **Transition nhanh** — hoàn thiện UX | `components/issue/transition-button.tsx` (color-coded) | ✅ Done |
-| 2.5 | **Tạo Issue modal** — C key shortcut | `components/create-issue-modal.tsx`, `components/sidebar.tsx` (+ Create button) | ✅ Done |
-| 2.6 | **Global Search** — Ctrl+K command palette | `components/search/command-palette.tsx`, `hooks/use-search.ts`, `app/(app)/layout.tsx` | ✅ Done |
+| # | Feature | Files | Status |
+|---|---------|-------|--------|
+| 2.1 | My Issues `/issues` — table, filter, sort | `issues/page.tsx`, `components/issues/` | ✅ Done |
+| 2.2 | Log Work modal | `components/issue/log-work-modal.tsx` | ✅ Done |
+| 2.3 | Comments — xem + thêm | `components/issue/comment-section.tsx` | ✅ Done |
+| 2.4 | Transition nhanh — color-coded badges | `components/issue/transition-button.tsx` | ✅ Done |
+| 2.5 | Create Issue modal — phím C | `components/create-issue-modal.tsx` | ✅ Done |
+| 2.6 | Global Search — Ctrl+K | `components/search/command-palette.tsx`, `hooks/use-search.ts` | ✅ Done |
 
 ---
 
-## ✅ Phase 3 — Power Features (DONE)
+## ✅ Phase 3 — Power Features
+
+| # | Feature | Files | Status |
+|---|---------|-------|--------|
+| 3.1 | Projects browser + project board | `projects/page.tsx`, `projects/[key]/page.tsx` | ✅ Done |
+| 3.2 | JQL Search `/search` | `search/page.tsx`, `hooks/use-jql-search.ts` | ✅ Done |
+| 3.3 | Keyboard shortcuts — G·B/I/S, C, L, ?, Ctrl+K | `app/(app)/layout.tsx` | ✅ Done |
+| 3.4 | Bulk Actions — select nhiều → transition | `components/issues/issues-table.tsx` | ✅ Done |
+| 3.5 | Worklog history — localStorage tab | `components/issues/worklogs-tab.tsx` | ✅ Done |
+| 3.6 | Settings page `/settings` | `settings/page.tsx` | ✅ Done |
+| 3.7 | Dark mode | `app/layout.tsx` (inline script), globals.css | ✅ Done |
+| 3.8 | Notifications — poll 60s, badge + dropdown | `components/sidebar.tsx` | ✅ Done |
+
+---
+
+## ✅ Phase 4 — AI Integration (Gemini 2.5 Flash)
+
+| # | Feature | Files | Status |
+|---|---------|-------|--------|
+| 4.1 | AI API key input trong Settings | `settings/page.tsx` | ✅ Done |
+| 4.2 | AI Summarize issue | `lib/ai.ts`, `backend/routes/ai.ts` | ✅ Done |
+| 4.3 | AI Draft Comment | `components/issue/comment-section.tsx` | ✅ Done |
+| 4.4 | AI Parse Worklog — natural language → timeSpent | `components/issue/log-work-modal.tsx` | ✅ Done |
+| 4.5 | AI Suggest Transition | `components/issue/transition-button.tsx` | ✅ Done |
+| 4.6 | AI Sprint Review — worklogs → markdown report | `components/issues/worklogs-tab.tsx` | ✅ Done |
+
+---
+
+## ✅ Phase 5A — Extended Features
+
+| # | Feature | Files | Status |
+|---|---------|-------|--------|
+| 5.1 | Team Dashboard `/team` | `team/page.tsx`, `hooks/use-team-dashboard.ts` | ✅ Done |
+| 5.2 | Team Workload Planner `/team-plan` | `team-plan/page.tsx`, `hooks/use-team-plan.ts` | ✅ Done |
+| 5.3 | Worklog Calendar `/worklog` — week/month, drag-drop | `worklog/page.tsx`, `components/worklog/` | ✅ Done |
+| 5.4 | Board enhancements — edit mode, sub-grouping, epic/version filter | `board/page.tsx`, `components/board/` | ✅ Done |
+| 5.5 | Avatar proxy + Attachment gallery | `backend/routes/jira.ts`, `components/issue/attachment-gallery.tsx` | ✅ Done |
+| 5.6 | Docker Compose full stack | `docker-compose.yml`, `Dockerfile` (FE + BE) | ✅ Done |
+
+---
+
+## 🔄 Phase 5B — Production Ready
 
 | # | Feature | Mô tả | Status |
 |---|---------|-------|--------|
-| 3.1 | Projects browser `/projects` | Danh sách projects → Board của project | ✅ Done |
-| 3.2 | Advanced Search / JQL builder | JQL textarea + preset chips → results table | ✅ Done |
-| 3.3 | Keyboard shortcuts full | G B, G I, G S, C, L, ?, Ctrl+K — global listener in layout | ✅ Done |
-| 3.4 | Bulk Actions | Select nhiều issues → transition dropdown (sequential) | ✅ Done |
-| 3.5 | Worklog history | Tab "Worklog History" trên /issues — localStorage based | ✅ Done |
-| 3.6 | Settings page `/settings` | Account, Connection, Shortcuts ref, Dark mode toggle | ✅ Done |
-| 3.7 | Dark mode | Inline script tránh flash, toggle trong Settings, dark: variants | ✅ Done |
-| 3.8 | Notifications | Poll /search?jql=updated>=-15m 60s, badge + dropdown sidebar | ✅ Done |
-
----
-
-## 🤖 Phase 4 — AI Integration (DONE)
-
-> Bắt đầu sau khi Phase 2+3 web cơ bản hoàn chỉnh.
-
-| # | Feature | Mô tả | Status |
-|---|---------|-------|--------|
-| 4.1 | Settings — API key input | User nhập Gemini API key → localStorage, với status indicator | ✅ Done |
-| 4.2 | AI Summarize issue | Nút "✨ Summary" → 3-5 bullet từ description+comments | ✅ Done |
-| 4.3 | AI Draft Comment | Nút "✨ Draft with AI" → AI generate, user edit rồi submit | ✅ Done |
-| 4.4 | AI Parse Worklog | Nhập natural language → AI parse thành timeSpent+comment | ✅ Done |
-| 4.5 | AI Suggest Transition | Đọc context → suggest status tiếp theo phù hợp | ✅ Done |
-| 4.6 | AI Sprint Review | Worklog tuần → báo cáo markdown + copy clipboard | ✅ Done |
-
----
-
-## 🐘 Phase 5 — Production Ready
-
-| # | Feature | Mô tả | Status |
-|---|---------|-------|--------|
-| 5.1 | PostgreSQL migration | Drizzle schema đã sẵn sàng, đổi connection string | ⬜ Todo |
-| 5.2 | Docker Compose | `docker-compose up` → full stack chạy ngay | ⬜ Todo |
-| 5.3 | README setup guide | Clone → `.env` → chạy → dùng | ⬜ Todo |
-| 5.4 | Rate limiting + error boundary | `express-rate-limit`, React ErrorBoundary | ⬜ Todo |
-| 5.5 | Offline indicator | Detect network status, show banner | ⬜ Todo |
-
----
-
-## Thứ tự build đề xuất
-
-```
-2.1 → 2.2 → 2.3 → 2.6 → 2.4 → 2.5
-  ↓
-3.6 → 3.3 → 3.7
-  ↓
-3.1 → 3.2 → 3.4 → 3.5 → 3.8
-  ↓
-4.1 → 4.2 → 4.3 → 4.4 → 4.5 → 4.6
-  ↓
-5.x
-```
+| 5B.1 | PostgreSQL migration guide | README setup với PG | ⬜ Todo |
+| 5B.2 | README.md | Clone → `.env` → run → dùng | ⬜ Todo |
+| 5B.3 | Rate limiting | `express-rate-limit` cho `/api/jira/*` | ⬜ Todo |
+| 5B.4 | React Error Boundaries | Bắt lỗi component-level, không crash cả app | ⬜ Todo |
+| 5B.5 | Offline indicator | Detect network, show banner | ⬜ Todo |
 
 ---
 
@@ -97,7 +87,9 @@
 
 | Ngày | Thay đổi |
 |------|---------|
-| 2026-05-10 | Phase 1 hoàn thành, docs khởi tạo, hydration bug fix |
-| 2026-05-10 | Phase 2 hoàn thành: My Issues page, Log Work, Comments, Transition UX, Create Issue modal, Ctrl+K global search |
-| 2026-05-10 | Phase 3 hoàn thành: Settings, Keyboard Shortcuts, Dark Mode, Projects Browser, JQL Search, Worklog History, Bulk Actions, Notifications Badge |
-| 2026-05-10 | Phase 4 hoàn thành: AI Integration (Gemini 2.5 Flash) — Settings key, Summarize, Draft Comment, Parse Worklog, Suggest Transition, Sprint Review |
+| 2026-05-09 | Phase 1: Backend proxy, Login, Board, Issue Detail |
+| 2026-05-10 | Phase 2: My Issues, Log Work, Comments, Transitions, Create Issue, Ctrl+K |
+| 2026-05-10 | Phase 3: Settings, Dark Mode, Projects, JQL Search, Keyboard Shortcuts, Bulk Actions, Worklog History, Notifications |
+| 2026-05-10 | Phase 4: AI Integration — Gemini 2.5 Flash (Settings key, Summarize, Draft Comment, Parse Worklog, Suggest Transition, Sprint Review) |
+| 2026-05-21 | Phase 5A: Team Dashboard, Team Planner, Worklog Calendar, Board enhancements, Avatar/Attachment proxy, Docker Compose |
+| 2026-05-29 | Docs refactor — cập nhật toàn bộ docs/*, xóa file thừa |
