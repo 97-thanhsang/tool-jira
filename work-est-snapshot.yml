@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: J
+          - generic [ref=e8]: Jira Power UI
+        - button "Collapse sidebar" [ref=e9]:
+          - img [ref=e10]
+      - navigation [ref=e13]:
+        - generic [ref=e14]:
+          - button "My Workspace" [ref=e15]
+          - link "My Board" [ref=e18] [cursor=pointer]:
+            - /url: /board
+          - link "Dashboard" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard
+          - link "My Issues" [ref=e29] [cursor=pointer]:
+            - /url: /issues
+          - link "Worklog" [ref=e34] [cursor=pointer]:
+            - /url: /worklog
+        - generic [ref=e39]:
+          - button "Team" [ref=e40]
+          - link "Team Dashboard" [ref=e43] [cursor=pointer]:
+            - /url: /team
+          - link "Team Plan" [ref=e50] [cursor=pointer]:
+            - /url: /team-plan
+          - link "Work Est" [ref=e54] [cursor=pointer]:
+            - /url: /work-est
+        - generic [ref=e58]:
+          - button "System" [ref=e59]
+          - link "Settings" [ref=e62] [cursor=pointer]:
+            - /url: /settings
+          - link "Open Jira" [ref=e67] [cursor=pointer]:
+            - /url: https://task.ascvn.com.vn
+      - generic [ref=e73]:
+        - button "Notifications" [ref=e75]:
+          - img [ref=e77]
+          - text: Notifications
+        - generic [ref=e80]:
+          - generic [ref=e82]: S
+          - generic [ref=e83]
+        - button "Log out" [ref=e85]:
+          - img [ref=e86]
+          - text: Log out
+    - main [ref=e89]:
+      - generic [ref=e90]:
+        - generic [ref=e91]:
+          - img [ref=e92]
+          - heading "Work Estimate Schedule" [level=1] [ref=e94]
+          - generic [ref=e95]: Lập kế hoạch & phân bổ estimate
+        - generic [ref=e96]:
+          - generic [ref=e97]: "Bước 1: Chọn parent tasks"
+          - generic [ref=e99]
+        - generic [ref=e106]:
+          - generic [ref=e107]: "Bước 2: Chọn sub-tasks (0/0)"
+          - generic [ref=e108]: Chưa có sub-tasks. Nhập parent task và nhấn "Tải Sub-Tasks".
+        - generic [ref=e109]:
+          - generic [ref=e110]: "Bước 3: Khoảng thời gian"
+          - generic [ref=e112]
+  - button "Open Next.js Dev Tools" [ref=e132] [cursor=pointer]:
+    - img [ref=e133]
+  - alert [ref=e136]

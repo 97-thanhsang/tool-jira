@@ -13,6 +13,7 @@ import {
   Clock,
   Users,
   Calendar,
+  CalendarDays,
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
@@ -52,6 +53,7 @@ const navSections: NavSection[] = [
     items: [
       { href: '/team', label: 'Team Dashboard', icon: Users },
       { href: '/team-plan', label: 'Team Plan', icon: Calendar },
+      { href: '/work-est', label: 'Work Est', icon: CalendarDays },
     ],
   },
   {

@@ -1,0 +1,6 @@
+- generic [active]:
+  - button "Open Next.js Dev Tools" [ref=e11] [cursor=pointer]:
+    - generic [ref=e14]:
+      - text: Rendering
+      - generic [ref=e15]
+  - alert [ref=e10]
