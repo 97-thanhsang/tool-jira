@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { startOfWeek, addDays, format } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { WorkEstDaySchedule, WorkEstAllocation } from '@/lib/work-est-api';
+import type { WorkEstDaySchedule, WorkEstAllocation, WorkEstLogEntry } from '@/lib/work-est-api';
 
 interface Props {
   schedule: WorkEstDaySchedule[];
@@ -84,9 +83,9 @@ function getEntryBorderColor(issueKey: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-// ── Allocation Card (giống hệt WorklogEntryCard) ─────────────────────────
+// ── Allocation Card (giống WorklogEntryCard, chỉ khác hours badge) ─────
 
-function AllocationCard({ alloc, columnDate }: { alloc: WorkEstAllocation; columnDate: string }) {
+function AllocationCard({ alloc }: { alloc: WorkEstAllocation }) {
   return (
     <div
       className="px-3 py-2 text-[12px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm hover:shadow-sm transition-all group"
@@ -109,7 +108,7 @@ function AllocationCard({ alloc, columnDate }: { alloc: WorkEstAllocation; colum
       {/* Row 2: summary */}
       <p className="text-[11px] text-[#5E6C84] dark:text-gray-400 leading-relaxed mb-[5px]" title={alloc.summary}>{alloc.summary}</p>
 
-      {/* Row 3: left=column date, right=hours badge */}
+      {/* Row 3: hours badge (giống log badge) */}
       <div className="flex items-center justify-between text-[10px] mb-[3px]">
         <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500" />
         <div className="flex items-center gap-2.5">
@@ -133,6 +132,33 @@ function AllocationCard({ alloc, columnDate }: { alloc: WorkEstAllocation; colum
             <span className="text-[10px] text-[#8993A4] dark:text-gray-500 ml-1">{alloc.assigneeDisplayName}</span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Individual Log Entry Card (1 card per worklog) ─────────────────────
+
+function LogEntryCard({ entry }: { entry: WorkEstLogEntry }) {
+  return (
+    <div
+      className="px-3 py-2 text-[12px] bg-[#F8F9FA] dark:bg-gray-800/40 border border-dashed border-[#DFE1E6] dark:border-gray-700 rounded-sm opacity-70"
+      style={{ borderLeftColor: getEntryBorderColor(entry.issueKey), borderLeftWidth: '3px' }}
+    >
+      <div className="flex items-center gap-2 mb-[5px]">
+        <TypeBadge typeName={entry.issueTypeName} iconUrl={entry.issueTypeIconUrl} />
+        <span className="font-semibold text-[#5E6C84] dark:text-gray-400 text-xs truncate">{entry.issueKey}</span>
+        <span className="text-[10px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0">{entry.projectKey}</span>
+        <div className="flex-1" />
+        <span className="text-[9px] text-[#8993A4] dark:text-gray-500 italic shrink-0">(cũ)</span>
+      </div>
+      <p className="text-[11px] text-[#8993A4] dark:text-gray-500 leading-relaxed truncate mb-[5px]" title={entry.summary}>{entry.summary}</p>
+      <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500" />
+        <span className="font-bold px-1.5 py-[1px] rounded text-[11px]"
+          style={{ backgroundColor: '#DEEBFF', color: '#0052CC' }}>
+          {entry.hours}h
+        </span>
       </div>
     </div>
   );
@@ -175,20 +201,28 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
         </div>
       )}
 
-      {/* Existing allocation notice */}
-      {day.existingHours > 0 && day.allocations.length === 0 && (
-        <div className="mx-2 mt-2 px-2.5 py-2 bg-[#F8F9FA] dark:bg-gray-800/30 border-l-2 border-[#C1C7D0] rounded-sm">
-          <div className="text-[10px] text-[#5E6C84] italic">Đã có {day.existingHours}h từ tasks khác</div>
-        </div>
-      )}
-
-      {/* Allocation cards */}
+      {/* Existing (old) log entries + new allocation cards */}
       <div className="flex-1 space-y-1.5 p-2 overflow-y-auto">
-        {day.allocations.length === 0 && day.existingHours === 0 ? (
+        {/* Individual log entries (one per worklog) */}
+        {day.existingLogEntries.length > 0 && (
+          <div className="space-y-1 mb-2">
+            {day.existingLogEntries.map((entry, ei) => (
+              <LogEntryCard key={`log-${entry.issueKey}-${ei}`} entry={entry} />
+            ))}
+          </div>
+        )}
+
+        {/* Separator if both old logs and new allocations */}
+        {day.existingLogEntries.length > 0 && day.allocations.length > 0 && (
+          <div className="border-t border-dashed border-[#DFE1E6] dark:border-gray-700 my-1" />
+        )}
+
+        {/* Newly distributed allocations */}
+        {day.allocations.length === 0 && day.existingLogEntries.length === 0 ? (
           <div className="text-[10px] text-[#C1C7D0] dark:text-gray-500 text-center italic pt-8">Trống</div>
         ) : (
           day.allocations.map(alloc => (
-            <AllocationCard key={`${day.date}-${alloc.issueKey}`} alloc={alloc} columnDate={day.date} />
+            <AllocationCard key={`${day.date}-${alloc.issueKey}`} alloc={alloc} />
           ))
         )}
       </div>
@@ -199,39 +233,36 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
 // ── Main Timeline ──────────────────────────────────────────────────────────
 
 export function EstTimeline({ schedule, workingDays }: Props) {
-  const [weekOffset, setWeekOffset] = useState(0);
   const dayHeaders = ['T2', 'T3', 'T4', 'T5', 'T6'];
 
+  // Group working days into weeks (Mon-Fri)
   const weeks = useMemo(() => {
     if (workingDays.length === 0) return [];
-    const groups: string[][] = [];
+    const groups: { label: string; days: string[] }[] = [];
     let cur: string[] = [];
     for (const day of workingDays) {
       const d = new Date(day + 'T00:00:00');
-      if (d.getDay() === 1 && cur.length > 0) { groups.push(cur); cur = []; }
+      if (d.getDay() === 1 && cur.length > 0) {
+        const first = new Date(cur[0] + 'T00:00:00');
+        const last = new Date(cur[cur.length - 1] + 'T00:00:00');
+        groups.push({
+          label: `${format(first, 'dd/MM')} – ${format(last, 'dd/MM/yyyy')}`,
+          days: cur,
+        });
+        cur = [];
+      }
       cur.push(day);
     }
-    if (cur.length > 0) groups.push(cur);
+    if (cur.length > 0) {
+      const first = new Date(cur[0] + 'T00:00:00');
+      const last = new Date(cur[cur.length - 1] + 'T00:00:00');
+      groups.push({
+        label: `${format(first, 'dd/MM')} – ${format(last, 'dd/MM/yyyy')}`,
+        days: cur,
+      });
+    }
     return groups;
   }, [workingDays]);
-
-  const currentWeekDays = weeks[weekOffset] ?? [];
-  const weekIndex = weekOffset + 1;
-  const totalWeeks = weeks.length;
-
-  const gridDays: (string | null)[] = [];
-  if (currentWeekDays.length > 0) {
-    const first = new Date(currentWeekDays[0] + 'T00:00:00');
-    const start = startOfWeek(first, { weekStartsOn: 1 });
-    for (let i = 0; i < 5; i++) {
-      const d = addDays(start, i);
-      gridDays.push(currentWeekDays.includes(format(d, 'yyyy-MM-dd')) ? format(d, 'yyyy-MM-dd') : null);
-    }
-  }
-
-  const weekLabel = currentWeekDays.length > 0
-    ? `${format(new Date(currentWeekDays[0] + 'T00:00:00'), 'dd/MM')} \u2013 ${format(new Date(currentWeekDays[currentWeekDays.length - 1] + 'T00:00:00'), 'dd/MM/yyyy')}`
-    : '';
 
   const scheduleMap = useMemo(() => {
     const m = new Map<string, WorkEstDaySchedule>();
@@ -246,44 +277,54 @@ export function EstTimeline({ schedule, workingDays }: Props) {
 
   return (
     <div>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <button onClick={() => setWeekOffset(o => Math.max(0, o - 1))} disabled={weekOffset === 0}
-            className="p-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] hover:bg-[#F4F5F7] dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
-            <ChevronLeft size={14} />
-          </button>
-          <span className="text-sm font-semibold text-[#172B4D] dark:text-gray-100 w-44 text-center">{weekLabel}</span>
-          <button onClick={() => setWeekOffset(o => Math.min(totalWeeks - 1, o + 1))} disabled={weekOffset >= totalWeeks - 1}
-            className="p-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] hover:bg-[#F4F5F7] dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed">
-            <ChevronRight size={14} />
-          </button>
-          <span className="text-[10px] text-[#5E6C84]">Tu\u1EA7n {weekIndex}/{totalWeeks}</span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-[#5E6C84] dark:text-gray-400">
-          <span className="font-semibold text-[#172B4D] dark:text-gray-200">{totalHours}h / {totalCapacity}h</span>
-          <span className="w-px h-4 bg-[#DFE1E6] dark:border-gray-700" />
-          <span>{workingDays.length} ngày</span>
-        </div>
+      {/* Summary bar */}
+      <div className="flex items-center gap-3 mb-4 text-xs text-[#5E6C84] dark:text-gray-400">
+        <span className="font-semibold text-[#172B4D] dark:text-gray-200">{totalHours}h / {totalCapacity}h</span>
+        <span className="w-px h-4 bg-[#DFE1E6] dark:border-gray-700" />
+        <span>{workingDays.length} ngày</span>
+        <span className="w-px h-4 bg-[#DFE1E6] dark:border-gray-700" />
+        <span>{weeks.length} tuần</span>
       </div>
 
-      {/* Day headers */}
-      <div className="grid grid-cols-5 gap-2 mb-1">
-        {dayHeaders.map((d, i) => (
-          <div key={d} className={cn('text-center text-[10px] font-semibold py-1 rounded-sm',
-            gridDays[i] && scheduleMap.has(gridDays[i]!) ? 'text-[#5E6C84] dark:text-gray-400' : 'text-[#C1C7D0] dark:text-gray-600',
-          )}>{d}</div>
-        ))}
-      </div>
+      {/* Each week as a separate timeline */}
+      {weeks.map((week, wi) => {
+        // Build 5-column grid (Mon-Fri), fill null for missing days
+        const first = new Date(week.days[0] + 'T00:00:00');
+        const start = startOfWeek(first, { weekStartsOn: 1 });
+        const gridDays: (string | null)[] = [];
+        for (let i = 0; i < 5; i++) {
+          const d = addDays(start, i);
+          gridDays.push(week.days.includes(format(d, 'yyyy-MM-dd')) ? format(d, 'yyyy-MM-dd') : null);
+        }
 
-      {/* Day grid */}
-      <div className="grid grid-cols-5 gap-2">
-        {gridDays.map((dayKey, i) => {
-          if (!dayKey) return <div key={`e-${i}`} className="min-h-[300px] bg-[#F8F9FA] dark:bg-gray-800/20 border border-dashed border-[#DFE1E6] dark:border-gray-700 rounded-sm" />;
-          const ds = scheduleMap.get(dayKey);
-          return <DayColumn key={dayKey} day={ds ?? { date: dayKey, allocations: [], totalSeconds: 0, totalHours: 0, existingSeconds: 0, existingHours: 0 }} />;
-        })}
-      </div>
+        return (
+          <div key={wi} className="mb-6">
+            {/* Week label */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-200">Tuần {wi + 1}/{weeks.length}</span>
+              <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">{week.label}</span>
+            </div>
+
+            {/* Day headers */}
+            <div className="grid grid-cols-5 gap-2 mb-1">
+              {dayHeaders.map((d, i) => (
+                <div key={d} className={cn('text-center text-[10px] font-semibold py-1 rounded-sm',
+                  gridDays[i] && scheduleMap.has(gridDays[i]!) ? 'text-[#5E6C84] dark:text-gray-400' : 'text-[#C1C7D0] dark:text-gray-600',
+                )}>{d}</div>
+              ))}
+            </div>
+
+            {/* Day grid */}
+            <div className="grid grid-cols-5 gap-2">
+              {gridDays.map((dayKey, i) => {
+                if (!dayKey) return <div key={`e-${wi}-${i}`} className="min-h-[250px] bg-[#F8F9FA] dark:bg-gray-800/20 border border-dashed border-[#DFE1E6] dark:border-gray-700 rounded-sm" />;
+                const ds = scheduleMap.get(dayKey);
+                return <DayColumn key={dayKey} day={ds ?? { date: dayKey, allocations: [], totalSeconds: 0, totalHours: 0, existingSeconds: 0, existingHours: 0, existingTasks: [], existingLogEntries: [] }} />;
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

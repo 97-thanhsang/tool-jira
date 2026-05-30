@@ -62,8 +62,23 @@ export interface WorkEstDaySchedule {
   allocations: WorkEstAllocation[];
   totalSeconds: number;
   totalHours: number;
-  existingSeconds: number;  // from unchecked sub-tasks with duedate=this date
+  existingSeconds: number;
   existingHours: number;
+  existingTasks: WorkEstSubTask[];  // old tasks grouped by day
+  existingLogEntries: WorkEstLogEntry[];  // individual worklog entries
+}
+
+export interface WorkEstLogEntry {
+  issueKey: string;
+  summary: string;
+  projectKey: string;
+  seconds: number;
+  hours: number;
+  issueTypeName: string;
+  issueTypeIconUrl: string;
+  status: string;
+  priority: string;
+  assigneeDisplayName: string | null;
 }
 
 export interface WorkEstDistributeResult {
@@ -98,7 +113,8 @@ export interface SubTaskRaw {
       avatarUrls?: { '24x24': string };
     } | null;
     worklog?: {
-      worklogs: Array<{ timeSpentSeconds: number; author: { name: string } }>;
+      total: number;
+      worklogs: Array<{ timeSpentSeconds: number; started: string; author: { name: string } }>;
     };
     parent?: {
       key: string;
@@ -130,6 +146,7 @@ function localDateStr(d: Date): string {
 
 // ─── Fetch ─────────────────────────────────────────────────────────────────
 
+/** Fetch sub-tasks by parent keys */
 export async function fetchSubTasks(
   parentKeys: string[],
 ): Promise<WorkEstSubTask[]> {
@@ -227,6 +244,97 @@ export async function fetchSubTasks(
       manualEstimateHours: null,
     };
   });
+}
+
+/** Fetch ANY sub-tasks that have duedate OR worklogs in the given date range */
+export async function fetchTasksByDateRange(
+  fromDate: string,
+  toDate: string,
+): Promise<WorkEstSubTask[]> {
+  // Build date boundary timestamps for worklog filtering
+  const fromTs = new Date(fromDate + 'T00:00:00').getTime();
+  const toTs = new Date(toDate + 'T23:59:59').getTime();
+
+  // Query 1: MY sub-tasks with duedate in range
+  const q1 = `issuetype = Sub-task AND assignee = currentUser() AND duedate >= "${fromDate}" AND duedate <= "${toDate}"`;
+  // Query 2: tasks logged BY ME in range (any issue type)
+  const q2 = `worklogAuthor = currentUser() AND worklogDate >= "${fromDate}" AND worklogDate <= "${toDate}"`;
+
+  const seen = new Set<string>();
+  const results: WorkEstSubTask[] = [];
+
+  const mapIssue = (issue: SubTaskRaw): (WorkEstSubTask & { worklogDays?: Record<string, number>; logEntries?: Record<string, WorkEstLogEntry[]> }) | null => {
+    if (seen.has(issue.key)) return null;
+    seen.add(issue.key);
+    const f = issue.fields;
+    const est = f.timetracking?.originalEstimateSeconds ?? 0;
+
+    // Compute per-day worklog totals AND individual entries
+    const worklogDays: Record<string, number> = {};
+    const logEntries: Record<string, WorkEstLogEntry[]> = {};
+    const allLogs = f.worklog?.worklogs ?? [];
+    for (const wl of allLogs) {
+      const t = new Date(wl.started).getTime();
+      if (t >= fromTs && t <= toTs) {
+        const dayKey = localDateStr(new Date(wl.started));
+        worklogDays[dayKey] = (worklogDays[dayKey] ?? 0) + (wl.timeSpentSeconds ?? 0);
+        if (!logEntries[dayKey]) logEntries[dayKey] = [];
+        logEntries[dayKey].push({
+          issueKey: issue.key,
+          summary: f.summary,
+          projectKey: f.project.key,
+          seconds: wl.timeSpentSeconds ?? 0,
+          hours: Math.round(((wl.timeSpentSeconds ?? 0) / 3600) * 10) / 10,
+          issueTypeName: f.issuetype?.name ?? 'Sub-task',
+          issueTypeIconUrl: f.issuetype?.iconUrl ?? '',
+          status: f.status?.name ?? '',
+          priority: f.priority?.name ?? 'Medium',
+          assigneeDisplayName: f.assignee?.displayName ?? null,
+        });
+      }
+    }
+    const totalLogged = Object.values(worklogDays).reduce((s, v) => s + v, 0);
+
+    return {
+      key: issue.key, issueId: issue.id, summary: f.summary,
+      issueTypeName: f.issuetype?.name ?? 'Sub-task',
+      issueTypeIconUrl: f.issuetype?.iconUrl ?? '',
+      projectKey: f.project.key, projectName: f.project.name,
+      status: f.status?.name ?? '', priority: f.priority?.name ?? 'Medium',
+      assignee: f.assignee?.name ?? null,
+      assigneeDisplayName: f.assignee?.displayName ?? null,
+      assigneeAvatarUrl: f.assignee?.avatarUrls?.['24x24'] ?? null,
+      reporter: f.reporter?.name ?? null,
+      reporterDisplayName: f.reporter?.displayName ?? null,
+      reporterAvatarUrl: f.reporter?.avatarUrls?.['24x24'] ?? null,
+      originalEstimateSeconds: est, originalEstimateDisplay: formatDuration(est),
+      loggedSeconds: totalLogged, loggedDisplay: formatDuration(totalLogged),
+      worklogDays, logEntries,
+      duedate: f.duedate, created: f.created ?? null, updated: f.updated ?? null,
+      parentKey: f.parent?.key ?? null,
+      parentSummary: f.parent?.fields?.summary ?? null,
+      parentIssueTypeName: f.parent?.fields?.issuetype?.name ?? null,
+      parentIssueTypeIconUrl: f.parent?.fields?.issuetype?.iconUrl ?? null,
+      parentStatus: f.parent?.fields?.status?.name ?? null,
+      manualEstimateHours: null,
+    } as any;
+  };
+
+  const fetchWithJql = async (jql: string) => {
+    try {
+      const r = await api.get<{ issues: SubTaskRaw[] }>('/search', {
+        params: { jql, maxResults: 200, fields: 'summary,issuetype,project,timetracking,status,priority,duedate,assignee,parent,created,updated,reporter,worklog' },
+      });
+      for (const issue of r.data.issues ?? []) {
+        const mapped = mapIssue(issue);
+        if (mapped) results.push(mapped);
+      }
+    } catch { /* skip */ }
+  };
+
+  await Promise.all([fetchWithJql(q1), fetchWithJql(q2)]);
+
+  return results;
 }
 
 // ─── Update ────────────────────────────────────────────────────────────────
@@ -327,7 +435,8 @@ export function distributeEstimates(
   subTasks: WorkEstSubTask[],
   fromDate: string,
   toDate: string,
-  existingDayAllocations?: Record<string, number>,  // date → seconds pre-assigned
+  existingDayAllocations?: Record<string, number>,
+  uncheckedTasks?: WorkEstSubTask[],
 ): WorkEstDistributeResult {
   // 1. Build working day list (always exclude weekends)
   const workingDays: string[] = [];
@@ -351,48 +460,68 @@ export function distributeEstimates(
     };
   }
 
-  // 2. Daily remaining capacity = 8h - existing allocations from unchecked tasks
+  // 2. Daily remaining capacity = 8h - existing allocations
   const dayCapacity: Map<string, number> = new Map();
+  const existingPerDay: Map<string, WorkEstSubTask[]> = new Map();
+  const logEntriesPerDay: Map<string, WorkEstLogEntry[]> = new Map();
   let totalExisting = 0;
+
+  if (uncheckedTasks) {
+    for (const ut of uncheckedTasks) {
+      if (!(ut.loggedSeconds > 0)) continue;
+
+      // Collect individual log entries
+      const le = (ut as any).logEntries as Record<string, WorkEstLogEntry[]> | undefined;
+      if (le) {
+        for (const [dayKey, entries] of Object.entries(le)) {
+          if (workingDays.includes(dayKey) && entries.length > 0) {
+            if (!logEntriesPerDay.has(dayKey)) logEntriesPerDay.set(dayKey, []);
+            for (const entry of entries) logEntriesPerDay.get(dayKey)!.push(entry);
+          }
+        }
+      }
+
+      // Also group by days for existingTasks (kept for backward compat)
+      const wd = (ut as any).worklogDays as Record<string, number> | undefined;
+      let daysWithLogs: string[] = [];
+      if (wd) {
+        daysWithLogs = Object.entries(wd)
+          .filter(([, secs]) => secs > 0)
+          .map(([day]) => day)
+          .filter(day => workingDays.includes(day));
+      }
+      if (daysWithLogs.length > 0) {
+        for (const dayKey of daysWithLogs) {
+          if (!existingPerDay.has(dayKey)) existingPerDay.set(dayKey, []);
+          existingPerDay.get(dayKey)!.push(ut);
+        }
+      }
+    }
+  }
+
   for (const d of workingDays) {
-    const existing = existingDayAllocations?.[d] ?? 0;
-    dayCapacity.set(d, Math.max(0, MAX_PER_DAY - existing));
-    totalExisting += existing;
+    const consumed = existingDayAllocations?.[d] ?? 0;
+    dayCapacity.set(d, Math.max(0, MAX_PER_DAY - consumed));
+    totalExisting += consumed;
   }
   const totalAvailable = workingDays.length * MAX_PER_DAY - totalExisting;
 
-  // 3. Assign sizes — even split across ALL checked tasks, rounded to 0.5h
+  // 3. Assign sizes — keep each task's existing estimate (or manual override)
+  const tasks: TaskWithAssigned[] = sortSubTasks(subTasks.map(t => {
+    let assigned: number;
+    if (t.manualEstimateHours !== null) {
+      assigned = Math.min(t.manualEstimateHours * 3600, MAX_PER_TASK);
+    } else if (t.originalEstimateSeconds > 0) {
+      assigned = Math.min(t.originalEstimateSeconds, MAX_PER_TASK);
+    } else {
+      assigned = 0;
+    }
+    return { ...t, _assigned: assigned };
+  }));
+
+  // 4. Fill calendar — place tasks into days based on capacity
+  //    Day capacity = 8h - existing logged consumption from old tasks
   const totalCapacity = workingDays.reduce((s, d) => s + (dayCapacity.get(d) ?? 0), 0);
-  const taskCount = subTasks.length;
-  const tasks: TaskWithAssigned[] = sortSubTasks(subTasks.map(t => ({ ...t, _assigned: 0 })));
-
-  if (taskCount > 0 && totalCapacity > 0) {
-    // Base: each task gets equal share (min 1h=2slots, max 8h=16slots)
-    const totalSlots = Math.floor(totalCapacity / SLOT);
-    let baseSlots = Math.min(Math.floor(totalSlots / taskCount), MAX_PER_TASK / SLOT);
-    if (baseSlots < 2) baseSlots = 2; // enforce 1h min (2 slots)
-
-    if (baseSlots * SLOT * taskCount > totalCapacity) {
-      baseSlots = Math.floor(totalSlots / taskCount);
-    }
-
-    let used = 0;
-    for (const t of tasks) {
-      const alloc = baseSlots * SLOT;
-      t._assigned = alloc;
-      used += alloc;
-    }
-
-    // Distribute remainder in 0.5h chunks to first tasks
-    let remainder = totalCapacity - used;
-    for (const t of tasks) {
-      if (remainder < SLOT) break;
-      const add = Math.min(Math.floor(remainder / SLOT) * SLOT, MAX_PER_TASK - t._assigned);
-      if (add >= SLOT) { t._assigned += add; remainder -= add; }
-    }
-  }
-
-  // 4. Fill calendar — place all tasks into days
   const dayAllocs: Map<string, WorkEstAllocation[]> = new Map();
   const dayRemaining: Map<string, number> = new Map(dayCapacity);
 
@@ -402,6 +531,11 @@ export function distributeEstimates(
 
   for (const task of tasks) {
     let remainingSecs = task._assigned;
+    // Task without any estimate → give min 1h
+    if (remainingSecs <= 0) {
+      remainingSecs = Math.min(MAX_PER_TASK, Math.max(3600, Math.floor(totalCapacity / Math.max(tasks.length, 1))));
+    }
+    remainingSecs = Math.min(remainingSecs, MAX_PER_TASK);
 
     while (remainingSecs > 0 && dayIdx < workingDays.length) {
       const day = workingDays[dayIdx];
@@ -428,18 +562,22 @@ export function distributeEstimates(
     }
   }
 
-  // 6. Build result
+  // 5. Build result
   const schedule: WorkEstDaySchedule[] = workingDays.map(date => {
     const allocs = dayAllocs.get(date) ?? [];
     const totalSeconds = allocs.reduce((s, a) => s + a.seconds, 0);
-    const existing = existingDayAllocations?.[date] ?? 0;
+    const consumed = existingDayAllocations?.[date] ?? 0;
+    const dayExisting = existingPerDay.get(date) ?? [];
+    const dayLogs = logEntriesPerDay.get(date) ?? [];
     return {
       date,
       allocations: allocs,
       totalSeconds,
       totalHours: Math.round((totalSeconds / 3600) * 10) / 10,
-      existingSeconds: existing,
-      existingHours: Math.round((existing / 3600) * 10) / 10,
+      existingSeconds: consumed,
+      existingHours: Math.round((consumed / 3600) * 10) / 10,
+      existingTasks: dayExisting,
+      existingLogEntries: dayLogs,
     };
   });
 
@@ -453,3 +591,4 @@ export function distributeEstimates(
     totalExistingSeconds: totalExisting,
   };
 }
+

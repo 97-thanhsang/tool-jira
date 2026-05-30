@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import useSWR from 'swr';
-import { fetchSubTasks, distributeEstimates } from '@/lib/work-est-api';
+import { fetchSubTasks, fetchTasksByDateRange, distributeEstimates } from '@/lib/work-est-api';
 import type { WorkEstSubTask, WorkEstDistributeResult } from '@/lib/work-est-api';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 
@@ -120,21 +120,42 @@ export function useWorkEst(parentKeys: string[]) {
   selectedSubTasksRef.current = selectedSubTasks;
 
   // ── Explicit distribution — runs fresh on each click ─────────────────
-  const runDistribution = useCallback(() => {
+  const runDistribution = useCallback(async () => {
     const checkedTasks = selectedSubTasksRef.current;
     const { from, to } = dateRangeRef.current;
 
     if (checkedTasks.length === 0) return;
 
+    // 1. Auto-fetch ANY sub-tasks with duedate or worklogs in the date range
+    const dateRangeTasks = await fetchTasksByDateRange(from, to);
+
+    // 2. Build existing allocations from worklogDays of ALL found tasks (per-day)
     const existingAllocs: Record<string, number> = {};
-    // Recompute existing allocations from unselected tasks at click time
-    for (const st of patchedSubTasks) {
-      if (!selectedIds.has(st.key) && st.duedate && st.originalEstimateSeconds > 0) {
-        existingAllocs[st.duedate] = (existingAllocs[st.duedate] ?? 0) + st.originalEstimateSeconds;
+    for (const st of dateRangeTasks) {
+      const wd = (st as any).worklogDays as Record<string, number> | undefined;
+      if (wd) {
+        for (const [day, secs] of Object.entries(wd)) {
+          if (secs > 0) {
+            existingAllocs[day] = (existingAllocs[day] ?? 0) + secs;
+          }
+        }
+      } else if (st.loggedSeconds > 0) {
+        existingAllocs[from] = (existingAllocs[from] ?? 0) + st.loggedSeconds;
       }
     }
 
-    const result = distributeEstimates(checkedTasks, from, to, existingAllocs);
+    // 3. Display: all tasks with worklogs + unchecked from list (dedup by key)
+    const uncheckedFromList = patchedSubTasks.filter(st => !selectedIds.has(st.key));
+    const seenKeys = new Set<string>();
+    const deduped: WorkEstSubTask[] = [];
+    for (const st of [...dateRangeTasks, ...uncheckedFromList]) {
+      if (!seenKeys.has(st.key)) {
+        seenKeys.add(st.key);
+        deduped.push(st);
+      }
+    }
+
+    const result = distributeEstimates(checkedTasks, from, to, existingAllocs, deduped);
     setDistribution(result);
   }, [patchedSubTasks, selectedIds]);
 
