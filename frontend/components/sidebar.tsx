@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clearAuth, getStoredUser } from '@/lib/api';
@@ -41,6 +42,7 @@ const navSections: NavSection[] = [
     label: 'My Workspace',
     items: [
       { href: '/board', label: 'My Board', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
       { href: '/issues', label: 'My Issues', icon: ListTodo },
       { href: '/worklog', label: 'Worklog', icon: Clock },
     ],
