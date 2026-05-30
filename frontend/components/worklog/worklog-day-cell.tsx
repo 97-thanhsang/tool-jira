@@ -40,7 +40,7 @@ function getStatusAccentColor(status: string | undefined): string {
   return '#5E6C84';
 }
 
-function getStatusBgColor(status: string | undefined): string {
+export function getStatusBgColor(status: string | undefined): string {
   if (!status) return '#F4F5F7';
   const s = status.toLowerCase();
   if (['done', 'closed', 'resolved', 'completed'].some(x => s.includes(x))) return '#E3FCEF';
@@ -51,7 +51,7 @@ function getStatusBgColor(status: string | undefined): string {
   return '#F4F5F7';
 }
 
-function getStatusColor(status: string | undefined): string {
+export function getStatusColor(status: string | undefined): string {
   if (!status) return '#42526E';
   const s = status.toLowerCase();
   if (['done', 'closed', 'resolved', 'completed'].some(x => s.includes(x))) return '#006644';
@@ -62,7 +62,7 @@ function getStatusColor(status: string | undefined): string {
   return '#42526E';
 }
 
-function getPriorityColor(priority: string | undefined): string {
+export function getPriorityColor(priority: string | undefined): string {
   if (!priority) return '#DFE1E6';
   const colors: Record<string, string> = {
     Highest: '#DE350B', High: '#FF5630', Blocker: '#DE350B',
@@ -73,7 +73,7 @@ function getPriorityColor(priority: string | undefined): string {
   return colors[priority] ?? '#6B778C';
 }
 
-function getPriorityBgColor(priority: string | undefined): string {
+export function getPriorityBgColor(priority: string | undefined): string {
   if (!priority) return '#F4F5F7';
   const colors: Record<string, string> = {
     Highest: '#FFEBE6', High: '#FFEDE8', Blocker: '#FFEBE6',
@@ -93,13 +93,13 @@ function getEntryBorderColor(issueKey: string, _projectKey: string): string {
 }
 
 // Log badge color: red when logged > estimated
-function getLogBadgeColor(logSeconds: number, estSeconds: number): { bg: string; fg: string } {
+export function getLogBadgeColor(logSeconds: number, estSeconds: number): { bg: string; fg: string } {
   if (estSeconds > 0 && logSeconds > estSeconds) return { bg: '#FFEBE6', fg: '#DE350B' };
   return { bg: '#E6F0FF', fg: '#0052CC' };
 }
 
 // Duedate color: green when done+past, red when not done+past, blue otherwise
-function getDuedateColor(status: string | undefined, duedate: string | undefined): string {
+export function getDuedateColor(status: string | undefined, duedate: string | undefined): string {
   if (!duedate) return '#2684FF';
   const isDone = status && ['Done','Closed','Resolved','Completed'].some(s => status.includes(s));
   const isPast = new Date(duedate) < new Date(new Date().toISOString().slice(0, 10));
@@ -133,7 +133,7 @@ export const SWIMLANE_PALETTE = [
   '#FF7452', '#998DD9', '#79E2F2', '#B3BAC5',
 ];
 
-function TypeBadge({ typeName, iconUrl }: { typeName: string; iconUrl?: string }) {
+export function TypeBadge({ typeName, iconUrl }: { typeName: string; iconUrl?: string }) {
   if (iconUrl) {
     return <img src={iconUrl} alt={typeName} className="w-3.5 h-3.5 flex-shrink-0" />;
   }

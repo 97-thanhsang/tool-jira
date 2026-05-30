@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { WorklogEntry, JiraPriority } from '@/types/jira';
 import { WorklogDayCell, type GroupByField, type GroupMeta, getGroupKey, getGroupMeta, SWIMLANE_PALETTE } from './worklog-day-cell';
 import { WorklogEntryCard } from './worklog-entry-card';
+import { GroupDetailPanel } from './group-detail-panel';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { Button } from '@/components/ui/button';
 
@@ -269,6 +270,11 @@ export function WorklogCalendar({
                   </button>
                   {isOpen && (
                     <div className="border-t border-[#DFE1E6] dark:border-gray-700">
+                      <GroupDetailPanel
+                        entries={Object.values(lane.entriesByDate).flat()}
+                        editMode={editMode}
+                        onEntryClick={onEntryClick}
+                      />
                       <DayGrid entries={lane.entriesByDate} hours={lane.dailyHours} />
                     </div>
                   )}
