@@ -1,16 +1,16 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { startOfWeek, subWeeks, addWeeks, addDays, subDays, startOfMonth, subMonths, addMonths, format } from 'date-fns';
-import { CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
-import { getStoredUser, api } from '@/lib/api';
-import { updateWorklog } from '@/lib/worklog-api';
+import { CheckCircle2, XCircle, Clock, RefreshCw, Layers } from 'lucide-react';
+import { getStoredUser } from '@/lib/api';
+import { updateWorklog, deleteWorklog } from '@/lib/worklog-api';
 import { useWorklogs } from '@/hooks/use-worklogs';
 import { useWorklogMutations } from '@/hooks/use-worklog-mutations';
 import { WorklogCalendar } from '@/components/worklog/worklog-calendar';
 import { EMPTY_WORKLOG_FILTERS, applyWorklogFilters, type WorklogFilterBarFilters } from '@/components/worklog/worklog-filter-bar';
 import { FilterBar } from '@/components/shared/filter-bar';
 import type { UnifiedFilters } from '@/lib/filter-constants';
-import { WorklogDrawer } from '@/components/worklog/worklog-drawer';
+import { EditWorklogModal } from '@/components/worklog/edit-worklog-modal';
 import { SWIMLANE_PALETTE, type GroupByField } from '@/components/worklog/worklog-day-cell';
 import type { WorklogEntry } from '@/types/jira';
 import { cn } from '@/lib/utils';
@@ -29,13 +29,14 @@ export default function WorklogPage() {
   // Display mode (Full / Focus)
   const [displayMode, setDisplayMode] = useState<'full' | 'focus'>('focus');
   const [editMode, setEditMode] = useState(false);
-  const [showWeekends, setShowWeekends] = useState(true);
+  const [showWeekends, setShowWeekends] = useState(false);
 
   // Filters
   const [filters, setFilters] = useState<WorklogFilterBarFilters>({
     ...EMPTY_WORKLOG_FILTERS,
     period: 'week',
     dateRangeMode: 'current',
+    assigneeIn: ['currentUser()'],
   });
   const [groupBy, setGroupBy] = useState<string>('assignee');
 
@@ -158,21 +159,67 @@ export default function WorklogPage() {
     setMemberDisplayNames(prev => ({ ...prev, ...names }));
   }
 
+  // ── Worklog Drafts ──────────────────────────────────────────────────────
+
+  type WorklogDraft =
+    | { type: 'update'; timeSpentSeconds: number; comment: string; started: string }
+    | { type: 'delete' };
+
+  const [worklogDrafts, setWorklogDrafts] = useState<Record<string, WorklogDraft>>({});
+  const [worklogReviewOpen, setWorklogReviewOpen] = useState(false);
+
   // CRUD
   const { add, update, remove, toast } = useWorklogMutations(() => mutate());
 
-  // Drawer
-  const [drawerEntry, setDrawerEntry] = useState<WorklogEntry | null>(null);
+  const pendingCount = useMemo(
+    () => Object.keys(worklogDrafts).length,
+    [worklogDrafts],
+  );
 
-  const issueDailyHours = useMemo(() => {
-    if (!drawerEntry || !data) return 0;
-    const dateKey = new Date(drawerEntry.started).toISOString().slice(0, 10);
-    const dayEntries = data.entries.filter(
-      e => e.issueKey === drawerEntry.issueKey &&
-           new Date(e.started).toISOString().slice(0, 10) === dateKey,
-    );
-    return dayEntries.reduce((sum, e) => sum + e.timeSpentSeconds / 3600, 0);
-  }, [drawerEntry, data]);
+  async function handleApplyWorklogDrafts() {
+    let errors = 0;
+    for (const [worklogId, draft] of Object.entries(worklogDrafts)) {
+      const entry = data?.entries.find(e => e.id === worklogId);
+      if (!entry) { errors++; continue; }
+      try {
+        if (draft.type === 'delete') {
+          await deleteWorklog(entry.issueKey, worklogId);
+        } else {
+          await updateWorklog(entry.issueKey, worklogId, {
+            timeSpentSeconds: draft.timeSpentSeconds,
+            comment: draft.comment,
+            started: draft.started,
+          });
+        }
+      } catch { errors++; }
+    }
+    if (errors === 0) {
+      setWorklogDrafts({});
+      setWorklogReviewOpen(false);
+    }
+    await mutate();
+  }
+
+  // Edit modal state
+  const [editEntry, setEditEntry] = useState<WorklogEntry | null>(null);
+
+  function handleEditSave(changes: { timeSpentSeconds: number; comment: string; started: string }) {
+    if (!editEntry) return;
+    setWorklogDrafts(prev => ({
+      ...prev,
+      [editEntry.id]: { type: 'update' as const, ...changes },
+    }));
+    setEditEntry(null);
+  }
+
+  function handleEditDelete() {
+    if (!editEntry) return;
+    setWorklogDrafts(prev => ({
+      ...prev,
+      [editEntry.id]: { type: 'delete' as const },
+    }));
+    setEditEntry(null);
+  }
 
   const handleDragEnd = useCallback(async (entryId: string, newDate: string) => {
     if (!data) return;
@@ -182,15 +229,16 @@ export default function WorklogPage() {
     if (oldDate === newDate) return;
     const oldStarted = new Date(entry.started);
     const newStarted = `${newDate}T${format(oldStarted, 'HH:mm')}:00.000+0700`;
-    try {
-      await updateWorklog(entry.issueKey, entry.id, {
+    setWorklogDrafts(prev => ({
+      ...prev,
+      [entryId]: {
+        type: 'update',
         timeSpentSeconds: entry.timeSpentSeconds,
         comment: entry.comment,
         started: newStarted,
-      });
-      mutate();
-    } catch { /* handled by hook toast */ }
-  }, [data, mutate]);
+      },
+    }));
+  }, [data]);
 
   const handleDayClick = useCallback((_date: Date) => {
     // Placeholder for add dialog
@@ -311,6 +359,17 @@ export default function WorklogPage() {
           >
             {showWeekends ? 'Sat, Sun' : 'Mon–Fri'}
           </button>
+          {/* Pending badge + Review button */}
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setWorklogReviewOpen(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[#0052CC] bg-[#0052CC] text-white hover:bg-[#0747A6] transition-colors shrink-0"
+            >
+              <Layers size={13} />
+              <span>{pendingCount} pending</span>
+            </button>
+          )}
           <button
           type="button"
           onClick={async () => { setIsRefreshing(true); await mutate(); setIsRefreshing(false); }}
@@ -394,20 +453,94 @@ export default function WorklogPage() {
           showWeekends={showWeekends}
           onNavigate={handleNavigate}
           onModeChange={setMode}
-          onEntryClick={setDrawerEntry}
+          onEntryClick={setEditEntry}
           onDayClick={handleDayClick}
           onDragEnd={handleDragEnd}
         />
       </div>
 
-      {/* Edit Drawer */}
-      <WorklogDrawer
-        entry={drawerEntry}
-        onClose={() => setDrawerEntry(null)}
-        onSave={(changes) => drawerEntry && update(drawerEntry, changes)}
-        onDelete={() => drawerEntry && remove(drawerEntry)}
-        issueDailyHours={issueDailyHours}
-      />
+      {/* Edit Worklog Modal */}
+      {editEntry && (
+        <EditWorklogModal
+          entry={editEntry}
+          onSaveDraft={handleEditSave}
+          onDeleteDraft={handleEditDelete}
+          onClose={() => setEditEntry(null)}
+        />
+      )}
+
+      {/* Worklog Review Changes popup */}
+      {worklogReviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setWorklogReviewOpen(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#DFE1E6] dark:border-gray-700 flex-shrink-0">
+              <h3 className="text-sm font-semibold text-[#172B4D] dark:text-gray-100">Review Worklog Changes</h3>
+              <button onClick={() => setWorklogReviewOpen(false)} className="text-[#5E6C84] hover:text-[#172B4D] dark:hover:text-gray-100 p-0.5">
+                <XCircle size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {Object.entries(worklogDrafts).map(([worklogId, draft]) => {
+                const entry = data?.entries.find(e => e.id === worklogId);
+                if (!entry) return null;
+                return (
+                  <div key={worklogId} className="flex items-center justify-between px-3 py-2 bg-[#FAFBFC] dark:bg-gray-700/50 border border-[#DFE1E6] dark:border-gray-700 rounded-lg">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[#0052CC] dark:text-blue-400">{entry.issueKey}</span>
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded font-medium',
+                          draft.type === 'delete'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                        )}>
+                          {draft.type === 'delete' ? 'Delete' : 'Update'}
+                        </span>
+                      </div>
+                      {draft.type === 'update' && (
+                        <div className="text-[11px] text-[#5E6C84] dark:text-gray-400 mt-0.5 space-x-2">
+                          <span>{(draft.timeSpentSeconds / 3600).toFixed(1)}h</span>
+                          {draft.started && <span>· {draft.started.slice(0, 16).replace('T', ' ')}</span>}
+                          {draft.comment && <span>· "{draft.comment.slice(0, 30)}{draft.comment.length > 30 ? '…' : ''}"</span>}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = { ...worklogDrafts };
+                        delete next[worklogId];
+                        setWorklogDrafts(next);
+                      }}
+                      className="text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-1.5 py-0.5 rounded ml-2 flex-shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+              {Object.keys(worklogDrafts).length === 0 && (
+                <p className="text-xs text-[#5E6C84] dark:text-gray-400 text-center py-8">No pending changes</p>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#DFE1E6] dark:border-gray-700 flex-shrink-0">
+              <button
+                onClick={() => { setWorklogDrafts({}); setWorklogReviewOpen(false); }}
+                className="text-xs px-2.5 py-1.5 rounded border border-[#DFE1E6] dark:border-gray-600 text-[#5E6C84] dark:text-gray-400 hover:bg-[#F4F5F7] dark:hover:bg-gray-700 transition-colors"
+              >
+                Discard All
+              </button>
+              <button
+                onClick={handleApplyWorklogDrafts}
+                disabled={Object.keys(worklogDrafts).length === 0}
+                className="text-xs px-3 py-1.5 rounded bg-[#0052CC] text-white hover:bg-[#0747A6] disabled:opacity-50 transition-colors"
+              >
+                Apply All Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

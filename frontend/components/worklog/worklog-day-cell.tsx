@@ -3,19 +3,19 @@ import { useMemo } from 'react';
 import { format, isToday } from 'date-fns';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
-import { Pencil, Layers, Calendar, AlertTriangle } from 'lucide-react';
+import { Pencil, Layers, Calendar, Clock } from 'lucide-react';
 import type { WorklogEntry } from '@/types/jira';
 
 export type GroupByField = 'project' | 'type' | 'assignee' | 'status' | 'priority' | 'parent' | 'statusCategory' | 'sprint' | 'reporter' | null;
 
-// Timeline: show 6:00-17:30 (11.5h = 23 slots of 30min)
-const START_HOUR = 6;        // 6:00
-const END_MINUTES = 17.5 * 60; // 17:30 = 1050 min
-const START_MINUTES = START_HOUR * 60; // 360
-const SLOT_HEIGHT = 24;
-const MINUTES_PER_SLOT = 30;
-const VISIBLE_SLOTS = (END_MINUTES - START_MINUTES) / MINUTES_PER_SLOT; // 19 slots
-const TIMELINE_HEIGHT = VISIBLE_SLOTS * SLOT_HEIGHT; // 456px
+// Timeline: show 7:00-18:30 (11.5h = 138 slots of 5min)
+const START_HOUR = 7;        // 7:00
+const END_MINUTES = 18.5 * 60; // 18:30 = 1110 min
+const START_MINUTES = START_HOUR * 60; // 420
+const SLOT_HEIGHT = 10;
+const MINUTES_PER_SLOT = 5;
+const VISIBLE_SLOTS = (END_MINUTES - START_MINUTES) / MINUTES_PER_SLOT; // 138 slots
+const TIMELINE_HEIGHT = VISIBLE_SLOTS * SLOT_HEIGHT; // 1380px
 const LUNCH_START = 12 * 60;       // 720 min
 const LUNCH_END = 13.5 * 60;       // 810 min
 
@@ -26,6 +26,86 @@ const PROJECT_COLORS: Record<string, string> = {
 
 function isWeekend(date: Date): boolean {
   return date.getDay() === 0 || date.getDay() === 6;
+}
+
+// ── Status-based colors ───────────────────────────────────────
+function getStatusAccentColor(status: string | undefined): string {
+  if (!status) return '#5E6C84';
+  const s = status.toLowerCase();
+  if (['done', 'closed', 'resolved', 'completed'].some(x => s.includes(x))) return '#36B37E';
+  if (['in progress', 'in review', 'development', 'testing', 'review'].some(x => s.includes(x))) return '#0052CC';
+  if (['to do', 'open', 'backlog', 'new', 'selected for development'].some(x => s.includes(x))) return '#5E6C84';
+  if (['cancelled', 'rejected'].some(x => s.includes(x))) return '#C1C7D0';
+  if (['blocked', 'impediment'].some(x => s.includes(x))) return '#DE350B';
+  return '#5E6C84';
+}
+
+function getStatusBgColor(status: string | undefined): string {
+  if (!status) return '#F4F5F7';
+  const s = status.toLowerCase();
+  if (['done', 'closed', 'resolved', 'completed'].some(x => s.includes(x))) return '#E3FCEF';
+  if (['in progress', 'in review', 'development', 'testing', 'review'].some(x => s.includes(x))) return '#DEEBFF';
+  if (['to do', 'open', 'backlog', 'new', 'selected for development'].some(x => s.includes(x))) return '#F4F5F7';
+  if (['cancelled', 'rejected'].some(x => s.includes(x))) return '#F4F5F7';
+  if (['blocked', 'impediment'].some(x => s.includes(x))) return '#FFEBE6';
+  return '#F4F5F7';
+}
+
+function getStatusColor(status: string | undefined): string {
+  if (!status) return '#42526E';
+  const s = status.toLowerCase();
+  if (['done', 'closed', 'resolved', 'completed'].some(x => s.includes(x))) return '#006644';
+  if (['in progress', 'in review', 'development', 'testing', 'review'].some(x => s.includes(x))) return '#0052CC';
+  if (['to do', 'open', 'backlog', 'new', 'selected for development'].some(x => s.includes(x))) return '#42526E';
+  if (['cancelled', 'rejected'].some(x => s.includes(x))) return '#6B778C';
+  if (['blocked', 'impediment'].some(x => s.includes(x))) return '#DE350B';
+  return '#42526E';
+}
+
+function getPriorityColor(priority: string | undefined): string {
+  if (!priority) return '#DFE1E6';
+  const colors: Record<string, string> = {
+    Highest: '#DE350B', High: '#FF5630', Blocker: '#DE350B',
+    Medium: '#FFAB00',
+    Low: '#2684FF', Lowest: '#2684FF',
+    Minor: '#6B778C',
+  };
+  return colors[priority] ?? '#6B778C';
+}
+
+function getPriorityBgColor(priority: string | undefined): string {
+  if (!priority) return '#F4F5F7';
+  const colors: Record<string, string> = {
+    Highest: '#FFEBE6', High: '#FFEDE8', Blocker: '#FFEBE6',
+    Medium: '#FFF7E6',
+    Low: '#E6F0FF', Lowest: '#E6F0FF',
+    Minor: '#F4F5F7',
+  };
+  return colors[priority] ?? '#F4F5F7';
+}
+
+// Border color: consistent by issue key (same key = same color)
+function getEntryBorderColor(issueKey: string, _projectKey: string): string {
+  let hash = 0;
+  for (let i = 0; i < issueKey.length; i++) hash = issueKey.charCodeAt(i) + ((hash << 5) - hash);
+  const palette = ['#0052CC','#36B37E','#DE350B','#FF8B00','#6554C0','#008DA6','#E774BB','#00B8D9','#5243AA','#BF2600','#403294','#006644','#FF991F','#172B4D','#0747A6'];
+  return palette[Math.abs(hash) % palette.length];
+}
+
+// Log badge color: red when logged > estimated
+function getLogBadgeColor(logSeconds: number, estSeconds: number): { bg: string; fg: string } {
+  if (estSeconds > 0 && logSeconds > estSeconds) return { bg: '#FFEBE6', fg: '#DE350B' };
+  return { bg: '#E6F0FF', fg: '#0052CC' };
+}
+
+// Duedate color: green when done+past, red when not done+past, blue otherwise
+function getDuedateColor(status: string | undefined, duedate: string | undefined): string {
+  if (!duedate) return '#2684FF';
+  const isDone = status && ['Done','Closed','Resolved','Completed'].some(s => status.includes(s));
+  const isPast = new Date(duedate) < new Date(new Date().toISOString().slice(0, 10));
+  if (isPast && isDone) return '#36B37E';
+  if (isPast && !isDone) return '#DE350B';
+  return '#2684FF';
 }
 
 function typeAbbr(name: string): string {
@@ -165,25 +245,12 @@ export function getGroupMeta(entry: WorklogEntry, field: GroupByField): GroupMet
   }
 }
 
-function getEntryColor(entry: WorklogEntry, groupBy: GroupByField): string {
-  if (!groupBy) return '#FFFFFF';
-  switch (groupBy) {
-    case 'project': {
-      const name = entry.author?.displayName || '';
-      let hash = 0;
-      for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-      return SWIMLANE_PALETTE[Math.abs(hash) % SWIMLANE_PALETTE.length];
-    }
-    case 'assignee':
-    case 'status':
-    case 'type':
-    case 'priority':
-    case 'parent':
-    case 'statusCategory':
-      return PROJECT_COLORS[entry.projectKey] ?? '#5E6C84';
-    default:
-      return '#FFFFFF';
-  }
+function getEntryColor(entry: WorklogEntry, _groupBy: GroupByField): string {
+  return getStatusAccentColor(entry.status);
+}
+
+function getEntryBgColor(entry: WorklogEntry): string {
+  return getStatusBgColor(entry.status);
 }
 
 function getExtraLabel(entry: WorklogEntry, groupBy: GroupByField): string | null {
@@ -192,13 +259,13 @@ function getExtraLabel(entry: WorklogEntry, groupBy: GroupByField): string | nul
     case 'project':
       return entry.author?.displayName ?? null;
     case 'assignee':
+      return null;
+    case 'status':
     case 'type':
     case 'priority':
     case 'parent':
     case 'statusCategory':
-      return entry.projectKey ?? null;
-    case 'status':
-      return entry.projectKey ?? null;
+      return null;
     default:
       return null;
   }
@@ -240,14 +307,16 @@ function groupEntries(entries: WorklogEntry[], field: GroupByField): EntryGroup[
 
 function DraggableTimelineEntry({
   entry,
-  color,
+  accentColor,
+  bgColor,
   style,
   extraLabel,
   editMode,
   onEntryClick,
 }: {
   entry: LayoutEntry;
-  color: string;
+  accentColor: string;
+  bgColor: string;
   style: React.CSSProperties;
   extraLabel?: string | null;
   editMode?: boolean;
@@ -272,12 +341,12 @@ function DraggableTimelineEntry({
     SLOT_HEIGHT,
   );
 
-  const isWhite = color === '#FFFFFF' || color === '#ffffff' || color === '#FFF' || color === '#fff';
-  const textClass = isWhite ? 'text-[#172B4D] dark:text-gray-200' : 'text-white';
-  const subtitleClass = isWhite ? 'text-[#5E6C84] dark:text-gray-400' : 'text-white/70';
-  const smallClass = isWhite ? 'text-[#8993A4] dark:text-gray-500' : 'text-white/50';
+  const textClass = 'text-[#172B4D] dark:text-gray-200';
+  const subtitleClass = 'text-[#5E6C84] dark:text-gray-400';
+  const smallClass = 'text-[#8993A4] dark:text-gray-500';
 
   const estH = entry.estSeconds > 0 ? (entry.estSeconds / 3600).toFixed(1) : null;
+  const logH = (entry.timeSpentSeconds / 3600).toFixed(1);
   const isTall = entry.height > 50;
 
   return (
@@ -286,40 +355,54 @@ function DraggableTimelineEntry({
       {...listeners}
       {...attributes}
       className={cn(
-        'absolute rounded-sm cursor-grab active:cursor-grabbing hover:brightness-110 transition-all group',
-        isWhite && 'border border-[#DFE1E6] dark:border-gray-600',
+        'absolute rounded-sm cursor-grab active:cursor-grabbing hover:brightness-110 transition-all group overflow-hidden',
+        'border border-[#DFE1E6] dark:border-gray-600',
+        'bg-white dark:bg-gray-800',
         isDragging ? 'opacity-50 shadow-2xl z-50' : 'z-10',
       )}
-      style={{ ...dragStyle, backgroundColor: color, minHeight }}
+      style={{ ...dragStyle, backgroundColor: bgColor, borderLeftColor: accentColor, borderLeftWidth: '3px', minHeight }}
       onClick={(ev) => {
         ev.stopPropagation();
         onEntryClick?.(entry);
       }}
-      title={`${entry.issueKey}: ${entry.comment || entry.issueSummary} (${(entry.timeSpentSeconds / 3600).toFixed(1)}h)`}
+      title={`${entry.issueKey}: ${entry.comment || entry.issueSummary} (${logH}h)`}
     >
-      <div className="px-1.5 py-1 flex flex-col h-full" style={{ fontSize: '11px', lineHeight: '1.3' }}>
-        {/* Top row: type icon + key + badges */}
-        <div className="flex items-center gap-1">
+      <div className="px-2 py-1.5 flex flex-col h-full gap-[2px]" style={{ fontSize: '12px', lineHeight: '1.3' }}>
+        {/* Row 1: left=type+key+project, right=status */}
+        <div className="flex items-center gap-1.5 min-w-0">
           <TypeBadge typeName={entry.issueTypeName} iconUrl={entry.issueTypeIconUrl} />
           <span className={cn('font-semibold truncate flex-1', textClass)}>{entry.issueKey}</span>
-          {entry.priority && (
-            <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium shrink-0', {
-              'bg-red-500/30 text-white': ['Highest','High','Blocker'].includes(entry.priority),
-              'bg-yellow-500/30 text-white': entry.priority === 'Medium',
-              'bg-gray-500/30 text-white': ['Low','Lowest','Minor'].includes(entry.priority),
-            })}>{entry.priority}</span>
-          )}
+          <span className={cn('text-[10px] truncate flex-shrink-0', smallClass)}>{entry.projectKey}</span>
           {entry.status && (
-            <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium shrink-0', {
-              'bg-green-500/30 text-white': ['Done','Closed','Resolved','Completed'].includes(entry.status),
-              'bg-blue-500/30 text-white': ['In Progress','In Review','Development','Testing'].some(s => entry.status?.toLowerCase().includes(s.toLowerCase())),
-              'bg-gray-500/30 text-white': true,
-            })}>{entry.status}</span>
+            <span className="text-[9px] px-1.5 py-[1px] rounded font-medium shrink-0"
+              style={{
+                backgroundColor: getStatusBgColor(entry.status),
+                color: getStatusColor(entry.status),
+              }}
+            >{entry.status}</span>
           )}
         </div>
 
-        {/* Summary line — always visible */}
-        <p className={cn('text-[9px] truncate leading-tight mt-0.5', subtitleClass)}>{entry.issueSummary}</p>
+        {/* Row 2: summary */}
+        <p className={cn('text-[10px] leading-relaxed', subtitleClass)}>{entry.issueSummary}</p>
+
+        {/* Row 3: left=create+due, right=est+log(colored) */}
+        <div className="flex items-center justify-between text-[9px]">
+          <div className="flex items-center gap-2" style={{ color: '#8993A4' }}>
+            <span className="inline-flex items-center gap-0.5">
+              <Clock size={8} />{format(new Date(entry.started), 'dd/MM')}
+            </span>
+            {entry.duedate && (
+              <span className="inline-flex items-center gap-0.5 font-medium" style={{ color: getDuedateColor(entry.status, entry.duedate) }}>
+                <Calendar size={8} />{format(new Date(entry.duedate + 'T12:00:00'), 'dd/MM')}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {estH != null && <span className={smallClass}>⏱{estH}h</span>}
+            <span className="font-bold px-1.5 py-[1px] rounded text-[10px]" style={{ backgroundColor: getLogBadgeColor(entry.timeSpentSeconds, entry.estSeconds).bg, color: getLogBadgeColor(entry.timeSpentSeconds, entry.estSeconds).fg }}>{logH}h</span>
+          </div>
+        </div>
 
         {extraLabel && (
           <div className={cn('text-[9px] truncate leading-tight', subtitleClass)}>
@@ -327,37 +410,32 @@ function DraggableTimelineEntry({
           </div>
         )}
 
-        {/* Est + due date row */}
-        <div className="flex items-center gap-2 mt-0.5">
-          {estH != null && <span className={cn('text-[9px] font-medium', smallClass)}>{estH}h est</span>}
-          {entry.duedate && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] text-red-300 font-medium">
-              <AlertTriangle size={8} />
-              {entry.duedate}
-            </span>
-          )}
+        {/* Row 4: left=priority(colored text), right=edit */}
+        <div className="flex items-center justify-between mt-auto pt-[2px]">
+          <div className="flex items-center gap-1.5">
+            {entry.priority && (
+              <span className="text-[9px] px-2 py-[2px] rounded font-medium" style={{ backgroundColor: getPriorityBgColor(entry.priority), color: getPriorityColor(entry.priority) }}>
+                {entry.priority}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {editMode && (
+              <button
+                className="opacity-60 hover:opacity-100 transition-opacity bg-white/70 dark:bg-gray-700 rounded-sm p-1 -mr-0.5 border border-[#DFE1E6] dark:border-gray-600"
+                onPointerDown={(ev) => ev.stopPropagation()}
+                onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(entry); }}
+                title="Edit worklog"
+              >
+                <Pencil size={10} className="text-[#5E6C84]" />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Bottom row: hours + edit button */}
-        <div className="flex items-center justify-between mt-auto pt-0.5">
-          <span className={cn('text-[10px] font-medium', subtitleClass)}>
-            {(entry.timeSpentSeconds / 3600).toFixed(1)}h
-          </span>
-          {editMode && (
-            <button
-              className="opacity-60 hover:opacity-100 transition-opacity hover:bg-white/20 rounded-sm p-0.5 -mr-0.5"
-              onPointerDown={(ev) => ev.stopPropagation()}
-              onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(entry); }}
-              title="Edit worklog"
-            >
-              <Pencil size={10} className="text-white/80" />
-            </button>
-          )}
-        </div>
-
-        {/* Comment — only if tall enough */}
-        {isTall && entry.comment && (
-          <p className={cn('text-[9px] truncate mt-0.5 leading-tight', smallClass)}>{entry.comment}</p>
+        {/* Comment — only if tall enough and not the same as summary */}
+        {isTall && entry.comment && entry.comment !== entry.issueSummary && (
+          <p className={cn('text-[9px] truncate leading-tight mt-[1px]', smallClass)}>{entry.comment}</p>
         )}
       </div>
     </div>
@@ -410,9 +488,9 @@ export function WorklogDayCell({
   const laidOutEntries = useMemo(() => layoutEntries(entries), [entries]);
   const groups = useMemo(() => groupEntries(entries, groupBy), [entries, groupBy]);
 
-  // ── Weekend / Compact: simple list (no timeline) ──
+  // ── Compact (month mode): simple list (no timeline) ──
 
-  if (weekend || compact) {
+  if (compact) {
     const compactProgressPct = Math.min((dailyHours / 8) * 100, 100);
     const compactProgressColor = isComplete ? '#36B37E' : isUnder ? '#FFAB00' : isEmpty ? '#DE350B' : '#0052CC';
 
@@ -491,59 +569,68 @@ export function WorklogDayCell({
                 </div>
                 {g.entries.slice(0, compact ? 10 : 5).map((e) => {
                   const estH = e.estSeconds > 0 ? (e.estSeconds / 3600).toFixed(1) : null;
+                  const logH = (e.timeSpentSeconds / 3600).toFixed(1);
+                  const logColor = getLogBadgeColor(e.timeSpentSeconds, e.estSeconds);
                   return (
                 <div
                   key={e.id}
-                  className="px-1.5 py-1 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
-                  style={{ borderLeftColor: g.color, borderLeftWidth: '3px' }}
+                  className="px-3 py-2 text-[12px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group relative"
+                  style={{ borderLeftColor: getEntryBorderColor(e.issueKey, e.projectKey), borderLeftWidth: '3px' }}
                   onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
-                      <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {estH != null && <span className="text-[9px] text-[#8993A4] dark:text-gray-500 font-medium">{estH}h est</span>}
-                      <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">{(e.timeSpentSeconds / 3600).toFixed(1)}h</span>
-                    </div>
-                  </div>
-                  {/* Summary line */}
-                  <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate leading-tight mt-0.5">{e.issueSummary}</p>
-                  {/* Meta chips */}
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    {e.priority && (
-                      <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
-                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': ['Highest','High','Blocker'].includes(e.priority),
-                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': e.priority === 'Medium',
-                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': ['Low','Lowest','Minor'].includes(e.priority),
-                      })}>{e.priority}</span>
-                    )}
+                  {/* Row 1: left=type+key+project, right=status */}
+                  <div className="flex items-center gap-2 mb-[5px]">
+                    <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
+                    <span className="font-semibold text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
+                    <span className="text-[11px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0">{e.projectKey}</span>
+                    <div className="flex-1" />
                     {e.status && (
-                      <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
-                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': ['Done','Closed','Resolved','Completed'].includes(e.status),
-                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': ['In Progress','In Review','Development','Testing'].some(s => e.status?.toLowerCase().includes(s.toLowerCase())),
-                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': true,
-                      })}>{e.status}</span>
-                    )}
-                    {e.duedate && (
-                      <span className="inline-flex items-center gap-0.5 text-[8px] text-red-500 dark:text-red-400 font-medium">
-                        <AlertTriangle size={8} />
-                        {e.duedate}
-                      </span>
+                      <span
+                        className="text-[10px] px-2 py-[1px] rounded font-medium shrink-0"
+                        style={{
+                          backgroundColor: getStatusBgColor(e.status),
+                          color: getStatusColor(e.status),
+                        }}
+                      >{e.status}</span>
                     )}
                   </div>
-                  {/* Edit button */}
-                  {editMode && (
-                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Row 2: summary */}
+                  <p className="text-[11px] text-[#5E6C84] dark:text-gray-400 leading-relaxed mb-[5px]">{e.issueSummary}</p>
+                  {/* Row 3: left=create+due, right=est+log(colored) */}
+                  <div className="flex items-center justify-between text-[10px] mb-[3px]">
+                    <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock size={10} />{format(new Date(e.started), 'dd/MM')}
+                      </span>
+                      {e.duedate && (
+                        <span className="inline-flex items-center gap-1 font-medium" style={{ color: getDuedateColor(e.status, e.duedate) }}>
+                          <Calendar size={10} />{format(new Date(e.duedate + 'T12:00:00'), 'dd/MM')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      {estH != null && <span className="text-[#8993A4] dark:text-gray-500">⏱ {estH}h</span>}
+                      <span className="font-bold px-1.5 py-[1px] rounded text-[11px]" style={{ backgroundColor: logColor.bg, color: logColor.fg }}>{logH}h</span>
+                    </div>
+                  </div>
+                  {/* Row 4: left=priority(colored text), right=edit */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      {e.priority && (
+                        <span className="text-[10px] px-2 py-[2px] rounded font-medium" style={{ backgroundColor: getPriorityBgColor(e.priority), color: getPriorityColor(e.priority) }}>
+                          {e.priority}
+                        </span>
+                      )}
+                    </div>
+                    {editMode && (
                       <button
-                        className="bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-0.5 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-1 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
                         onPointerDown={(ev) => ev.stopPropagation()}
                         onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
                         title="Edit worklog"
-                      ><Pencil size={9} className="text-[#5E6C84]" /></button>
-                    </div>
-                  )}
+                      ><Pencil size={10} className="text-[#5E6C84]" /></button>
+                    )}
+                  </div>
                 </div>
                 );})}
                 {g.entries.length > (compact ? 15 : 5) && (
@@ -554,69 +641,71 @@ export function WorklogDayCell({
           ) : (<>
             {entries.slice(0, compact ? 30 : 10).map((e) => {
               const estH = e.estSeconds > 0 ? (e.estSeconds / 3600).toFixed(1) : null;
+              const logH = (e.timeSpentSeconds / 3600).toFixed(1);
+              const logColor = getLogBadgeColor(e.timeSpentSeconds, e.estSeconds);
               return (
             <div
               key={e.id}
-              className="relative px-1.5 py-1 text-[11px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group"
-              style={{
-                borderLeftColor: groupBy ? getEntryColor(e, groupBy) : (PROJECT_COLORS[e.projectKey] ?? '#5E6C84'),
-                borderLeftWidth: '3px',
-              }}
+              className="px-3 py-2 text-[12px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm cursor-pointer hover:shadow-sm transition-all group relative"
+              style={{ borderLeftColor: getEntryBorderColor(e.issueKey, e.projectKey), borderLeftWidth: '3px' }}
               onClick={(ev) => {
                 ev.stopPropagation();
                 onEntryClick?.(e);
               }}
             >
-              <div className="flex items-center justify-between gap-1">
-                <div className="flex items-center gap-1 min-w-0">
-                  <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
-                  <span className="font-medium text-[#172B4D] dark:text-gray-100 truncate">
-                    {e.issueKey}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {estH != null && <span className="text-[9px] text-[#8993A4] dark:text-gray-500 font-medium">{estH}h est</span>}
-                  <span className="text-[#5E6C84] dark:text-gray-400 flex-shrink-0 font-medium">
-                    {(e.timeSpentSeconds / 3600).toFixed(1)}h
-                  </span>
-                </div>
-              </div>
-              {/* Summary line */}
-              <p className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate leading-tight mt-0.5">{e.issueSummary}</p>
-              {/* Meta chips */}
-              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                {e.priority && (
-                  <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
-                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': ['Highest','High','Blocker'].includes(e.priority),
-                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': e.priority === 'Medium',
-                    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': ['Low','Lowest','Minor'].includes(e.priority),
-                  })}>{e.priority}</span>
-                )}
+              {/* Row 1: left=type+key+project, right=status */}
+              <div className="flex items-center gap-2 mb-[5px]">
+                <TypeBadge typeName={e.issueTypeName} iconUrl={e.issueTypeIconUrl} />
+                <span className="font-semibold text-[#172B4D] dark:text-gray-100 truncate">{e.issueKey}</span>
+                <span className="text-[11px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0">{e.projectKey}</span>
+                <div className="flex-1" />
                 {e.status && (
-                  <span className={cn('text-[8px] px-1 py-[1px] rounded font-medium', {
-                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': ['Done','Closed','Resolved','Completed'].includes(e.status),
-                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400': ['In Progress','In Review','Development','Testing'].some(s => e.status?.toLowerCase().includes(s.toLowerCase())),
-                    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': true,
-                  })}>{e.status}</span>
-                )}
-                {e.duedate && (
-                  <span className="inline-flex items-center gap-0.5 text-[8px] text-red-500 dark:text-red-400 font-medium">
-                    <AlertTriangle size={8} />
-                    {e.duedate}
-                  </span>
+                  <span
+                    className="text-[10px] px-2 py-[1px] rounded font-medium shrink-0"
+                    style={{
+                      backgroundColor: getStatusBgColor(e.status),
+                      color: getStatusColor(e.status),
+                    }}
+                  >{e.status}</span>
                 )}
               </div>
-              {/* Edit button */}
-              {editMode && (
-                <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Row 2: summary */}
+              <p className="text-[11px] text-[#5E6C84] dark:text-gray-400 leading-relaxed mb-[5px]">{e.issueSummary}</p>
+              {/* Row 3: left=create+due, right=est+log(colored) */}
+              <div className="flex items-center justify-between text-[10px] mb-[3px]">
+                <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock size={10} />{format(new Date(e.started), 'dd/MM')}
+                  </span>
+                  {e.duedate && (
+                    <span className="inline-flex items-center gap-1 font-medium" style={{ color: getDuedateColor(e.status, e.duedate) }}>
+                      <Calendar size={10} />{format(new Date(e.duedate + 'T12:00:00'), 'dd/MM')}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {estH != null && <span className="text-[#8993A4] dark:text-gray-500">⏱ {estH}h</span>}
+                  <span className="font-bold px-1.5 py-[1px] rounded text-[11px]" style={{ backgroundColor: logColor.bg, color: logColor.fg }}>{logH}h</span>
+                </div>
+              </div>
+              {/* Row 4: left=priority(colored text), right=edit */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  {e.priority && (
+                    <span className="text-[10px] px-2 py-[2px] rounded font-medium" style={{ backgroundColor: getPriorityBgColor(e.priority), color: getPriorityColor(e.priority) }}>
+                      {e.priority}
+                    </span>
+                  )}
+                </div>
+                {editMode && (
                   <button
-                    className="bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-0.5 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-700 rounded border border-[#DFE1E6] dark:border-gray-600 p-1 shadow-sm hover:bg-[#F4F5F7] dark:hover:bg-gray-600"
                     onPointerDown={(ev) => ev.stopPropagation()}
                     onClick={(ev) => { ev.stopPropagation(); onEntryClick?.(e); }}
                     title="Edit worklog"
-                  ><Pencil size={9} className="text-[#5E6C84]" /></button>
-                </div>
-              )}
+                  ><Pencil size={10} className="text-[#5E6C84]" /></button>
+                )}
+              </div>
             </div>
             );})}
           {!compact && !groupBy && entries.length > 10 && (
@@ -731,7 +820,8 @@ export function WorklogDayCell({
           {laidOutEntries.length > 0 && (
             <div style={{ position: 'absolute', top: 0, left: '38px', right: '2px', bottom: 0 }}>
               {laidOutEntries.map((e) => {
-                const color = getEntryColor(e, groupBy);
+                const accentColor = getEntryBorderColor(e.issueKey, e.projectKey);
+                const bgColor = getStatusBgColor(e.status);
                 const extraLabel = getExtraLabel(e, groupBy);
                 const entryHeight = Math.max(e.height - 2, SLOT_HEIGHT * 0.5);
 
@@ -739,7 +829,8 @@ export function WorklogDayCell({
                   <DraggableTimelineEntry
                     key={e.id}
                     entry={e}
-                    color={color}
+                    accentColor={accentColor}
+                    bgColor={bgColor}
                     extraLabel={extraLabel}
                     editMode={editMode}
                     style={{
