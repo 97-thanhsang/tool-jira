@@ -26,8 +26,10 @@ import Image from 'next/image';
 import type { JiraIssue } from '@/types/jira';
 import { PriorityIcon } from '@/components/shared/priority-icon';
 import { IssueCard } from './issue-card';
+import { BoardDetailPanel } from './board-detail-panel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useBoardEdit } from '@/contexts/board-edit';
 
 // ─── Priority / Type / Project color maps ────────────────────────────────────
 
@@ -551,6 +553,7 @@ export const KanbanBoard = React.memo(function KanbanBoard({
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
   const [collapsedSubGroups, setCollapsedSubGroups] = useState<Set<string>>(new Set());
   const hasSwimlanes = !!swimlanes && swimlanes.length > 0;
+  const boardEditCtx = useBoardEdit();
 
   // Drag sensors: require 5px movement before activating drag (avoids accidental drags on click)
   const sensors = useSensors(
@@ -906,6 +909,28 @@ export const KanbanBoard = React.memo(function KanbanBoard({
 
                 {/* Column grid (collapsed when toggled) */}
                 {!isCollapsed && (
+                  <>
+                  {/* Detail panel */}
+                  <BoardDetailPanel
+                    issues={(() => {
+                      const result: JiraIssue[] = [];
+                      for (const colData of Object.values(lane.columns)) {
+                        if (colData && 'subGroups' in colData) {
+                          for (const sg of colData.subGroups) {
+                            result.push(...sg.issues);
+                            if (sg.subSubGroups) {
+                              for (const ssg of sg.subSubGroups) result.push(...ssg.issues);
+                            }
+                          }
+                        } else {
+                          result.push(...(colData as JiraIssue[] || []));
+                        }
+                      }
+                      return result;
+                    })()}
+                    editMode={boardEditCtx?.editMode ?? false}
+                    onIssueClick={onCardClick}
+                  />
                   <div
                     className="grid gap-4 mt-3"
                     style={{
@@ -960,6 +985,7 @@ export const KanbanBoard = React.memo(function KanbanBoard({
                       );
                     })}
                   </div>
+                </>
                 )}
               </div>
             );

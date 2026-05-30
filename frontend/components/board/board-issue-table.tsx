@@ -1,13 +1,11 @@
 'use client';
 
 import { useMemo, useState, Fragment } from 'react';
-import { Pencil, Calendar, Clock, ChevronDown, ChevronRight, FolderTree } from 'lucide-react';
-import { format } from 'date-fns';
-import { getStatusBgColor, getStatusColor, getDuedateColor } from '@/components/worklog/worklog-day-cell';
+import { Pencil, Calendar, ChevronDown, ChevronRight, FolderTree } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { WorklogEntry } from '@/types/jira';
+import type { JiraIssue } from '@/types/jira';
 
-// ─── Helpers (matching board-issue-table.tsx) ────────────────────────────
+// ─── Helpers (matching patterns from issue-card.tsx) ─────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
   Story: 'bg-[#36B37E] text-white', 'Sub-task': 'bg-[#0052CC] text-white',
@@ -18,62 +16,81 @@ const TYPE_COLORS: Record<string, string> = {
   'Bug after release': 'bg-[#BF2600] text-white', WBS: 'bg-[#505F79] text-white',
 };
 
+const STATUS_CATEGORY_COLORS: Record<string, string> = {
+  new: 'bg-[#5E6C84] text-white',
+  indeterminate: 'bg-[#0052CC] text-white',
+  done: 'bg-[#00875A] text-white',
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Highest: '#DE350B', High: '#FF5630', Medium: '#FFAB00',
+  Low: '#2684FF', Lowest: '#2684FF', Blocker: '#DE350B', Minor: '#6B778C',
+};
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}`;
+}
+
+function getStatusBgClass(catKey: string): string {
+  return STATUS_CATEGORY_COLORS[catKey] ?? 'bg-gray-400 text-white';
+}
+
 function getTypeClass(typeName: string): string {
   return TYPE_COLORS[typeName] ?? 'bg-gray-400 text-white';
 }
 
 function getPriorityColor(name?: string): string {
-  const PRIORITY_COLORS: Record<string, string> = {
-    Highest: '#DE350B', High: '#FF5630', Medium: '#FFAB00',
-    Low: '#2684FF', Lowest: '#2684FF', Blocker: '#DE350B', Minor: '#6B778C',
-  };
   return name ? (PRIORITY_COLORS[name] ?? '#6B778C') : '#6B778C';
+}
+
+function getDuedateColor(statusCat: string, duedate?: string): string {
+  if (!duedate) return '#2684FF';
+  if (statusCat === 'done') return '#36B37E';
+  const now = new Date();
+  const due = new Date(duedate);
+  return due < now ? '#DE350B' : '#2684FF';
 }
 
 // ─── Component ───────────────────────────────────────────────────────────
 
-interface SubTaskTableProps {
-  entries: WorklogEntry[];
+interface BoardIssueTableProps {
+  issues: JiraIssue[];
   editMode?: boolean;
-  onEntryClick?: (entry: WorklogEntry) => void;
+  onIssueClick?: (key: string) => void;
 }
 
-export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTableProps) {
+export function BoardIssueTable({ issues, editMode, onIssueClick }: BoardIssueTableProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   function toggleParent(key: string) {
     setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  // Group entries by parent-task, then by issue key
+  // Group by parentKey
   const parentGroups = useMemo(() => {
-    const issueMap = new Map<string, { entry: WorklogEntry; logSeconds: number }>();
-    for (const e of entries) {
-      if (issueMap.has(e.issueKey)) {
-        issueMap.get(e.issueKey)!.logSeconds += e.timeSpentSeconds;
-      } else {
-        issueMap.set(e.issueKey, { entry: e, logSeconds: e.timeSpentSeconds });
-      }
-    }
-    const issues = Array.from(issueMap.values())
-      .sort((a, b) => a.entry.issueKey.localeCompare(b.entry.issueKey));
+    const groupMap = new Map<string, { parentKey: string; parentSummary: string; issues: JiraIssue[] }>();
+    const noParent: JiraIssue[] = [];
+    const seenGlobal = new Set<string>();
 
-    const groupMap = new Map<string, { parentKey: string; parentSummary: string; issues: typeof issues }>();
-    const noParent: typeof issues = [];
+    for (const issue of issues) {
+      if (seenGlobal.has(issue.key)) continue;
+      seenGlobal.add(issue.key);
 
-    for (const item of issues) {
-      const pk = item.entry.parentKey;
-      if (pk) {
-        if (!groupMap.has(pk)) {
-          groupMap.set(pk, {
-            parentKey: pk,
-            parentSummary: item.entry.parentSummary || pk,
+      const parent = issue.fields.parent;
+      if (parent) {
+        if (!groupMap.has(parent.key)) {
+          groupMap.set(parent.key, {
+            parentKey: parent.key,
+            parentSummary: parent.fields.summary,
             issues: [],
           });
         }
-        groupMap.get(pk)!.issues.push(item);
+        groupMap.get(parent.key)!.issues.push(issue);
       } else {
-        noParent.push(item);
+        noParent.push(issue);
       }
     }
 
@@ -85,12 +102,12 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
     }
 
     return groups;
-  }, [entries]);
+  }, [issues]);
 
   if (parentGroups.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 text-[11px] text-[#8993A4] dark:text-gray-500">
-        No sub-tasks found
+        No issues found
       </div>
     );
   }
@@ -114,7 +131,7 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
   const allCollapsed = parentGroups.every(g => expanded[g.parentKey || '__no_parent__'] !== true);
   const allExpanded = parentGroups.every(g => expanded[g.parentKey || '__no_parent__'] === true);
 
-  const COL_COUNT = 11;
+  const COL_COUNT = 10;
 
   return (
     <div className="overflow-x-auto">
@@ -124,7 +141,7 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
           <FolderTree size={12} />
           <span>Parent Group</span>
           <span className="text-[#8993A4]">·</span>
-          <span className="text-[#0052CC] dark:text-blue-400 font-semibold">{parentGroups.reduce((s, g) => s + g.issues.length, 0)} sub-task(s)</span>
+          <span className="text-[#0052CC] dark:text-blue-400 font-semibold">{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>
         </div>
         <button
           onClick={allExpanded ? collapseAll : expandAll}
@@ -147,7 +164,7 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
             <th className="text-left font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-44">Summary</th>
             <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-20">Type</th>
             <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-24">Status</th>
-            <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-12">Start</th>
+            <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-16">Priority</th>
             <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-12">Due</th>
             <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-10">Est</th>
             <th className="text-center font-semibold text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide py-2 px-1.5 w-12">Log</th>
@@ -158,9 +175,9 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
         <tbody>
           {parentGroups.map(group => {
             const groupKey = group.parentKey || '__no_parent__';
-            const isOpen = expanded[groupKey] === true; // default collapsed
-            const groupTotalHours = group.issues.reduce((s, i) => s + i.logSeconds / 3600, 0);
-            const groupEstHours = group.issues.reduce((s, i) => s + i.entry.estSeconds / 3600, 0);
+            const isOpen = expanded[groupKey] === true;
+            const groupTotalHours = group.issues.reduce((s, i) => s + (i.fields.timetracking?.timeSpentSeconds ?? 0) / 3600, 0);
+            const groupEstHours = group.issues.reduce((s, i) => s + (i.fields.timetracking?.originalEstimateSeconds ?? 0) / 3600, 0);
             const groupProgress = groupEstHours > 0 ? Math.min(groupTotalHours / groupEstHours, 1) : 0;
 
             return (
@@ -193,10 +210,10 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
                           <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 truncate">{group.parentSummary}</span>
                         </>
                       ) : (
-                        <span className="text-[11px] text-[#5E6C84] dark:text-gray-400 italic">Sub-tasks without parent</span>
+                        <span className="text-[11px] text-[#5E6C84] dark:text-gray-400 italic">Issues without parent</span>
                       )}
                       <span className="ml-auto flex items-center gap-3">
-                        <span className="text-[10px] font-medium text-[#5E6C84] dark:text-gray-400">{group.issues.length} sub-task(s)</span>
+                        <span className="text-[10px] font-medium text-[#5E6C84] dark:text-gray-400">{group.issues.length} issue{group.issues.length !== 1 ? 's' : ''}</span>
                         {groupEstHours > 0 && (
                           <span className="text-[10px] text-[#8993A4] dark:text-gray-500">Est {groupEstHours.toFixed(1)}h</span>
                         )}
@@ -211,58 +228,59 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
                   </td>
                 </tr>
 
-                {/* Sub-task rows */}
-                {isOpen && group.issues.map(({ entry: e, logSeconds }) => {
-                  const estH = e.estSeconds > 0 ? (e.estSeconds / 3600).toFixed(1) : null;
+                {/* Issue rows */}
+                {isOpen && group.issues.map(issue => {
+                  const tt = issue.fields.timetracking;
+                  const estH = tt?.originalEstimateSeconds ? (tt.originalEstimateSeconds / 3600).toFixed(1) : null;
+                  const logSeconds = tt?.timeSpentSeconds ?? 0;
                   const logH = (logSeconds / 3600).toFixed(1);
-                  const logColor = logSeconds > (e.estSeconds || 0)
+                  const statusCat = issue.fields.status.statusCategory.key;
+                  const duedateColor = getDuedateColor(statusCat, issue.fields.duedate);
+
+                  const logColor = tt?.originalEstimateSeconds && logSeconds > tt.originalEstimateSeconds
                     ? { bg: '#FFEBE6', fg: '#DE350B' }
                     : { bg: '#DEEBFF', fg: '#0052CC' };
-                  const duedateColor = getDuedateColor(e.status, e.duedate);
 
                   return (
-                    <tr key={e.issueKey} className="border-b border-[#F4F5F7] dark:border-gray-700/50 hover:bg-[#FAFBFC] dark:hover:bg-gray-800/50 transition-colors">
+                    <tr key={`${groupKey}-${issue.key}`} className="border-b border-[#F4F5F7] dark:border-gray-700/50 hover:bg-[#FAFBFC] dark:hover:bg-gray-800/50 transition-colors">
                       {/* Key */}
                       <td className="py-1.5 px-1.5 w-28">
                         <button
-                          onClick={() => onEntryClick?.(e)}
+                          onClick={() => onIssueClick?.(issue.key)}
                           className="font-semibold text-[#0052CC] dark:text-blue-400 hover:underline text-left text-[10px]"
                         >
-                          {e.issueKey}
+                          {issue.key}
                         </button>
                       </td>
                       {/* Summary */}
                       <td className="py-1.5 px-1.5 w-44">
                         <span className="text-[#5E6C84] dark:text-gray-400 whitespace-nowrap">
-                          {e.issueSummary}
+                          {issue.fields.summary}
                         </span>
                       </td>
                       {/* Type */}
                       <td className="py-1.5 px-1.5 text-center w-20">
-                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-sm leading-none', getTypeClass(e.issueTypeName))}>
-                          {e.issueTypeName}
+                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-sm leading-none', getTypeClass(issue.fields.issuetype.name))}>
+                          {issue.fields.issuetype.name}
                         </span>
                       </td>
                       {/* Status */}
                       <td className="py-1.5 px-1.5 text-center w-24">
-                        {e.status && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm leading-none"
-                            style={{ backgroundColor: getStatusBgColor(e.status), color: getStatusColor(e.status) }}>
-                            {e.status}
-                          </span>
-                        )}
-                      </td>
-                      {/* Start date */}
-                      <td className="py-1.5 px-1.5 text-center w-12">
-                        <span className="inline-flex items-center gap-0.5 text-[10px] text-[#8993A4] dark:text-gray-500 leading-none whitespace-nowrap">
-                          <Clock size={8} />{format(new Date(e.started), 'dd/MM')}
+                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-sm leading-none', getStatusBgClass(statusCat))}>
+                          {issue.fields.status.name}
                         </span>
                       </td>
-                      {/* Due date */}
+                      {/* Priority */}
+                      <td className="py-1.5 px-1.5 text-center w-16">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm leading-none" style={{ color: getPriorityColor(issue.fields.priority?.name) }}>
+                          {issue.fields.priority?.name ?? '—'}
+                        </span>
+                      </td>
+                      {/* Due */}
                       <td className="py-1.5 px-1.5 text-center w-12">
-                        {e.duedate ? (
+                        {issue.fields.duedate ? (
                           <span className="inline-flex items-center gap-0.5 text-[10px] font-medium leading-none whitespace-nowrap" style={{ color: duedateColor }}>
-                            <Calendar size={8} />{format(new Date(e.duedate + 'T12:00:00'), 'dd/MM')}
+                            <Calendar size={8} />{formatDate(issue.fields.duedate)}
                           </span>
                         ) : (
                           <span className="text-[10px] text-[#C1C7D0] leading-none">—</span>
@@ -288,16 +306,16 @@ export function SubTaskTable({ entries, editMode, onEntryClick }: SubTaskTablePr
                       {/* Assignee */}
                       <td className="py-1.5 px-1.5 overflow-visible">
                         <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 whitespace-nowrap">
-                          {e.author?.displayName || e.author?.name || '—'}
+                          {issue.fields.assignee?.displayName || issue.fields.assignee?.name || 'Unassigned'}
                         </span>
                       </td>
                       {/* Edit */}
                       <td className="py-1.5 px-1.5 text-center w-8">
                         {editMode ? (
                           <button
-                            onClick={() => onEntryClick?.(e)}
+                            onClick={() => onIssueClick?.(issue.key)}
                             className="text-[#5E6C84] hover:text-[#0052CC] transition-colors p-0.5"
-                            title="Edit worklog"
+                            title="Edit issue"
                           >
                             <Pencil size={9} />
                           </button>

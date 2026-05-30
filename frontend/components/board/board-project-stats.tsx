@@ -2,19 +2,18 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import type { WorklogEntry } from '@/types/jira';
+import type { JiraIssue } from '@/types/jira';
 
 interface ProjectStat {
   projectKey: string;
   projectName: string;
   totalHours: number;
-  estHours: number;
   issueCount: number;
-  entryCount: number;
+  estHours: number;
 }
 
-interface ProjectStatsPanelProps {
-  entries: WorklogEntry[];
+interface BoardProjectStatsProps {
+  issues: JiraIssue[];
   selectedProject: string | null;
   onSelectProject: (projectKey: string | null) => void;
 }
@@ -29,34 +28,28 @@ function projectDot(key: string): string {
   return PROJECT_DOT_COLORS[key] ?? '#6554C0';
 }
 
-export function ProjectStatsPanel({ entries, selectedProject, onSelectProject }: ProjectStatsPanelProps) {
+export function BoardProjectStats({ issues, selectedProject, onSelectProject }: BoardProjectStatsProps) {
   const stats = useMemo(() => {
     const map = new Map<string, ProjectStat>();
     const seenIssues = new Set<string>();
 
-    for (const e of entries) {
-      if (!map.has(e.projectKey)) {
-        map.set(e.projectKey, {
-          projectKey: e.projectKey,
-          projectName: e.projectName,
-          totalHours: 0,
-          estHours: 0,
-          issueCount: 0,
-          entryCount: 0,
-        });
+    for (const issue of issues) {
+      const pk = issue.fields.project.key;
+      const pn = issue.fields.project.name;
+      if (!map.has(pk)) {
+        map.set(pk, { projectKey: pk, projectName: pn, totalHours: 0, issueCount: 0, estHours: 0 });
       }
-      const stat = map.get(e.projectKey)!;
-      stat.totalHours += e.timeSpentSeconds / 3600;
-      stat.estHours += e.estSeconds / 3600;
-      stat.entryCount++;
-      if (!seenIssues.has(e.issueKey)) {
-        seenIssues.add(e.issueKey);
+      const stat = map.get(pk)!;
+      stat.totalHours += (issue.fields.timetracking?.timeSpentSeconds ?? 0) / 3600;
+      stat.estHours += (issue.fields.timetracking?.originalEstimateSeconds ?? 0) / 3600;
+      if (!seenIssues.has(issue.key)) {
+        seenIssues.add(issue.key);
         stat.issueCount++;
       }
     }
 
     return Array.from(map.values()).sort((a, b) => b.totalHours - a.totalHours);
-  }, [entries]);
+  }, [issues]);
 
   const allTotal = useMemo(() => stats.reduce((s, st) => s + st.totalHours, 0), [stats]);
   const allEst = useMemo(() => stats.reduce((s, st) => s + st.estHours, 0), [stats]);
@@ -114,9 +107,10 @@ export function ProjectStatsPanel({ entries, selectedProject, onSelectProject }:
       <div className="my-2 border-t border-[#DFE1E6] dark:border-gray-700" />
 
       {/* Individual project entries */}
-      {stats.map(stat => {
+      {stats.map((stat, index) => {
         const isSelected = selectedProject === stat.projectKey;
         const progress = stat.estHours > 0 ? Math.min(stat.totalHours / stat.estHours, 1) : 0;
+        const total = stats.length;
 
         return (
           <button

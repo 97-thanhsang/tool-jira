@@ -1,29 +1,29 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ProjectStatsPanel } from '@/components/worklog/project-stats-panel';
-import { SubTaskTable } from '@/components/worklog/subtask-table';
-import type { WorklogEntry } from '@/types/jira';
+import { BoardProjectStats } from '@/components/board/board-project-stats';
+import { BoardIssueTable } from '@/components/board/board-issue-table';
+import type { JiraIssue } from '@/types/jira';
 
-interface GroupDetailPanelProps {
-  entries: WorklogEntry[];
+interface BoardDetailPanelProps {
+  issues: JiraIssue[];
   editMode?: boolean;
-  onEntryClick?: (entry: WorklogEntry) => void;
+  onIssueClick?: (key: string) => void;
 }
 
-export function GroupDetailPanel({ entries, editMode, onEntryClick }: GroupDetailPanelProps) {
+export function BoardDetailPanel({ issues, editMode, onIssueClick }: BoardDetailPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
-  // Filter entries by selected project
-  const filteredEntries = useMemo(() => {
-    if (!selectedProject) return entries;
-    return entries.filter(e => e.projectKey === selectedProject);
-  }, [entries, selectedProject]);
+  // Filter issues by selected project
+  const filteredIssues = useMemo(() => {
+    if (!selectedProject) return issues;
+    return issues.filter(issue => issue.fields.project.key === selectedProject);
+  }, [issues, selectedProject]);
 
-  if (entries.length === 0) return null;
+  if (issues.length === 0) return null;
 
   return (
     <div className="border-t border-[#DFE1E6] dark:border-gray-700">
@@ -50,7 +50,7 @@ export function GroupDetailPanel({ entries, editMode, onEntryClick }: GroupDetai
           'ml-auto flex items-center gap-2',
           isOpen ? 'text-[#0052CC] dark:text-blue-400' : 'text-[#8993A4] dark:text-gray-500',
         )}>
-          <span className="text-[10px] font-medium">{entries.length} entr{entries.length !== 1 ? 'ies' : 'y'}</span>
+          <span className="text-[10px] font-medium">{issues.length} issue{issues.length !== 1 ? 's' : ''}</span>
           {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </div>
       </button>
@@ -61,18 +61,18 @@ export function GroupDetailPanel({ entries, editMode, onEntryClick }: GroupDetai
           <div className="grid grid-cols-[260px_1fr] gap-0">
             {/* Left: Project Stats */}
             <div className="border-r border-[#DFE1E6] dark:border-gray-700 p-3 overflow-y-auto max-h-[400px]">
-              <ProjectStatsPanel
-                entries={entries}
+              <BoardProjectStats
+                issues={issues}
                 selectedProject={selectedProject}
                 onSelectProject={setSelectedProject}
               />
             </div>
-            {/* Right: Sub-task Table */}
+            {/* Right: Issue Table */}
             <div className="overflow-x-auto overflow-y-auto max-h-[400px] p-2">
-              <SubTaskTable
-                entries={filteredEntries}
+              <BoardIssueTable
+                issues={filteredIssues}
                 editMode={editMode}
-                onEntryClick={onEntryClick}
+                onIssueClick={onIssueClick}
               />
             </div>
           </div>
