@@ -4,6 +4,7 @@ import { useStageOutput } from '@/hooks/use-pipeline';
 import { PipelineBadge } from '../pipeline-badge';
 import { StageRunButton } from '../stage-run-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Search } from 'lucide-react';
 
 interface DecomposePanelProps {
   taskKey: string;
@@ -28,7 +29,10 @@ export function DecomposePanel({ taskKey, onRunComplete }: DecomposePanelProps) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">🔍 Decompose Stage</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Search className="w-5 h-5 text-primary" />
+            Decompose Stage
+          </h2>
           <PipelineBadge status={output?.status ?? 'IDLE'} size="md" />
         </div>
         <StageRunButton
@@ -47,7 +51,7 @@ export function DecomposePanel({ taskKey, onRunComplete }: DecomposePanelProps) 
       {output?.status === 'IDLE' && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-3xl mb-2">🔍</p>
+            <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">Chưa chạy Decompose</p>
             <p className="text-sm mt-1">Nhấn "▶ Chạy Decompose" để phân tích task và tạo sub-tasks.</p>
           </CardContent>

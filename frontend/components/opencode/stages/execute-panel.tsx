@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { Play, CheckCircle2, XCircle } from 'lucide-react';
 
 interface ExecutePanelProps {
   taskKey: string;
@@ -50,7 +51,10 @@ export function ExecutePanel({ taskKey, onRunComplete }: ExecutePanelProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">⚡ Execute Stage</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Play className="w-5 h-5 text-primary" />
+            Execute Stage
+          </h2>
           <PipelineBadge status={status} size="md" />
         </div>
         <StageRunButton
@@ -70,7 +74,7 @@ export function ExecutePanel({ taskKey, onRunComplete }: ExecutePanelProps) {
       {status === 'IDLE' && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-3xl mb-2">⚡</p>
+            <Play className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">Chưa có execution report</p>
             <p className="text-sm mt-1">Cần có solution blueprint trước, rồi nhấn "▶ Chạy Execute".</p>
           </CardContent>
@@ -91,7 +95,7 @@ export function ExecutePanel({ taskKey, onRunComplete }: ExecutePanelProps) {
           {hasFailed && (
             <Alert variant="destructive">
               <AlertDescription>
-                ⚠️ <strong>Quality Gates FAILED.</strong> Review execution report trước khi tiếp tục.
+                            <strong>Quality Gates FAILED.</strong> Review execution report before continuing.
               </AlertDescription>
             </Alert>
           )}
@@ -195,7 +199,11 @@ function GateItem({ label, value, pass, neutral = false }: {
         'font-bold text-sm',
         neutral ? 'text-foreground' : pass ? 'text-emerald-700' : 'text-red-700',
       )}>
-        {neutral ? '' : pass ? '✅ ' : '❌ '}{value}
+        {!neutral && (
+          pass
+            ? <CheckCircle2 className="w-4 h-4 text-emerald-500 inline mr-1" />
+            : <XCircle className="w-4 h-4 text-red-500 inline mr-1" />
+        )}{value}
       </p>
     </div>
   );

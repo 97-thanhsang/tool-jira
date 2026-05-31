@@ -3,11 +3,31 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { STAGE_CONFIG } from '@/types/opencode';
 import { useServiceStatus } from '@/hooks/use-opencode-settings';
+import { Search, Package, BrainCircuit, Hammer, Play, Settings } from 'lucide-react';
 import type { PipelineStage } from '@/types/opencode';
 
+/* ─── Stage Icons (lucide, not emoji) ────────────────────────── */
+
+const STAGE_ICON: Record<PipelineStage, React.ComponentType<{ className?: string }>> = {
+  decompose: Search,
+  extractor: Package,
+  analyze:   BrainCircuit,
+  solution:  Hammer,
+  execute:   Play,
+};
+
+const STAGE_LABEL: Record<PipelineStage, string> = {
+  decompose: 'Decompose',
+  extractor: 'Extractor',
+  analyze:   'Analyze',
+  solution:  'Solution',
+  execute:   'Execute',
+};
+
 const STAGE_ORDER: PipelineStage[] = ['decompose', 'extractor', 'analyze', 'solution', 'execute'];
+
+/* ─── Component ───────────────────────────────────────────────── */
 
 export function OpenCodeStageNav() {
   const pathname = usePathname();
@@ -16,12 +36,13 @@ export function OpenCodeStageNav() {
   const isSettings = pathname === '/opencode/settings' || pathname.startsWith('/opencode/settings/');
 
   return (
-    <div className="border-b bg-background">
-      <div className="container mx-auto max-w-5xl px-4 flex items-center justify-between">
-        {/* Stage tabs */}
-        <nav className="flex overflow-x-auto">
+    <div className="border-b bg-card">
+      <div className="container mx-auto max-w-5xl px-4 flex items-center justify-between h-12">
+        {/* Pipeline stage tabs */}
+        <nav className="flex items-center h-full overflow-x-auto">
           {STAGE_ORDER.map((stage) => {
-            const cfg = STAGE_CONFIG[stage];
+            const Icon = STAGE_ICON[stage];
+            const label = STAGE_LABEL[stage];
             const isActive =
               pathname === `/opencode/${stage}` ||
               pathname.startsWith(`/opencode/${stage}/`);
@@ -31,46 +52,50 @@ export function OpenCodeStageNav() {
                 key={stage}
                 href={`/opencode/${stage}`}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors shrink-0',
+                  'relative flex items-center gap-2 px-4 h-full text-sm font-medium whitespace-nowrap transition-colors shrink-0',
                   isActive
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40',
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <span>{cfg.icon}</span>
-                <span className="hidden sm:inline">{cfg.label}</span>
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline">{label}</span>
+                {/* Active indicator bar */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+                )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Right side: service indicator + settings */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
+        {/* Right side: status dot + settings */}
+        <div className="flex items-center gap-3 shrink-0 ml-2">
           {/* Service status dot */}
           <div
-            title={status ? `OpenCode ${status.running ? 'running' : 'stopped'}` : 'Checking…'}
+            title={status ? `OpenCode ${status.running ? 'running' : 'stopped'} — v${status.version ?? '?'}` : 'Checking…'}
             className={cn(
               'w-2 h-2 rounded-full transition-colors',
               status?.running
-                ? 'bg-emerald-500 shadow-[0_0_4px_#10b981]'
+                ? 'bg-emerald-500 shadow-[0_0_5px_#10b981]'
                 : status
-                ? 'bg-muted-foreground/40'
+                ? 'bg-muted-foreground/30'
                 : 'bg-muted-foreground/20 animate-pulse',
             )}
           />
 
-          {/* Settings link */}
+          {/* Settings gear */}
           <Link
             href="/opencode/settings"
             title="OpenCode Settings"
             className={cn(
-              'p-2 rounded-md text-sm transition-colors',
+              'p-1.5 rounded-md transition-colors',
               isSettings
                 ? 'bg-muted text-foreground'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
             )}
           >
-            ⚙️
+            <Settings className="w-4 h-4" />
           </Link>
         </div>
       </div>

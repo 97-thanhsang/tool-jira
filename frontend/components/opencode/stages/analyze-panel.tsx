@@ -8,17 +8,18 @@ import { MarkdownViewer } from '../markdown-viewer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { BrainCircuit, CheckCircle, XCircle, AlertTriangle, HelpCircle } from 'lucide-react';
 
 interface AnalyzePanelProps {
   taskKey: string;
   onRunComplete?: () => void;
 }
 
-const VERDICT_CONFIG: Record<string, { label: string; classes: string; icon: string }> = {
-  IMPLEMENT: { label: 'IMPLEMENT', classes: 'bg-emerald-100 text-emerald-800 border-emerald-300', icon: '✅' },
-  REJECT:    { label: 'REJECT',    classes: 'bg-red-100 text-red-800 border-red-300',             icon: '❌' },
-  CLARIFY:   { label: 'CLARIFY',   classes: 'bg-amber-100 text-amber-800 border-amber-300',       icon: '⚠️' },
-  UNKNOWN:   { label: 'UNKNOWN',   classes: 'bg-muted text-muted-foreground border-muted',        icon: '❓' },
+const VERDICT_CONFIG: Record<string, { label: string; classes: string; icon: React.ComponentType<{ className?: string }> }> = {
+  IMPLEMENT: { label: 'IMPLEMENT', classes: 'bg-emerald-100 text-emerald-800 border-emerald-300', icon: CheckCircle },
+  REJECT:    { label: 'REJECT',    classes: 'bg-red-100 text-red-800 border-red-300',             icon: XCircle },
+  CLARIFY:   { label: 'CLARIFY',   classes: 'bg-amber-100 text-amber-800 border-amber-300',       icon: AlertTriangle },
+  UNKNOWN:   { label: 'UNKNOWN',   classes: 'bg-muted text-muted-foreground border-muted',        icon: HelpCircle },
 };
 
 export function AnalyzePanel({ taskKey, onRunComplete }: AnalyzePanelProps) {
@@ -37,6 +38,7 @@ export function AnalyzePanel({ taskKey, onRunComplete }: AnalyzePanelProps) {
   const status = output?.status ?? 'IDLE';
   const verdict = ((output?.frontmatter?.verdict as string) ?? 'UNKNOWN').toUpperCase();
   const verdictCfg = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG.UNKNOWN;
+  const VerdictIcon = verdictCfg.icon;
   const qualityScore = output?.frontmatter?.['quality-score'] as string | undefined;
   const outputFile = output?.outputFile;
 
@@ -44,7 +46,10 @@ export function AnalyzePanel({ taskKey, onRunComplete }: AnalyzePanelProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">🧠 Analyze Stage</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <BrainCircuit className="w-5 h-5 text-primary" />
+            Analyze Stage
+          </h2>
           <PipelineBadge status={status} size="md" />
         </div>
         <StageRunButton
@@ -64,7 +69,7 @@ export function AnalyzePanel({ taskKey, onRunComplete }: AnalyzePanelProps) {
       {status === 'IDLE' && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-3xl mb-2">🧠</p>
+            <BrainCircuit className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">Chưa có analysis report</p>
             <p className="text-sm mt-1">Nhấn "▶ Chạy Analyze" để tạo analysis report.</p>
           </CardContent>
@@ -85,7 +90,7 @@ export function AnalyzePanel({ taskKey, onRunComplete }: AnalyzePanelProps) {
           <Card className={cn('border', verdictCfg.classes)}>
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">{verdictCfg.icon}</span>
+                <VerdictIcon className="w-6 h-6" />
                 <div>
                   <p className="font-bold text-lg">VERDICT: {verdictCfg.label}</p>
                   {qualityScore && (

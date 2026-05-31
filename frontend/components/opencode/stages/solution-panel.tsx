@@ -9,16 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Hammer } from 'lucide-react';
 
 interface SolutionPanelProps {
   taskKey: string;
   onRunComplete?: () => void;
 }
 
-const RISK_CONFIG: Record<string, { label: string; classes: string; dot: string }> = {
-  LOW:    { label: 'LOW',    classes: 'bg-emerald-100 text-emerald-800', dot: '🟢' },
-  MEDIUM: { label: 'MEDIUM', classes: 'bg-amber-100 text-amber-800',     dot: '🟡' },
-  HIGH:   { label: 'HIGH',   classes: 'bg-red-100 text-red-800',         dot: '🔴' },
+const RISK_CONFIG: Record<string, { label: string; classes: string; dotColor: string }> = {
+  LOW:    { label: 'LOW',    classes: 'bg-emerald-100 text-emerald-800', dotColor: 'bg-emerald-500' },
+  MEDIUM: { label: 'MEDIUM', classes: 'bg-amber-100 text-amber-800',     dotColor: 'bg-amber-500' },
+  HIGH:   { label: 'HIGH',   classes: 'bg-red-100 text-red-800',         dotColor: 'bg-red-500' },
 };
 
 export function SolutionPanel({ taskKey, onRunComplete }: SolutionPanelProps) {
@@ -48,7 +49,10 @@ export function SolutionPanel({ taskKey, onRunComplete }: SolutionPanelProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">🏗️ Solution Stage</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Hammer className="w-5 h-5 text-primary" />
+            Solution Stage
+          </h2>
           <PipelineBadge status={status} size="md" />
         </div>
         <StageRunButton
@@ -68,7 +72,7 @@ export function SolutionPanel({ taskKey, onRunComplete }: SolutionPanelProps) {
       {status === 'IDLE' && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-3xl mb-2">🏗️</p>
+            <Hammer className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">Chưa có solution blueprint</p>
             <p className="text-sm mt-1">Cần Analyze với verdict IMPLEMENT trước, rồi nhấn "▶ Chạy Solution".</p>
           </CardContent>
@@ -99,8 +103,8 @@ export function SolutionPanel({ taskKey, onRunComplete }: SolutionPanelProps) {
                 {riskCfg && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Risk</p>
-                    <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', riskCfg.classes)}>
-                      {riskCfg.dot} {riskCfg.label}
+                    <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1', riskCfg.classes)}>
+                      <span className={cn('w-2 h-2 rounded-full', riskCfg.dotColor)} /> {riskCfg.label}
                     </span>
                   </div>
                 )}

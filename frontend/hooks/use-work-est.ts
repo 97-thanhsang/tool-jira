@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import useSWR from 'swr';
-import { fetchSubTasks, fetchTasksByDateRange, distributeEstimates } from '@/lib/work-est-api';
+import { fetchSubTasks, fetchTasksByDateRange, distributeEstimates, buildExistingSchedule } from '@/lib/work-est-api';
 import type { WorkEstSubTask, WorkEstDistributeResult } from '@/lib/work-est-api';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 
@@ -35,11 +35,22 @@ export function useWorkEst(parentKeys: string[]) {
   const [manualEstimates, setManualEstimates] = useState<Map<string, number>>(new Map());
   const [dateRange, setDateRange] = useState<WorkEstDateRange>(defaultDateRange);
   const [filters, setFilters] = useState<UnifiedFilters>({ searchText: '' });
-  // Explicit distribution state — set by runDistribution, cleared by resetDistribution
+  // Selected user for distribution (empty = currentUser)
+  const [selectedUser, setSelectedUser] = useState<string>('');
+  // Timeline display state — set by either loadExistingData or runDistribution
   const [distribution, setDistribution] = useState<WorkEstDistributeResult | null>(null);
+  // Load state — whether user has clicked "Load" to view member's existing workload
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+  // Allocation state — whether user has clicked "Phân rã" to distribute selected sub-tasks
+  const [hasAllocated, setHasAllocated] = useState(false);
+  // Distribution errors — non-null when distribution has errors (partial result still shown)
+  const [distributionErrors, setDistributionErrors] = useState<string[] | null>(null);
   // Refs to capture latest state at click time
   const dateRangeRef = useRef(dateRange);
   dateRangeRef.current = dateRange;
+  const selectedUserRef = useRef(selectedUser);
+  selectedUserRef.current = selectedUser;
   const selectedSubTasksRef = useRef<WorkEstSubTask[]>([]);
 
   // ── Fetch ────────────────────────────────────────────────────────────
@@ -50,6 +61,25 @@ export function useWorkEst(parentKeys: string[]) {
     () => fetchSubTasks([...parentKeys]),
     { revalidateOnFocus: false, dedupingInterval: 30_000 },
   );
+
+  // ── Load existing workload for selected member ───────────────────────
+  const loadExistingData = useCallback(async () => {
+    const { from, to } = dateRangeRef.current;
+    const username = selectedUserRef.current || undefined;
+
+    if (!from || !to) return;
+
+    setIsLoadingExisting(true);
+    try {
+      const dateRangeTasks = await fetchTasksByDateRange(from, to, username);
+      const result = buildExistingSchedule(dateRangeTasks, from, to);
+      setDistribution(result);
+      setHasLoaded(true);
+      setHasAllocated(false);
+    } finally {
+      setIsLoadingExisting(false);
+    }
+  }, []);
 
   // ── Client-side filter ───────────────────────────────────────────────
   const filteredSubTasks = useMemo((): WorkEstSubTask[] => {
@@ -127,7 +157,8 @@ export function useWorkEst(parentKeys: string[]) {
     if (checkedTasks.length === 0) return;
 
     // 1. Auto-fetch ANY sub-tasks with duedate or worklogs in the date range
-    const dateRangeTasks = await fetchTasksByDateRange(from, to);
+    //    If a specific user is selected, fetch their tasks/worklogs instead of currentUser()
+    const dateRangeTasks = await fetchTasksByDateRange(from, to, selectedUserRef.current || undefined);
 
     // 2. Build existing allocations from worklogDays of ALL found tasks (per-day)
     const existingAllocs: Record<string, number> = {};
@@ -157,6 +188,14 @@ export function useWorkEst(parentKeys: string[]) {
 
     const result = distributeEstimates(checkedTasks, from, to, existingAllocs, deduped);
     setDistribution(result);
+
+    if (result.errors && result.errors.length > 0) {
+      setDistributionErrors(result.errors);
+      setHasAllocated(false);
+    } else {
+      setDistributionErrors(null);
+      setHasAllocated(true);
+    }
   }, [patchedSubTasks, selectedIds]);
 
   const resetDistribution = useCallback(() => {
@@ -164,7 +203,11 @@ export function useWorkEst(parentKeys: string[]) {
     setManualEstimates(new Map());
     setDateRange(defaultDateRange());
     setFilters({ searchText: '' });
+    setSelectedUser('');
     setDistribution(null);
+    setHasLoaded(false);
+    setHasAllocated(false);
+    setDistributionErrors(null);
   }, []);
 
   // ── Selection ────────────────────────────────────────────────────────
@@ -200,6 +243,10 @@ export function useWorkEst(parentKeys: string[]) {
     selectedIds, toggleSelection, toggleSelectAll, isAllSelected,
     manualEstimates, setManualEstimate,
     dateRange, setDateRange,
-    distribution, runDistribution, resetDistribution, hasDistributed: distribution !== null,
+    selectedUser, setSelectedUser,
+    distribution, runDistribution, resetDistribution,
+    hasLoaded, loadExistingData, isLoadingExisting,
+    hasAllocated,
+    distributionErrors,
   };
 }

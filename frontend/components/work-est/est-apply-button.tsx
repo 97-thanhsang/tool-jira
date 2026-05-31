@@ -11,11 +11,12 @@ interface Props {
   hasDistributed: boolean;
   dateLabel?: string;
   compact?: boolean;
+  assigneeUsername?: string;
   onDistribute: () => void;
   onReset: () => void;
 }
 
-export function EstActionButtons({ schedule, canDistribute, hasDistributed, dateLabel, compact, onDistribute, onReset }: Props) {
+export function EstActionButtons({ schedule, canDistribute, hasDistributed, dateLabel, compact, assigneeUsername, onDistribute, onReset }: Props) {
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState<{ success: number; failed: number } | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -41,6 +42,7 @@ export function EstActionButtons({ schedule, canDistribute, hasDistributed, date
       issueKey,
       estimateSeconds: data.seconds,
       duedate: data.duedate,
+      ...(assigneeUsername ? { assignee: assigneeUsername } : {}),
     }));
 
     const res = await batchUpdateEstimate(updates, (done, total) => {

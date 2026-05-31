@@ -2,16 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { usePipelineTasks, usePipelineSummary } from '@/hooks/use-pipeline';
 import { PipelineProgressBar } from './pipeline-progress-bar';
+import { Search, Plus, RefreshCw, Zap } from 'lucide-react';
 
-// ─── Row component (loads its own summary) ───────────────────────────────────
-function PipelineRow({ taskKey }: { taskKey: string }) {
+/* ─── Card component ──────────────────────────────────────────── */
+
+function PipelineCard({ taskKey }: { taskKey: string }) {
   const { summary } = usePipelineSummary(taskKey);
   const router = useRouter();
 
@@ -20,36 +21,37 @@ function PipelineRow({ taskKey }: { taskKey: string }) {
     : 0;
 
   return (
-    <TableRow
-      className="cursor-pointer hover:bg-muted/50"
+    <div
       onClick={() => router.push(`/opencode/${taskKey}`)}
+      className="p-4 rounded-xl border bg-card hover:border-primary/30 hover:shadow-sm cursor-pointer transition-all group"
     >
-      <TableCell className="font-mono font-medium">{taskKey}</TableCell>
-      <TableCell>
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-mono font-bold text-sm">{taskKey}</span>
         {summary ? (
-          <PipelineProgressBar
-            stages={summary.stages}
-            onStageClick={(stage) => {
-              router.push(`/opencode/${taskKey}?stage=${stage}`);
-            }}
-          />
+          <Badge variant={completedCount === 5 ? 'default' : 'secondary'} className="text-[10px]">
+            {completedCount}/5
+          </Badge>
         ) : (
-          <div className="h-4 w-40 bg-muted animate-pulse rounded" />
+          <span className="w-6 h-3 bg-muted animate-pulse rounded" />
         )}
-      </TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        {completedCount}/5 stages
-      </TableCell>
-      <TableCell>
-        <Button variant="ghost" size="sm">
-          View →
-        </Button>
-      </TableCell>
-    </TableRow>
+      </div>
+
+      {summary ? (
+        <PipelineProgressBar
+          stages={summary.stages}
+          onStageClick={(stage) => {
+            router.push(`/opencode/${taskKey}/${stage}`);
+          }}
+        />
+      ) : (
+        <div className="h-3 bg-muted/40 animate-pulse rounded-full" />
+      )}
+    </div>
   );
 }
 
-// ─── Main Hub ─────────────────────────────────────────────────────────────────
+/* ─── Main Hub ─────────────────────────────────────────────────── */
+
 export function PipelineHub() {
   const { taskKeys, isLoading, refresh } = usePipelineTasks();
   const [search, setSearch] = useState('');
@@ -68,92 +70,90 @@ export function PipelineHub() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">⚡ OpenCode Pipeline Hub</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Theo dõi và quản lý pipeline AI cho các Jira tasks
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Zap className="w-5 h-5 text-primary" />
+            Pipeline Hub
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Track and manage AI pipeline stages for Jira tasks
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refresh()}>
-          🔄 Làm mới
+        <Button variant="outline" size="sm" onClick={() => refresh()} className="gap-1.5">
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh
         </Button>
       </div>
 
-      {/* Pipeline Legend */}
-      <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg text-xs text-muted-foreground flex-wrap">
-        <span className="font-medium">Legend:</span>
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-muted/30 border text-xs">
+        <span className="font-medium text-muted-foreground">Stages:</span>
         {[
-          { color: 'bg-emerald-500', label: 'DONE' },
-          { color: 'bg-blue-400 animate-pulse', label: 'RUNNING' },
-          { color: 'bg-muted border', label: 'IDLE' },
-          { color: 'bg-red-500', label: 'FAILED' },
-          { color: 'bg-orange-400', label: 'BLOCKED' },
+          { color: 'bg-emerald-500', label: 'Done' },
+          { color: 'bg-blue-400', label: 'Running' },
+          { color: 'bg-muted-foreground/30', label: 'Idle' },
+          { color: 'bg-red-500', label: 'Failed' },
+          { color: 'bg-orange-400', label: 'Blocked' },
         ].map(({ color, label }) => (
           <span key={label} className="flex items-center gap-1.5">
-            <span className={`w-3 h-3 rounded-full border ${color}`} />
+            <span className={`w-2.5 h-2.5 rounded-full ${color} ${label === 'Running' ? 'animate-pulse' : ''}`} />
             {label}
           </span>
         ))}
-        <span className="ml-4">🔍 Decompose · 📦 Extractor · 🧠 Analyze · 🏗️ Solution · ⚡ Execute</span>
       </div>
 
       {/* Search + Add */}
-      <div className="flex gap-3 flex-wrap">
-        <Input
-          placeholder="Tìm theo task key (EMSPRO2-...)..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
+      <div className="flex gap-2 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search by task key..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
         <div className="flex gap-2 ml-auto">
           <Input
-            placeholder="Thêm task key..."
+            placeholder="Add task key..."
             value={manualKey}
             onChange={(e) => setManualKey(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddKey()}
-            className="w-44"
+            className="w-40"
           />
-          <Button onClick={handleAddKey} variant="outline">
-            + Thêm
+          <Button onClick={handleAddKey} variant="outline" size="sm" className="gap-1">
+            <Plus className="w-3.5 h-3.5" /> Add
           </Button>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Cards */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-14 bg-muted animate-pulse rounded" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-4 rounded-xl bg-muted/30 animate-pulse">
+              <div className="h-4 w-24 bg-muted rounded mb-3" />
+              <div className="h-3 bg-muted/50 rounded-full" />
+            </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <p className="text-4xl mb-3">⚡</p>
-          <p className="font-medium">Chưa có pipeline nào</p>
-          <p className="text-sm mt-1">
-            Chạy <code>/analyze-task EMSPRO2-1234</code> trong OpenCode CLI để bắt đầu,
-            hoặc thêm task key thủ công ở trên.
+        <div className="text-center py-16">
+          <Zap className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+          <p className="text-lg font-medium text-muted-foreground">No pipelines yet</p>
+          <p className="text-sm text-muted-foreground/60 mt-1 max-w-sm mx-auto">
+            Run <code className="bg-muted px-1.5 py-0.5 rounded text-[12px] font-mono">/analyze-task EMSPRO2-1234</code> in OpenCode CLI to start.
           </p>
         </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-36">Task Key</TableHead>
-              <TableHead>Pipeline Progress</TableHead>
-              <TableHead className="w-28">Tiến độ</TableHead>
-              <TableHead className="w-20" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((key) => (
-              <PipelineRow key={key} taskKey={key} />
-            ))}
-          </TableBody>
-        </Table>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((key) => (
+            <PipelineCard key={key} taskKey={key} />
+          ))}
+        </div>
       )}
     </div>
   );

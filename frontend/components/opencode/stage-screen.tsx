@@ -5,13 +5,23 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { usePipelineTasks } from '@/hooks/use-pipeline';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { STAGE_CONFIG } from '@/types/opencode';
+import { Search, Package, BrainCircuit, Hammer, Play } from 'lucide-react';
 import type { PipelineStage } from '@/types/opencode';
 import { DecomposePanel } from './stages/decompose-panel';
 import { ExtractorPanel } from './stages/extractor-panel';
 import { AnalyzePanel } from './stages/analyze-panel';
 import { SolutionPanel } from './stages/solution-panel';
 import { ExecutePanel } from './stages/execute-panel';
+
+/* ─── Stage config ──────────────────────────────────────────── */
+
+const STAGE_META: Record<PipelineStage, { icon: React.ComponentType<{ className?: string }>; label: string; description: string }> = {
+  decompose: { icon: Search,        label: 'Decompose',  description: 'Phân tích Jira task → tạo sub-tasks' },
+  extractor: { icon: Package,       label: 'Extractor',  description: 'Trích xuất BA knowledge từ Jira vào module-wisdom' },
+  analyze:   { icon: BrainCircuit,  label: 'Analyze',    description: 'Phân tích kỹ thuật → create analysis report với verdict' },
+  solution:  { icon: Hammer,        label: 'Solution',   description: 'Thiết kế solution blueprint từ analysis report' },
+  execute:   { icon: Play,          label: 'Execute',    description: 'Implement code theo solution blueprint — quality gates' },
+};
 
 interface StageScreenProps {
   stage: PipelineStage;
@@ -32,7 +42,8 @@ export function StageScreen({ stage }: StageScreenProps) {
     setActiveTask(taskFromUrl);
   }, [taskFromUrl]);
 
-  const cfg = STAGE_CONFIG[stage];
+  const meta = STAGE_META[stage];
+  const Icon = meta.icon;
 
   const handleLoad = () => {
     const key = inputValue.trim().toUpperCase();
@@ -48,18 +59,18 @@ export function StageScreen({ stage }: StageScreenProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       {/* Stage header */}
       <div>
         <h1 className="text-xl font-bold flex items-center gap-2">
-          <span>{cfg.icon}</span>
-          <span>{cfg.label}</span>
+          <Icon className="w-5 h-5 text-primary" />
+          <span>{meta.label}</span>
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{cfg.description}</p>
+        <p className="text-sm text-muted-foreground mt-0.5">{meta.description}</p>
       </div>
 
       {/* Task selector */}
-      <div className="flex flex-wrap items-center gap-3 p-4 rounded-lg border bg-muted/30">
+      <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border bg-muted/30">
         <span className="text-sm font-medium shrink-0">Task Key:</span>
         <div className="flex gap-2">
           <Input
@@ -101,12 +112,12 @@ export function StageScreen({ stage }: StageScreenProps) {
           {stage === 'execute'   && <ExecutePanel   taskKey={activeTask} />}
         </div>
       ) : (
-        <div className="text-center py-20 text-muted-foreground rounded-lg border border-dashed">
-          <p className="text-4xl mb-3">{cfg.icon}</p>
+        <div className="text-center py-16 text-muted-foreground rounded-xl border border-dashed">
+          <Icon className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">Nhập Task Key để bắt đầu</p>
           <p className="text-sm mt-1">
             Ví dụ:{' '}
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded">EMSPRO2-1234</code>
+            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">EMSPRO2-1234</code>
           </p>
         </div>
       )}

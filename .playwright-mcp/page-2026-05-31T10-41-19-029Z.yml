@@ -1,0 +1,123 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: J
+          - generic [ref=e8]: Jira Power UI
+        - button "Collapse sidebar" [ref=e9]:
+          - img [ref=e10]
+      - navigation [ref=e13]:
+        - generic [ref=e14]:
+          - button "My Workspace" [ref=e15]:
+            - img [ref=e16]
+            - text: My Workspace
+          - link "My Board" [ref=e18] [cursor=pointer]:
+            - /url: /board
+            - img [ref=e19]
+            - generic [ref=e24]: My Board
+          - link "Dashboard" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e26]
+            - generic [ref=e28]: Dashboard
+          - link "My Issues" [ref=e29] [cursor=pointer]:
+            - /url: /issues
+            - img [ref=e30]
+            - generic [ref=e33]: My Issues
+          - link "Worklog" [ref=e34] [cursor=pointer]:
+            - /url: /worklog
+            - img [ref=e35]
+            - generic [ref=e38]: Worklog
+          - link "OpenCode" [ref=e39] [cursor=pointer]:
+            - /url: /opencode
+            - img [ref=e40]
+            - generic [ref=e43]: OpenCode
+        - generic [ref=e44]:
+          - button "Team" [ref=e45]:
+            - img [ref=e46]
+            - text: Team
+          - link "Team Dashboard" [ref=e48] [cursor=pointer]:
+            - /url: /team
+            - img [ref=e49]
+            - generic [ref=e54]: Team Dashboard
+          - link "Team Plan" [ref=e55] [cursor=pointer]:
+            - /url: /team-plan
+            - img [ref=e56]
+            - generic [ref=e58]: Team Plan
+          - link "Work Est" [ref=e59] [cursor=pointer]:
+            - /url: /work-est
+            - img [ref=e60]
+            - generic [ref=e62]: Work Est
+        - generic [ref=e63]:
+          - button "System" [ref=e64]:
+            - img [ref=e65]
+            - text: System
+          - link "Settings" [ref=e67] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e68]
+            - generic [ref=e71]: Settings
+          - link "Open Jira" [ref=e72] [cursor=pointer]:
+            - /url: https://task.ascvn.com.vn
+            - img [ref=e73]
+            - generic [ref=e77]: Open Jira
+      - generic [ref=e78]:
+        - button "Notifications" [ref=e80]:
+          - img [ref=e82]
+          - text: Notifications
+        - generic [ref=e85]:
+          - generic [ref=e87]: SN
+          - generic [ref=e88]:
+            - paragraph [ref=e89]: Sang Nguyen Thanh
+            - paragraph [ref=e90]: ntsang@ascvn.edu.vn
+        - button "Log out" [ref=e91]:
+          - img [ref=e92]
+          - text: Log out
+    - main [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e98]:
+          - navigation [ref=e99]:
+            - link "Decompose" [ref=e100] [cursor=pointer]:
+              - /url: /opencode/decompose
+              - img [ref=e101]
+              - generic [ref=e104]: Decompose
+            - link "Extractor" [ref=e106] [cursor=pointer]:
+              - /url: /opencode/extractor
+              - img [ref=e107]
+              - generic [ref=e111]: Extractor
+            - link "Analyze" [ref=e112] [cursor=pointer]:
+              - /url: /opencode/analyze
+              - img [ref=e113]
+              - generic [ref=e125]: Analyze
+            - link "Solution" [ref=e126] [cursor=pointer]:
+              - /url: /opencode/solution
+              - img [ref=e127]
+              - generic [ref=e131]: Solution
+            - link "Execute" [ref=e132] [cursor=pointer]:
+              - /url: /opencode/execute
+              - img [ref=e133]
+              - generic [ref=e135]: Execute
+          - generic [ref=e136]:
+            - generic "OpenCode running — v1.15.12" [ref=e137]
+            - link "OpenCode Settings" [ref=e138] [cursor=pointer]:
+              - /url: /opencode/settings
+              - img [ref=e139]
+        - generic [ref=e143]:
+          - generic [ref=e144]:
+            - heading "🔍 Decompose" [level=1] [ref=e145]:
+              - generic [ref=e146]: 🔍
+              - generic [ref=e147]: Decompose
+            - paragraph [ref=e148]: Phân tích Jira task → tạo sub-tasks
+          - generic [ref=e149]:
+            - generic [ref=e150]: "Task Key:"
+            - generic [ref=e151]:
+              - textbox "EMSPRO2-1234" [ref=e152]
+              - button "Load" [disabled]
+          - generic [ref=e153]:
+            - paragraph [ref=e154]: 🔍
+            - paragraph [ref=e155]: Nhập Task Key để bắt đầu
+            - paragraph [ref=e156]:
+              - text: "Ví dụ:"
+              - code [ref=e157]: EMSPRO2-1234
+  - button "Open Next.js Dev Tools" [ref=e163] [cursor=pointer]:
+    - img [ref=e164]
+  - alert [ref=e167]

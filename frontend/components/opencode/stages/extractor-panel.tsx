@@ -4,6 +4,7 @@ import { useStageOutput } from '@/hooks/use-pipeline';
 import { PipelineBadge } from '../pipeline-badge';
 import { StageRunButton } from '../stage-run-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Package, Loader2 } from 'lucide-react';
 
 interface ExtractorPanelProps {
   taskKey: string;
@@ -29,7 +30,10 @@ export function ExtractorPanel({ taskKey, onRunComplete }: ExtractorPanelProps) 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">📦 Extractor Stage</h2>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Package className="w-5 h-5 text-primary" />
+            Extractor Stage
+          </h2>
           <PipelineBadge status={status} size="md" />
         </div>
         <StageRunButton
@@ -49,7 +53,7 @@ export function ExtractorPanel({ taskKey, onRunComplete }: ExtractorPanelProps) 
       {status === 'IDLE' && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-3xl mb-2">📦</p>
+            <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">Chưa chạy Extractor</p>
             <p className="text-sm mt-1">
               Extractor sẽ tải attachments từ Jira và ghi BA knowledge vào module-wisdom.
@@ -61,7 +65,9 @@ export function ExtractorPanel({ taskKey, onRunComplete }: ExtractorPanelProps) 
       {status === 'RUNNING' && (
         <Card>
           <CardContent className="py-6 text-center">
-            <p className="text-blue-600 animate-pulse font-medium">⏳ Đang extract knowledge...</p>
+            <p className="text-blue-600 font-medium flex items-center gap-2 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" /> Đang extract knowledge...
+            </p>
           </CardContent>
         </Card>
       )}
