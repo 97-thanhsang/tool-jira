@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, Fragment } from 'react';
 import { cn } from '@/lib/utils';
 import { apiBackend } from '@/lib/api';
 import {
@@ -110,7 +110,7 @@ function ServiceSection() {
               status?.directory ? ['Dir', status.directory]                                     : null,
               status?.startedAt ? ['Started', new Date(status.startedAt).toLocaleTimeString()] : null,
             ] as Array<[string, string] | null>).filter((x): x is [string, string] => x !== null).map(([k, v]) => (
-              <><span className="text-muted-foreground">{k}</span><span>{v}</span></>
+              <Fragment key={k}><span className="text-muted-foreground">{k}</span><span>{v}</span></Fragment>
             ))}
           </div>
 
@@ -339,7 +339,7 @@ description: "What this skill does"
 
 function ModelSection() {
   const { config, refresh: refreshConfig } = useOpenCodeConfig();
-  const { providers } = useOpenCodeProviders();
+  const { providers, isLoading, error } = useOpenCodeProviders();
   const [selected, setSelected] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -354,50 +354,63 @@ function ModelSection() {
 
   return (
     <Section title="Model" icon="🧠">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Current:</span>
-          <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">{current || '(not set)'}</code>
+      {isLoading ? (
+        <div className="space-y-2">
+          <div className="h-5 bg-muted animate-pulse rounded w-48" />
+          <div className="h-10 bg-muted animate-pulse rounded" />
+          <div className="h-10 bg-muted animate-pulse rounded" />
         </div>
-
-        <div className="space-y-1">
-          {providers.map((p) => (
-            <details key={p.id} className="group">
-              <summary className="flex items-center gap-2 cursor-pointer select-none py-1.5 px-2 rounded hover:bg-muted text-sm font-medium list-none">
-                <span className="text-muted-foreground group-open:rotate-90 transition-transform inline-block w-3">▶</span>
-                {p.name ?? p.label ?? p.id}
-                <span className="text-xs text-muted-foreground ml-auto">{p.models.length} models</span>
-              </summary>
-              <div className="ml-5 mt-0.5 space-y-0.5">
-                {p.models.map((m) => {
-                  const modelId = typeof m === 'string' ? m : (m as Record<string, string>).id ?? String(m);
-                  const display = typeof m === 'string' ? m : (m as Record<string, string>).name ?? modelId;
-                  const isActive = modelId === (selected || current);
-                  return (
-                    <button key={modelId} onClick={() => setSelected(modelId)}
-                      className={cn(
-                        'w-full text-left px-3 py-1 rounded text-xs font-mono transition-colors',
-                        isActive ? 'bg-primary/10 text-primary font-semibold'
-                                 : 'hover:bg-muted text-muted-foreground hover:text-foreground',
-                      )}>
-                      {isActive && '✓ '}{display}
-                    </button>
-                  );
-                })}
-              </div>
-            </details>
-          ))}
-        </div>
-
-        {selected && selected !== current && (
-          <div className="flex items-center gap-2 pt-1 border-t">
-            <span className="text-xs text-muted-foreground">Set to:</span>
-            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono flex-1">{selected}</code>
-            <Button size="sm" onClick={save} disabled={saving}>{saving ? '...' : 'Apply'}</Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected('')}>✕</Button>
+      ) : error ? (
+        <EmptyState icon="⚠️" text="Failed to load models" sub={`${error}`} />
+      ) : providers.length === 0 ? (
+        <EmptyState icon="🧠" text="No providers found"
+          sub="Start the OpenCode service to see available models." />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Current:</span>
+            <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">{current || '(not set)'}</code>
           </div>
-        )}
-      </div>
+
+          <div className="space-y-1">
+            {providers.map((p) => (
+              <details key={p.id} className="group">
+                <summary className="flex items-center gap-2 cursor-pointer select-none py-1.5 px-2 rounded hover:bg-muted text-sm font-medium list-none">
+                  <span className="text-muted-foreground group-open:rotate-90 transition-transform inline-block w-3">▶</span>
+                  {p.name ?? p.label ?? p.id}
+                  <span className="text-xs text-muted-foreground ml-auto">{p.models.length} models</span>
+                </summary>
+                <div className="ml-5 mt-0.5 space-y-0.5">
+                  {p.models.map((m) => {
+                    const modelId = typeof m === 'string' ? m : (m as Record<string, string>).id ?? String(m);
+                    const display = typeof m === 'string' ? m : (m as Record<string, string>).name ?? modelId;
+                    const isActive = modelId === (selected || current);
+                    return (
+                      <button key={modelId} onClick={() => setSelected(modelId)}
+                        className={cn(
+                          'w-full text-left px-3 py-1 rounded text-xs font-mono transition-colors',
+                          isActive ? 'bg-primary/10 text-primary font-semibold'
+                                   : 'hover:bg-muted text-muted-foreground hover:text-foreground',
+                        )}>
+                        {isActive && '✓ '}{display}
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+            ))}
+          </div>
+
+          {selected && selected !== current && (
+            <div className="flex items-center gap-2 pt-1 border-t">
+              <span className="text-xs text-muted-foreground">Set to:</span>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono flex-1">{selected}</code>
+              <Button size="sm" onClick={save} disabled={saving}>{saving ? '...' : 'Apply'}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelected('')}>✕</Button>
+            </div>
+          )}
+        </div>
+      )}
     </Section>
   );
 }
@@ -476,7 +489,7 @@ function McpSection() {
 // ─── 8. Config Editor ─────────────────────────────────────────────────────────
 
 function ConfigSection() {
-  const { config, isLoading, refresh } = useOpenCodeConfig();
+  const { config, isLoading, refresh, error } = useOpenCodeConfig();
   const [open, setOpen]     = useState(false);
   const [draft, setDraft]   = useState('');
   const [saving, setSaving] = useState(false);
@@ -502,38 +515,47 @@ function ConfigSection() {
 
   return (
     <Section title="Config (opencode.json)" icon="📄">
-      <div className="space-y-3">
-        {config?.filePath
-          ? <p className="text-xs font-mono text-muted-foreground">{config.filePath}</p>
-          : <p className="text-xs text-muted-foreground">No project config found — will create <code className="bg-muted px-1 rounded">.opencode/opencode.json</code></p>
-        }
+      {isLoading ? (
+        <div className="space-y-3">
+          <div className="h-4 bg-muted animate-pulse rounded w-64" />
+          <div className="h-8 bg-muted animate-pulse rounded w-36" />
+        </div>
+      ) : error ? (
+        <EmptyState icon="⚠️" text="Failed to load config" sub={String(error)} />
+      ) : (
+        <div className="space-y-3">
+          {config?.filePath
+            ? <p className="text-xs font-mono text-muted-foreground">{config.filePath}</p>
+            : <p className="text-xs text-muted-foreground">No project config found — will create <code className="bg-muted px-1 rounded">.opencode/opencode.json</code></p>
+          }
 
-        {!open ? (
-          <Button size="sm" variant="outline" onClick={openEditor} disabled={isLoading}>
-            ✏️ Edit project config
-          </Button>
-        ) : (
-          <div className="space-y-2">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={20}
-              spellCheck={false}
-              className="w-full rounded-md border bg-muted/30 p-3 font-mono text-xs resize-y focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={save} disabled={saving}>{saving ? '...' : '💾 Save'}</Button>
-              <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-              {msg && <span className={cn('text-xs', msg.ok ? 'text-emerald-600' : 'text-red-600')}>{msg.text}</span>}
+          {!open ? (
+            <Button size="sm" variant="outline" onClick={openEditor}>
+              ✏️ Edit project config
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={20}
+                spellCheck={false}
+                className="w-full rounded-md border bg-muted/30 p-3 font-mono text-xs resize-y focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={save} disabled={saving}>{saving ? '...' : '💾 Save'}</Button>
+                <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                {msg && <span className={cn('text-xs', msg.ok ? 'text-emerald-600' : 'text-red-600')}>{msg.text}</span>}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer hover:text-foreground select-none py-1">📖 Full config schema reference</summary>
           <pre className="mt-2 p-3 bg-muted rounded text-[11px] overflow-auto max-h-80 leading-relaxed whitespace-pre-wrap">{CONFIG_SCHEMA_REFERENCE}</pre>
         </details>
       </div>
+      )}
     </Section>
   );
 }

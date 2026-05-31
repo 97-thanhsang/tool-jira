@@ -1,0 +1,137 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e62]: J
+          - generic [ref=e63]: Jira Power UI
+        - button "Collapse sidebar" [ref=e64]:
+          - img [ref=e65]
+      - navigation [ref=e68]:
+        - generic [ref=e69]:
+          - button "My Workspace" [ref=e70]:
+            - img [ref=e71]
+            - text: My Workspace
+          - link "My Board" [ref=e73] [cursor=pointer]:
+            - /url: /board
+            - img [ref=e74]
+            - generic [ref=e79]: My Board
+          - link "Dashboard" [ref=e80] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e81]
+            - generic [ref=e83]: Dashboard
+          - link "My Issues" [ref=e84] [cursor=pointer]:
+            - /url: /issues
+            - img [ref=e85]
+            - generic [ref=e88]: My Issues
+          - link "Worklog" [ref=e89] [cursor=pointer]:
+            - /url: /worklog
+            - img [ref=e90]
+            - generic [ref=e93]: Worklog
+          - link "OpenCode" [ref=e94] [cursor=pointer]:
+            - /url: /opencode
+            - img [ref=e95]
+            - generic [ref=e98]: OpenCode
+        - generic [ref=e99]:
+          - button "Team" [ref=e100]:
+            - img [ref=e101]
+            - text: Team
+          - link "Team Dashboard" [ref=e103] [cursor=pointer]:
+            - /url: /team
+            - img [ref=e104]
+            - generic [ref=e109]: Team Dashboard
+          - link "Team Plan" [ref=e110] [cursor=pointer]:
+            - /url: /team-plan
+            - img [ref=e111]
+            - generic [ref=e113]: Team Plan
+          - link "Work Est" [ref=e114] [cursor=pointer]:
+            - /url: /work-est
+            - img [ref=e115]
+            - generic [ref=e117]: Work Est
+        - generic [ref=e118]:
+          - button "System" [ref=e119]:
+            - img [ref=e120]
+            - text: System
+          - link "Settings" [ref=e122] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e123]
+            - generic [ref=e126]: Settings
+          - link "Open Jira" [ref=e127] [cursor=pointer]:
+            - /url: https://task.ascvn.com.vn
+            - img [ref=e128]
+            - generic [ref=e132]: Open Jira
+      - generic [ref=e133]:
+        - button "Notifications" [ref=e135]:
+          - img [ref=e137]
+          - text: Notifications
+        - generic [ref=e140]:
+          - generic [ref=e142]: SN
+          - generic [ref=e143]:
+            - paragraph [ref=e144]: Sang Nguyen Thanh
+            - paragraph [ref=e145]: ntsang@ascvn.edu.vn
+        - button "Log out" [ref=e146]:
+          - img [ref=e147]
+          - text: Log out
+    - main [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e6]:
+          - navigation [ref=e7]:
+            - link "🔍 Decompose" [ref=e8] [cursor=pointer]:
+              - /url: /opencode/decompose
+              - generic [ref=e9]: 🔍
+              - generic [ref=e10]: Decompose
+            - link "📦 Extractor" [ref=e11] [cursor=pointer]:
+              - /url: /opencode/extractor
+              - generic [ref=e12]: 📦
+              - generic [ref=e13]: Extractor
+            - link "🧠 Analyze" [ref=e14] [cursor=pointer]:
+              - /url: /opencode/analyze
+              - generic [ref=e15]: 🧠
+              - generic [ref=e16]: Analyze
+            - link "🏗️ Solution" [ref=e17] [cursor=pointer]:
+              - /url: /opencode/solution
+              - generic [ref=e18]: 🏗️
+              - generic [ref=e19]: Solution
+            - link "⚡ Execute" [ref=e20] [cursor=pointer]:
+              - /url: /opencode/execute
+              - generic [ref=e21]: ⚡
+              - generic [ref=e22]: Execute
+          - generic [ref=e23]:
+            - generic "OpenCode running" [ref=e150]
+            - link "⚙️" [ref=e25] [cursor=pointer]:
+              - /url: /opencode/settings
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - heading "⚙️ OpenCode Settings" [level=1] [ref=e29]
+            - paragraph [ref=e30]: Manage the OpenCode service, sessions, agents, commands, skills, and config.
+          - generic [ref=e31]:
+            - button "🖥️ Service" [ref=e32]
+            - button "💬 Sessions" [ref=e33]
+            - button "🤖 Agents" [ref=e34]
+            - button "⚡ Commands" [ref=e35]
+            - button "🎯 Skills" [ref=e36]
+            - button "🧠 Model" [active] [ref=e37]
+            - button "🔌 MCP" [ref=e38]
+            - button "📄 Config" [ref=e39]
+          - generic [ref=e151]:
+            - generic [ref=e154]:
+              - generic [ref=e155]: 🧠
+              - generic [ref=e156]: Model
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: "Current:"
+                - code [ref=e161]: (not set)
+              - generic [ref=e162]:
+                - group [ref=e163]:
+                  - generic "▶ providers 0 models" [ref=e164] [cursor=pointer]:
+                    - generic [ref=e165]: ▶
+                    - text: providers
+                    - generic [ref=e166]: 0 models
+                - group [ref=e167]:
+                  - generic "▶ default 0 models" [ref=e168] [cursor=pointer]:
+                    - generic [ref=e169]: ▶
+                    - text: default
+                    - generic [ref=e170]: 0 models
+  - button "Open Next.js Dev Tools" [ref=e54] [cursor=pointer]:
+    - img [ref=e55]
+  - alert [ref=e171]

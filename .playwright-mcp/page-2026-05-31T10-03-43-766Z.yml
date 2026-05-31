@@ -1,0 +1,259 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e25] [cursor=pointer]:
+    - img [ref=e26]
+  - alert [ref=e29]
+  - generic [ref=e30]:
+    - complementary [ref=e31]:
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e35]: J
+          - generic [ref=e36]: Jira Power UI
+        - button "Collapse sidebar" [ref=e37]:
+          - img [ref=e38]
+      - navigation [ref=e41]:
+        - generic [ref=e42]:
+          - button "My Workspace" [ref=e43]:
+            - img [ref=e44]
+            - text: My Workspace
+          - link "My Board" [ref=e46] [cursor=pointer]:
+            - /url: /board
+            - img [ref=e47]
+            - generic [ref=e52]: My Board
+          - link "Dashboard" [ref=e53] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e54]
+            - generic [ref=e56]: Dashboard
+          - link "My Issues" [ref=e57] [cursor=pointer]:
+            - /url: /issues
+            - img [ref=e58]
+            - generic [ref=e61]: My Issues
+          - link "Worklog" [ref=e62] [cursor=pointer]:
+            - /url: /worklog
+            - img [ref=e63]
+            - generic [ref=e66]: Worklog
+          - link "OpenCode" [ref=e67] [cursor=pointer]:
+            - /url: /opencode
+            - img [ref=e68]
+            - generic [ref=e71]: OpenCode
+        - generic [ref=e72]:
+          - button "Team" [ref=e73]:
+            - img [ref=e74]
+            - text: Team
+          - link "Team Dashboard" [ref=e76] [cursor=pointer]:
+            - /url: /team
+            - img [ref=e77]
+            - generic [ref=e82]: Team Dashboard
+          - link "Team Plan" [ref=e83] [cursor=pointer]:
+            - /url: /team-plan
+            - img [ref=e84]
+            - generic [ref=e86]: Team Plan
+          - link "Work Est" [ref=e87] [cursor=pointer]:
+            - /url: /work-est
+            - img [ref=e88]
+            - generic [ref=e90]: Work Est
+        - generic [ref=e91]:
+          - button "System" [ref=e92]:
+            - img [ref=e93]
+            - text: System
+          - link "Settings" [ref=e95] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e96]
+            - generic [ref=e99]: Settings
+          - link "Open Jira" [ref=e100] [cursor=pointer]:
+            - /url: https://task.ascvn.com.vn
+            - img [ref=e101]
+            - generic [ref=e105]: Open Jira
+      - generic [ref=e106]:
+        - button "Notifications" [ref=e108]:
+          - img [ref=e110]
+          - text: Notifications
+        - generic [ref=e113]:
+          - generic [ref=e115]: SN
+          - generic [ref=e116]:
+            - paragraph [ref=e117]: Sang Nguyen Thanh
+            - paragraph [ref=e118]: ntsang@ascvn.edu.vn
+        - button "Log out" [ref=e119]:
+          - img [ref=e120]
+          - text: Log out
+    - main [ref=e123]:
+      - generic [ref=e124]:
+        - generic [ref=e125]:
+          - heading "Kanban Board" [level=1] [ref=e126]
+          - generic [ref=e127]:
+            - generic [ref=e128]:
+              - button "Full" [ref=e129]
+              - button "Focus" [ref=e130]
+            - generic [ref=e131]:
+              - button "View" [ref=e132]
+              - button "Edit" [ref=e133]:
+                - img [ref=e134]
+                - text: Edit
+            - button "Legend" [ref=e138]:
+              - img [ref=e139]
+            - button "Refresh" [ref=e141]:
+              - img
+              - generic [ref=e142]: Refresh
+        - generic [ref=e143]:
+          - button "R&D-X 6" [ref=e144] [cursor=pointer]:
+            - generic [ref=e145]:
+              - img [ref=e146]
+              - generic [ref=e151]: R&D-X
+              - generic [ref=e152]: "6"
+            - img [ref=e153]
+          - generic [ref=e155]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - text: Sang Nguyen Thanh
+                - button [ref=e160]:
+                  - img [ref=e161]
+              - generic [ref=e164]:
+                - text: Phat Nguyen Hong
+                - button [ref=e165]:
+                  - img [ref=e166]
+              - generic [ref=e169]:
+                - text: Hieu Dao Tao
+                - button [ref=e170]:
+                  - img [ref=e171]
+              - generic [ref=e174]:
+                - text: Nghia Doan Trong
+                - button [ref=e175]:
+                  - img [ref=e176]
+              - generic [ref=e179]:
+                - text: Tri Ho Dang
+                - button [ref=e180]:
+                  - img [ref=e181]
+              - generic [ref=e184]: +1 more
+              - button "clear" [ref=e185]
+            - button "Groups" [ref=e187]:
+              - img [ref=e188]
+              - text: Groups
+              - img [ref=e193]
+        - generic [ref=e196]:
+          - generic [ref=e197]:
+            - generic [ref=e198]: Group by
+            - button "None" [ref=e199]
+            - button "epic" [ref=e200]
+            - button "project" [ref=e201]
+            - button "assignee" [ref=e202]
+            - button "priority" [ref=e203]
+            - button "Type" [ref=e204]
+            - button "parent" [ref=e205]
+            - button "status" [ref=e206]
+            - button "sprint" [ref=e207]
+            - button "Status Category" [ref=e208]
+            - button "reporter" [ref=e209]
+          - generic [ref=e210]:
+            - generic [ref=e211]: Sub group
+            - button "None" [ref=e212]
+            - button "epic" [ref=e213]
+            - button "project" [ref=e214]
+            - button "priority" [ref=e215]
+            - button "Type" [ref=e216]
+            - button "parent" [ref=e217]
+            - button "status" [ref=e218]
+            - button "sprint" [ref=e219]
+            - button "Status Category" [ref=e220]
+            - button "reporter" [ref=e221]
+          - generic [ref=e222]:
+            - generic [ref=e223]: Sub sub
+            - button "None" [ref=e224]
+            - button "epic" [ref=e225]
+            - button "priority" [ref=e226]
+            - button "Type" [ref=e227]
+            - button "parent" [ref=e228]
+        - generic [ref=e229]:
+          - generic [ref=e230]:
+            - generic [ref=e231]:
+              - img
+              - textbox "Search…" [ref=e232]
+            - button "Project" [ref=e234]:
+              - generic [ref=e235]: Project
+              - img [ref=e236]
+            - button "Epic" [ref=e239]:
+              - generic [ref=e240]: Epic
+              - img [ref=e241]
+            - button "Sub-task" [ref=e244]:
+              - generic [ref=e245]: Sub-task
+              - img [ref=e246]
+            - button "NOT 4 selected" [ref=e249]:
+              - generic [ref=e250]: NOT 4 selected
+              - img [ref=e251]
+            - button "Priority" [ref=e254]:
+              - generic [ref=e255]: Priority
+              - img [ref=e256]
+            - button "Me" [ref=e259]:
+              - generic [ref=e260]: Me
+              - img [ref=e261]
+            - button "Sprint" [ref=e264]:
+              - generic [ref=e265]: Sprint
+              - img [ref=e266]
+            - button "Reporter" [ref=e269]:
+              - generic [ref=e270]: Reporter
+              - img [ref=e271]
+            - generic [ref=e273]:
+              - generic [ref=e274]:
+                - button "Current" [ref=e275]
+                - button "Old" [ref=e276]
+              - generic [ref=e277]:
+                - button "Today" [ref=e278]
+                - button "Week" [ref=e279]
+                - button "Month" [ref=e280]
+                - button "Year" [ref=e281]
+          - generic [ref=e282]:
+            - button "Only My Issues" [ref=e283]
+            - button "Recently Updated" [ref=e284]
+            - button "Due This Week" [ref=e285]
+            - button "High Priority" [ref=e286]
+          - generic [ref=e287]:
+            - generic [ref=e288]:
+              - text: Type = Sub-task
+              - button [ref=e289]:
+                - img [ref=e290]
+            - generic [ref=e293]:
+              - text: Status ≠ Cancelled
+              - button [ref=e294]:
+                - img [ref=e295]
+            - generic [ref=e298]:
+              - text: Status ≠ Closed
+              - button [ref=e299]:
+                - img [ref=e300]
+            - generic [ref=e303]:
+              - text: Status ≠ Done
+              - button [ref=e304]:
+                - img [ref=e305]
+            - generic [ref=e308]:
+              - text: Status ≠ Rejected
+              - button [ref=e309]:
+                - img [ref=e310]
+            - generic [ref=e313]:
+              - text: Assignee = Me
+              - button [ref=e314]:
+                - img [ref=e315]
+            - button "Clear all" [ref=e318]
+        - generic [ref=e319]:
+          - generic [ref=e322]:
+            - button "Sang Nguyen Thanh Sang Nguyen Thanh 33" [ref=e323]:
+              - img [ref=e324]
+              - img "Sang Nguyen Thanh" [ref=e326]
+              - heading "Sang Nguyen Thanh" [level=4] [ref=e327]
+              - generic [ref=e328]: "33"
+            - generic [ref=e329]:
+              - generic [ref=e330]:
+                - generic [ref=e331]: Tasks
+                - generic [ref=e332]: "33"
+              - generic [ref=e333]:
+                - generic [ref=e334]: Est
+                - generic [ref=e335]: 43h
+              - generic [ref=e336]:
+                - generic [ref=e337]: Logged
+                - generic [ref=e338]: 8.0h
+              - generic [ref=e339]:
+                - generic [ref=e340]: Todo
+                - generic [ref=e341]: "24"
+              - generic [ref=e342]:
+                - generic [ref=e343]: WIP
+                - generic [ref=e344]: "9"
+              - generic [ref=e345]:
+                - generic [ref=e346]: Done
+                - generic [ref=e347]: "0"
+          - status [ref=e348]

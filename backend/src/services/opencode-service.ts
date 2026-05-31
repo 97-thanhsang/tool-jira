@@ -31,16 +31,21 @@ const PROJECT_CONFIG_PATHS = [
   path.join(PROJECT_DIR, 'opencode.jsonc'),
 ];
 
-/** Global config path — XDG on Linux/Mac, %APPDATA% on Windows */
-function globalConfigPath(): string {
+/** Global config path(s) — XDG on Linux/Mac, %APPDATA% on Windows, fallback ~/.config/opencode */
+function globalConfigPaths(): string[] {
   if (process.platform === 'win32') {
     const appdata = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
-    return path.join(appdata, 'opencode', 'opencode.json');
+    return [
+      path.join(appdata, 'opencode', 'opencode.json'),
+      path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
+    ];
   }
-  return path.join(
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'),
-    'opencode', 'opencode.json'
-  );
+  return [
+    path.join(
+      process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'),
+      'opencode', 'opencode.json'
+    ),
+  ];
 }
 
 // ─── Process tracking ────────────────────────────────────────────────────────
@@ -247,10 +252,13 @@ export async function readProjectConfig(): Promise<{
 }
 
 export async function readGlobalConfig(): Promise<Record<string, unknown>> {
-  try {
-    const raw = await fs.readFile(globalConfigPath(), 'utf-8');
-    return JSON.parse(stripJsonc(raw)) as Record<string, unknown>;
-  } catch { return {}; }
+  for (const p of globalConfigPaths()) {
+    try {
+      const raw = await fs.readFile(p, 'utf-8');
+      return JSON.parse(stripJsonc(raw)) as Record<string, unknown>;
+    } catch { /* try next */ }
+  }
+  return {};
 }
 
 /** Always writes to .opencode/opencode.json (highest-priority project config) */

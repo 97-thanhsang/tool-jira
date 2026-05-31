@@ -123,17 +123,54 @@ export function useOpenCodeProviders() {
   );
   // Live response shape may differ from static catalog; normalize
   let providers: ProviderInfo[] = [];
+
+  function extractModels(models: unknown, providerId: string): string[] {
+    if (Array.isArray(models)) {
+      return models.map((m) => {
+        if (typeof m === 'string') return m;
+        const obj = m as Record<string, string>;
+        return obj.providerID && obj.id ? `${obj.providerID}/${obj.id}` : (obj.id ?? String(m));
+      });
+    }
+    if (models && typeof models === 'object') {
+      // models is keyed by model ID: { "claude-opus-4-5": { id, providerID, name, ... }, ... }
+      return Object.values(models as Record<string, unknown>).map((m) => {
+        const obj = m as Record<string, string>;
+        return obj.providerID && obj.id ? `${obj.providerID}/${obj.id}` : (obj.id ?? String(m));
+      });
+    }
+    return [];
+  }
+
   if (Array.isArray(data)) {
-    providers = (data as ProviderInfo[]);
+    // Array of providers from live OpenCode server or fallback
+    providers = (data as Record<string, unknown>[]).map((p) => ({
+      id: (p.id as string) ?? '',
+      name: (p.name as string) ?? (p.label as string) ?? (p.id as string),
+      label: p.label as string | undefined,
+      models: extractModels(p.models, (p.id as string) ?? ''),
+    }));
   } else if (data && typeof data === 'object') {
-    // OpenCode /config/providers may return { anthropic: { models: [...] }, ... }
-    providers = Object.entries(data as Record<string, unknown>).map(([id, val]) => {
-      const v = val as Record<string, unknown>;
-      const models = Array.isArray(v?.models)
-        ? (v.models as { id: string }[]).map((m) => (typeof m === 'string' ? m : `${id}/${m.id}`))
-        : [];
-      return { id, name: (v?.name as string) ?? id, models };
-    });
+    const obj = data as Record<string, unknown>;
+    // OpenCode live /config/providers may return { providers: [...], default: {...} }
+    if (Array.isArray(obj.providers)) {
+      providers = (obj.providers as Record<string, unknown>[]).map((p) => ({
+        id: (p.id as string) ?? '',
+        name: (p.name as string) ?? (p.label as string) ?? (p.id as string),
+        label: p.label as string | undefined,
+        models: extractModels(p.models, (p.id as string) ?? ''),
+      }));
+    } else {
+      // Legacy: { anthropic: { models: [...] }, google: { models: [...] }, ... }
+      providers = Object.entries(obj).map(([id, val]) => {
+        const v = val as Record<string, unknown>;
+        return {
+          id,
+          name: (v?.name as string) ?? id,
+          models: extractModels(v?.models, id),
+        };
+      });
+    }
   }
   return { providers, isLoading, error };
 }

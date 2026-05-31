@@ -1,0 +1,16 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]: J
+    - heading "Jira Power UI" [level=1] [ref=e6]
+    - paragraph [ref=e7]: Log in with your Jira account
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - text: Username
+      - textbox "Username" [ref=e12]:
+        - /placeholder: e.g. SangNT
+    - generic [ref=e13]:
+      - text: Password
+      - textbox "Password" [ref=e14]:
+        - /placeholder: Your Jira password
+    - button "Log in" [ref=e15]
+  - paragraph [ref=e16]: Connecting to task.ascvn.com.vn
