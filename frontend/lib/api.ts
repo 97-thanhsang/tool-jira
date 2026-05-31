@@ -11,6 +11,19 @@ export const api = axios.create({
   baseURL: `${API_URL}/api/jira`,
 });
 
+// Generic backend client (không prefix /api/jira) — dùng cho OpenCode routes
+export const apiBackend = axios.create({
+  baseURL: API_URL,
+});
+
+apiBackend.interceptors.request.use((config) => {
+  const auth = getAuthHeader();
+  if (auth) {
+    config.headers['X-Jira-Auth'] = auth;
+  }
+  return config;
+});
+
 api.interceptors.request.use((config) => {
   const auth = getAuthHeader();
   if (auth) {

@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import jiraRouter from './routes/jira';
 import aiRouter from './routes/ai';
+import opencodeRouter from './routes/opencode';
 import './db';
 
 const app = express();
@@ -40,6 +41,9 @@ app.use('/api/jira', jiraRouter);
 
 // AI routes: /api/ai/* → Google Gemini (stateless, key per request)
 app.use('/api/ai', aiRouter);
+
+// OpenCode integration: /api/opencode/*
+app.use('/api/opencode', opencodeRouter);
 
 app.listen(config.port, () => {
   console.log(`Backend running at http://localhost:${config.port}`);
