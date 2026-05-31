@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { AlertTriangle, CalendarDays, Search, Loader2 } from 'lucide-react';
 import { useWorkEst } from '@/hooks/use-work-est';
 import { FilterBar } from '@/components/shared/filter-bar';
@@ -24,17 +24,8 @@ export default function WorkEstPage() {
     hasLoaded, loadExistingData, isLoadingExisting,
     hasAllocated,
     distributionErrors,
+    memberSubTasks, isLoadingMemberSubTasks,
   } = useWorkEst(parentKeys);
-
-  // Set default filters after mount (mirror My Issues)
-  useEffect(() => {
-    setFilters(prev => ({
-      ...prev,
-      statusIn: ['Cancelled', 'Closed', 'Done', 'Rejected'],
-      statusExclude: true,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleAddParent = useCallback((key: string) => setParentKeys(prev => [...prev, key]), []);
   const handleRemoveParent = useCallback((key: string) => setParentKeys(prev => prev.filter(k => k !== key)), []);
@@ -112,10 +103,10 @@ export default function WorkEstPage() {
           {/* Nút Load */}
           <button
             onClick={loadExistingData}
-            disabled={isLoadingExisting || !dateRange.from || !dateRange.to}
+            disabled={isLoadingExisting || isLoadingMemberSubTasks}
             className="inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-md bg-[#0052CC] text-white hover:bg-[#0065FF] disabled:opacity-50 disabled:cursor-not-allowed transition-colors ml-auto"
           >
-            {isLoadingExisting ? (
+            {(isLoadingExisting || isLoadingMemberSubTasks) ? (
               <><Loader2 size={14} className="animate-spin" /> Đang tải...</>
             ) : (
               <><Search size={14} /> Tải dữ liệu</>
@@ -140,14 +131,14 @@ export default function WorkEstPage() {
         />
 
         {/* Step B2: Sub-task table */}
-        {totalCount > 0 && (
+        {(totalCount > 0 || memberSubTasks.length > 0) && (
           <>
             <div className="flex items-center gap-2">
               <FilterBar
                 filters={filters}
                 onChange={(f: UnifiedFilters) => setFilters(f)}
               />
-              <span className="text-[11px] text-[#5E6C84] dark:text-gray-400 shrink-0">({selectedIds.size}/{filteredCount} chọn)</span>
+              <span className="text-[11px] text-[#5E6C84] dark:text-gray-400 shrink-0">({selectedIds.size}/{subTasks.length} chọn)</span>
             </div>
             <EstSubTaskTable
               subTasks={subTasks}
@@ -200,6 +191,13 @@ export default function WorkEstPage() {
             <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 bg-[#F4F5F7] dark:bg-gray-800 px-2 py-0.5 rounded">
               {hasAllocated ? 'Card dashed = (cũ) · Card màu = (mới)' : 'Log = (cũ) · Est = card màu'}
             </span>
+            {/* Error banner inline với timeline header */}
+            {distributionErrors && distributionErrors.length > 0 && (
+              <div className="flex items-center gap-2 ml-auto">
+                <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                <span className="text-xs font-semibold text-red-600 dark:text-red-400">{distributionErrors[0]}</span>
+              </div>
+            )}
           </div>
           <EstTimeline
             schedule={distribution.schedule}

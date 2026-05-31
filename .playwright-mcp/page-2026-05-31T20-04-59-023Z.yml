@@ -1,0 +1,57 @@
+- generic [active] [ref=e1]:
+  - main [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - img [ref=e6]
+        - heading "Work Estimate Schedule" [level=1] [ref=e8]
+        - generic [ref=e9]: Lập kế hoạch & phân bổ estimate
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]: A
+          - generic [ref=e13]: Xem workload của member
+        - generic [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]: Nhân sự
+            - combobox [ref=e17]:
+              - option "Chính tôi" [selected]
+              - option "Sang Nguyen Thanh"
+              - option "Phat Nguyen Hong"
+              - option "Hieu Dao Tao"
+              - option "Nghia Doan Trong"
+              - option "Tri Ho Dang"
+              - option "Thinh Tran Pham Quan"
+              - option "Huy Nguyen Quoc"
+              - option "Linh Pham Thi"
+              - option "Minh Nguyen Van"
+              - option "Duc Le Minh"
+              - option "Anh Nguyen Tuan"
+              - option "Tuan Nguyen Anh"
+          - generic [ref=e19]:
+            - img [ref=e21]
+            - textbox [ref=e23]: 2026-06-01
+            - generic [ref=e24]: →
+            - textbox [ref=e25]: 2026-06-15
+          - generic [ref=e26]: 11 ngày · 88h
+          - generic [ref=e27]: (Bỏ T7/CN)
+          - button "Tải dữ liệu" [ref=e28]:
+            - img [ref=e29]
+            - text: Tải dữ liệu
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]: B
+          - generic [ref=e35]: Phân rã thêm task
+          - generic [ref=e36]: (tùy chọn — thêm task để phân bổ cho member)
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - img [ref=e40]
+            - textbox "Nhập issue key hoặc URL Jira..." [ref=e43]
+          - button "Thêm" [disabled] [ref=e45]:
+            - img [ref=e46]
+            - text: Thêm
+        - generic [ref=e48]:
+          - button "Phân rã sub-task" [disabled] [ref=e49]:
+            - img [ref=e50]
+            - text: Phân rã sub-task
+          - generic [ref=e55]: "Phân rã cho: 2026-06-01 → 2026-06-15"
+  - button "Open Next.js Dev Tools" [ref=e61] [cursor=pointer]:
+    - img [ref=e62]

@@ -103,8 +103,10 @@ export function PencilV2Modal({ issue, estimated, onConfirm, onClose }: PencilV2
     if (summary !== issue.fields.summary) drafts.summary = summary;
     if (duedate !== (issue.fields.duedate ?? '')) drafts.duedate = duedate || undefined;
     const newEst = parseFloat(estHours);
-    if (!isNaN(newEst) && newEst > 0 && Math.round(newEst * 3600) !== estimated) {
-      drafts.originalEstimate = newEst;
+    const estCleared = estHours.trim() === '' && estimated > 0;
+    const estChanged = !isNaN(newEst) && newEst >= 0 && Math.round(newEst * 3600) !== estimated;
+    if (estCleared || estChanged) {
+      drafts.originalEstimate = estCleared ? 0 : newEst;
     }
     if (selectedPriority !== (issue.fields.priority?.name ?? '')) {
       const p = PRIORITY_OPTIONS.find(o => o.name === selectedPriority);

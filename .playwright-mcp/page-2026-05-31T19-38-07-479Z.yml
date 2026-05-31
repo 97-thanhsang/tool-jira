@@ -1,0 +1,131 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e7]: J
+          - generic [ref=e8]: Jira Power UI
+        - button "Collapse sidebar" [ref=e9]:
+          - img [ref=e10]
+      - navigation [ref=e13]:
+        - generic [ref=e14]:
+          - button "My Workspace" [ref=e15]:
+            - img [ref=e16]
+            - text: My Workspace
+          - link "My Board" [ref=e18] [cursor=pointer]:
+            - /url: /board
+            - img [ref=e19]
+            - generic [ref=e24]: My Board
+          - link "Dashboard" [ref=e25] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e26]
+            - generic [ref=e28]: Dashboard
+          - link "My Issues" [ref=e29] [cursor=pointer]:
+            - /url: /issues
+            - img [ref=e30]
+            - generic [ref=e33]: My Issues
+          - link "Worklog" [ref=e34] [cursor=pointer]:
+            - /url: /worklog
+            - img [ref=e35]
+            - generic [ref=e38]: Worklog
+          - link "OpenCode" [ref=e39] [cursor=pointer]:
+            - /url: /opencode
+            - img [ref=e40]
+            - generic [ref=e43]: OpenCode
+        - generic [ref=e44]:
+          - button "Team" [ref=e45]:
+            - img [ref=e46]
+            - text: Team
+          - link "Team Dashboard" [ref=e48] [cursor=pointer]:
+            - /url: /team
+            - img [ref=e49]
+            - generic [ref=e54]: Team Dashboard
+          - link "Team Plan" [ref=e55] [cursor=pointer]:
+            - /url: /team-plan
+            - img [ref=e56]
+            - generic [ref=e58]: Team Plan
+          - link "Work Est" [ref=e59] [cursor=pointer]:
+            - /url: /work-est
+            - img [ref=e60]
+            - generic [ref=e62]: Work Est
+        - generic [ref=e63]:
+          - button "System" [ref=e64]:
+            - img [ref=e65]
+            - text: System
+          - link "Settings" [ref=e67] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e68]
+            - generic [ref=e71]: Settings
+          - link "Open Jira" [ref=e72] [cursor=pointer]:
+            - /url: https://task.ascvn.com.vn
+            - img [ref=e73]
+            - generic [ref=e77]: Open Jira
+      - generic [ref=e78]:
+        - button "Notifications" [ref=e80]:
+          - img [ref=e82]
+          - text: Notifications
+        - generic [ref=e85]:
+          - generic [ref=e87]: SN
+          - generic [ref=e88]:
+            - paragraph [ref=e89]: Sang Nguyen Thanh
+            - paragraph [ref=e90]: ntsang@ascvn.edu.vn
+        - button "Log out" [ref=e91]:
+          - img [ref=e92]
+          - text: Log out
+    - main [ref=e95]:
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - img [ref=e98]
+          - heading "Work Estimate Schedule" [level=1] [ref=e100]
+          - generic [ref=e101]: Lập kế hoạch & phân bổ estimate
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - generic [ref=e104]: A
+            - generic [ref=e105]: Xem workload của member
+          - generic [ref=e106]:
+            - generic [ref=e107]:
+              - generic [ref=e108]: Nhân sự
+              - combobox [ref=e109]:
+                - option "Chính tôi" [selected]
+                - option "Sang Nguyen Thanh"
+                - option "Phat Nguyen Hong"
+                - option "Hieu Dao Tao"
+                - option "Nghia Doan Trong"
+                - option "Tri Ho Dang"
+                - option "Thinh Tran Pham Quan"
+                - option "Huy Nguyen Quoc"
+                - option "Linh Pham Thi"
+                - option "Minh Nguyen Van"
+                - option "Duc Le Minh"
+                - option "Anh Nguyen Tuan"
+                - option "Tuan Nguyen Anh"
+            - generic [ref=e111]:
+              - img [ref=e113]
+              - textbox [ref=e115]: 2026-06-01
+              - generic [ref=e116]: →
+              - textbox [ref=e117]: 2026-06-15
+            - generic [ref=e118]: 11 ngày · 88h
+            - generic [ref=e119]: (Bỏ T7/CN)
+            - button "Tải dữ liệu" [ref=e120]:
+              - img [ref=e121]
+              - text: Tải dữ liệu
+        - generic [ref=e124]:
+          - generic [ref=e125]:
+            - generic [ref=e126]: B
+            - generic [ref=e127]: Phân rã thêm task
+            - generic [ref=e128]: (tùy chọn — thêm task để phân bổ cho member)
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - img [ref=e132]
+              - textbox "Nhập issue key hoặc URL Jira..." [ref=e135]
+            - button "Thêm" [disabled] [ref=e137]:
+              - img [ref=e138]
+              - text: Thêm
+          - generic [ref=e140]:
+            - button "Phân rã sub-task" [disabled] [ref=e141]:
+              - img [ref=e142]
+              - text: Phân rã sub-task
+            - generic [ref=e147]: "Phân rã cho: 2026-06-01 → 2026-06-15"
+  - button "Open Next.js Dev Tools" [ref=e153] [cursor=pointer]:
+    - img [ref=e154]
+  - alert [ref=e157]

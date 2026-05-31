@@ -251,6 +251,56 @@ export async function fetchSubTasks(
   });
 }
 
+/** Fetch ALL sub-tasks assigned to a specific user (Section B). No date range filter. */
+export async function fetchSubTasksByAssignee(
+  username?: string,
+): Promise<WorkEstSubTask[]> {
+  const userFilter = username ? `"${username}"` : 'currentUser()';
+  const jql = `assignee = ${userFilter} AND issuetype = Sub-task ORDER BY priority DESC, duedate ASC`;
+  const r = await api.get<{ issues: SubTaskRaw[] }>('/search', {
+    params: {
+      jql,
+      maxResults: 500,
+      fields: 'summary,issuetype,project,timetracking,status,priority,duedate,assignee,parent,created,updated,reporter,worklog',
+    },
+  });
+  return (r.data.issues ?? []).map(issue => {
+    const f = issue.fields;
+    const est = f.timetracking?.originalEstimateSeconds ?? 0;
+    const loggedSecs = f.worklog?.worklogs?.reduce((s, w) => s + (w.timeSpentSeconds ?? 0), 0) ?? 0;
+    return {
+      key: issue.key,
+      issueId: issue.id,
+      summary: f.summary ?? '',
+      issueTypeName: f.issuetype?.name ?? 'Sub-task',
+      issueTypeIconUrl: f.issuetype?.iconUrl ?? '',
+      projectKey: f.project?.key ?? '',
+      projectName: f.project?.name ?? '',
+      status: f.status?.name ?? '',
+      priority: f.priority?.name ?? 'Medium',
+      assignee: f.assignee?.name ?? null,
+      assigneeDisplayName: f.assignee?.displayName ?? null,
+      assigneeAvatarUrl: f.assignee?.avatarUrls?.['24x24'] ?? null,
+      reporter: f.reporter?.name ?? null,
+      reporterDisplayName: f.reporter?.displayName ?? null,
+      reporterAvatarUrl: f.reporter?.avatarUrls?.['24x24'] ?? null,
+      originalEstimateSeconds: est,
+      originalEstimateDisplay: formatDuration(est),
+      loggedSeconds: loggedSecs,
+      loggedDisplay: formatDuration(loggedSecs),
+      duedate: f.duedate,
+      created: f.created ?? null,
+      updated: f.updated ?? null,
+      parentKey: f.parent?.key ?? null,
+      parentSummary: f.parent?.fields?.summary ?? null,
+      parentIssueTypeName: f.parent?.fields?.issuetype?.name ?? null,
+      parentIssueTypeIconUrl: f.parent?.fields?.issuetype?.iconUrl ?? null,
+      parentStatus: f.parent?.fields?.status?.name ?? null,
+      manualEstimateHours: null,
+    };
+  });
+}
+
 /** Fetch ANY sub-tasks that have duedate OR worklogs in the given date range.
  *  @param username - If provided, filters by this user's assigned tasks and worklogs.
  *                    If empty/undefined, uses `currentUser()` (default).
@@ -637,57 +687,71 @@ export function distributeEstimates(
 
   const totalEstimateSeconds = workingDays.length * MAX_PER_DAY;
 
-  // 2. Filter selected tasks — LOCKED vs ACTIVE
-  const activeTasks: WorkEstSubTask[] = [];
+  // 2. Filter & sort selected tasks
+  const tasks: TaskWithAssigned[] = groupSortTasks(subTasks.filter(t => t.loggedSeconds < MAX_PER_TASK).map(t => ({ ...t, _assigned: 0 })));
 
-  for (const t of subTasks) {
-    if (t.loggedSeconds < MAX_PER_TASK) {
-      activeTasks.push(t);
-    }
-  }
-
-  // 3. Even split
-  let secsPerTask = 0;
-  if (activeTasks.length > 0) {
-    secsPerTask = Math.floor(totalEstimateSeconds / activeTasks.length / SLOT) * SLOT;
-  }
-
-  // 4. Validate — must have at least 1 active task
-  if (activeTasks.length === 0) {
+  // 3. Validate
+  if (tasks.length === 0) {
     errors.push('Tất cả sub-task đã chọn đều đã log >= 8h. Không có task nào để phân rã.');
   }
 
-  // 5. Assign sizes
-  const tasks: TaskWithAssigned[] = groupSortTasks(subTasks.map(t => {
-    const isActive = t.loggedSeconds < MAX_PER_TASK;
-    let assigned: number;
-    if (isActive && activeTasks.length > 0) {
-      assigned = Math.min(secsPerTask, MAX_PER_TASK);
-    } else {
-      assigned = 0;
-    }
-    return { ...t, _assigned: assigned };
-  }));
+  // 4. Assign sizes — phân bổ linh hoạt: mỗi ngày tính số task phù hợp
+  //    tasksForDay = ceil(remainingTasks / remainingDays)
+  //    Mỗi task nhận: dayCapacity / tasksForDay (làm tròn 0.5h), task cuối lấy phần dư
+  const dayAllocs: Map<string, WorkEstAllocation[]> = new Map();
+  const dayCapacity = new Map<string, number>();
+  for (const d of workingDays) {
+    dayCapacity.set(d, MAX_PER_DAY);
+    dayAllocs.set(d, []);
+  }
 
-  // 5b. Redistribute remainder to fill all days
-  const totalAssigned = tasks.reduce((s, t) => s + t._assigned, 0);
-  let remainder = totalEstimateSeconds - totalAssigned;
-  if (remainder > 0) {
-    // Give remainder to active tasks (capped at 8h each)
-    for (const t of tasks) {
-      if (t._assigned > 0 && remainder > 0) {
-        const add = Math.min(remainder, MAX_PER_TASK - t._assigned);
-        t._assigned += add;
-        remainder -= add;
-        if (remainder <= 0) break;
-      }
+  let remainingTasks = tasks.length;
+  const remainingDaysList = [...workingDays]; // copy
+  for (let di = 0; di < remainingDaysList.length && remainingTasks > 0; di++) {
+    const day = remainingDaysList[di];
+    const cap = dayCapacity.get(day)!;
+    const remainingDays = remainingDaysList.length - di;
+    const tasksForDay = Math.max(1, Math.ceil(remainingTasks / remainingDays));
+
+    // Tính size cơ bản cho mỗi task (trừ task cuối)
+    const baseSecs = Math.floor(cap / tasksForDay / SLOT) * SLOT;
+    // Task cuối nhận phần dư
+    let used = 0;
+    for (let ti = 0; ti < tasksForDay && remainingTasks > 0; ti++) {
+      const isLast = ti === tasksForDay - 1;
+      const allocSecs = isLast ? cap - used : baseSecs;
+      if (allocSecs < SLOT) { used += allocSecs; continue; } // skip < 0.5h
+
+      const task = tasks[tasks.length - remainingTasks];
+      task._assigned = allocSecs;
+      used += allocSecs;
+      remainingTasks--;
+
+      dayAllocs.get(day)!.push({
+        issueKey: task.key,
+        summary: task.summary,
+        projectKey: task.projectKey,
+        seconds: allocSecs,
+        hours: Math.round((allocSecs / 3600) * 10) / 10,
+        status: task.status,
+        priority: task.priority,
+        assigneeDisplayName: task.assigneeDisplayName,
+        issueTypeName: task.issueTypeName,
+        issueTypeIconUrl: task.issueTypeIconUrl,
+        parentKey: task.parentKey,
+        parentSummary: task.parentSummary,
+      });
     }
   }
-  // Still not enough capacity → warn (even after giving every task up to 8h)
-  if (remainder > 0) {
-    const remainingHours = Math.round(remainder / 3600 * 10) / 10;
-    const filledPct = Math.round((totalEstimateSeconds - remainder) / totalEstimateSeconds * 100);
-    errors.push(`Không đủ sub-task. Chỉ phân rã được ${filledPct}% dung lượng (còn ${remainingHours}h bỏ trống). Cần thêm ${Math.ceil(remainder / MAX_PER_TASK)} sub-task nữa.`);
+
+  // Validate: task nào chưa được gán (._assigned = 0)
+  const unassignedCount = tasks.filter(t => t._assigned <= 0).length;
+  if (unassignedCount > 0) {
+    errors.push(`Không đủ ngày cho ${unassignedCount} sub-task. ${workingDays.length} ngày chỉ đủ cho ${tasks.length - unassignedCount} sub-task.`);
+  }
+  const filledHours = tasks.reduce((s, t) => s + t._assigned, 0);
+  if (filledHours < totalEstimateSeconds && unassignedCount === 0) {
+    errors.push(`Còn ${Math.round((totalEstimateSeconds - filledHours) / 3600 * 10) / 10}h trống. Cần thêm sub-task.`);
   }
 
   // 6. Greedy fill — place tasks into days, max 8h per day
@@ -727,46 +791,7 @@ export function distributeEstimates(
     }
   }
 
-  const dayAllocs: Map<string, WorkEstAllocation[]> = new Map();
-  const dayRemaining: Map<string, number> = new Map();
-
-  for (const d of workingDays) {
-    dayRemaining.set(d, MAX_PER_DAY);
-    dayAllocs.set(d, []);
-  }
-
-  let dayIdx = 0;
-
-  for (const task of tasks) {
-    let remainingSecs = task._assigned;
-    while (remainingSecs > 0 && dayIdx < workingDays.length) {
-      const day = workingDays[dayIdx];
-      const avail = dayRemaining.get(day) ?? 0;
-      if (avail <= 0) { dayIdx++; continue; }
-      const alloc = Math.min(remainingSecs, avail);
-      if (alloc > 0) {
-        dayAllocs.get(day)!.push({
-          issueKey: task.key,
-          summary: task.summary,
-          projectKey: task.projectKey,
-          seconds: alloc,
-          hours: Math.round((alloc / 3600) * 10) / 10,
-          status: task.status,
-          priority: task.priority,
-          assigneeDisplayName: task.assigneeDisplayName,
-          issueTypeName: task.issueTypeName,
-          issueTypeIconUrl: task.issueTypeIconUrl,
-          parentKey: task.parentKey,
-          parentSummary: task.parentSummary,
-        });
-        dayRemaining.set(day, avail - alloc);
-        remainingSecs -= alloc;
-      }
-      if ((dayRemaining.get(day) ?? 0) <= 0) dayIdx++;
-    }
-  }
-
-  // 7. Build schedule
+  // 5. Build schedule
   const schedule: WorkEstDaySchedule[] = workingDays.map(date => {
     const allocs = dayAllocs.get(date) ?? [];
     const totalSeconds = allocs.reduce((s, a) => s + a.seconds, 0);

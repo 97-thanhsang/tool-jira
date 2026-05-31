@@ -199,7 +199,11 @@ export default function IssuesPage() {
               fields.duedate = value || null;
               break;
             case 'originalEstimate':
-              fields.timetracking = { originalEstimate: `${value}h` };
+              if (typeof value === 'number' && !isNaN(value) && value > 0) {
+                fields.timetracking = { originalEstimate: `${value}h` };
+              } else {
+                fields.timetracking = { originalEstimate: null };
+              }
               break;
           }
         }
@@ -407,7 +411,7 @@ export default function IssuesPage() {
                               switch (field) {
                                 case 'summary': return issue.fields.summary ?? '';
                                 case 'duedate': return issue.fields.duedate ?? 'not set';
-                                case 'originalEstimate': return issue.fields.timetracking?.originalEstimateSeconds ? `${(issue.fields.timetracking.originalEstimateSeconds / 3600).toFixed(1)}h` : '0h';
+                                case 'originalEstimate': return issue.fields.timetracking?.originalEstimateSeconds ? `${(issue.fields.timetracking.originalEstimateSeconds / 3600).toFixed(1)}h` : 'not set';
                                 case 'priority': return issue.fields.priority?.name ?? 'None';
                                 case 'status': return issue.fields.status.name;
                                 case 'assignee': return issue.fields.assignee?.displayName ?? 'Unassigned';
@@ -418,7 +422,10 @@ export default function IssuesPage() {
                               switch (field) {
                                 case 'summary': return String(value);
                                 case 'duedate': return String(value || 'cleared');
-                                case 'originalEstimate': return `${String(value)}h`;
+                                case 'originalEstimate': {
+                                  const v = Number(value);
+                                  return (!isNaN(v) && v > 0) ? `${v}h` : 'cleared';
+                                }
                                 case 'status': return typeof value === 'object' && value && 'name' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).name) : String(value);
                                 case 'priority': return typeof value === 'object' && value && 'name' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).name) : String(value);
                                 case 'assignee': return value === null ? 'Unassigned' : typeof value === 'object' && value && 'displayName' in (value as Record<string, unknown>) ? String((value as Record<string, unknown>).displayName) : String(value);

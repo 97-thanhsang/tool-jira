@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import useSWR from 'swr';
-import { fetchSubTasks, fetchTasksByDateRange, distributeEstimates, buildExistingSchedule } from '@/lib/work-est-api';
+import { fetchSubTasks, fetchTasksByDateRange, distributeEstimates, buildExistingSchedule, fetchSubTasksByAssignee } from '@/lib/work-est-api';
 import type { WorkEstSubTask, WorkEstDistributeResult } from '@/lib/work-est-api';
 import type { UnifiedFilters } from '@/lib/filter-constants';
 
@@ -42,6 +42,8 @@ export function useWorkEst(parentKeys: string[]) {
   // Load state — whether user has clicked "Load" to view member's existing workload
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+  const [memberSubTasks, setMemberSubTasks] = useState<WorkEstSubTask[]>([]);
+  const [isLoadingMemberSubTasks, setIsLoadingMemberSubTasks] = useState(false);
   // Allocation state — whether user has clicked "Phân rã" to distribute selected sub-tasks
   const [hasAllocated, setHasAllocated] = useState(false);
   // Distribution errors — non-null when distribution has errors (partial result still shown)
@@ -67,24 +69,46 @@ export function useWorkEst(parentKeys: string[]) {
     const { from, to } = dateRangeRef.current;
     const username = selectedUserRef.current || undefined;
 
-    if (!from || !to) return;
+    // Phần 1: Load workload cho timeline (chỉ khi có date range)
+    if (from && to) {
+      setIsLoadingExisting(true);
+      try {
+        const dateRangeTasks = await fetchTasksByDateRange(from, to, username);
+        const result = buildExistingSchedule(dateRangeTasks, from, to);
+        setDistribution(result);
+        setHasLoaded(true);
+        setHasAllocated(false);
+      } finally {
+        setIsLoadingExisting(false);
+      }
+    }
 
-    setIsLoadingExisting(true);
+    // Phần 2: Luôn fetch ALL sub-task của member vào Section B (không cần date range)
+    setIsLoadingMemberSubTasks(true);
     try {
-      const dateRangeTasks = await fetchTasksByDateRange(from, to, username);
-      const result = buildExistingSchedule(dateRangeTasks, from, to);
-      setDistribution(result);
-      setHasLoaded(true);
-      setHasAllocated(false);
+      const tasks = await fetchSubTasksByAssignee(username);
+      // Spread để tạo new reference, đảm bảo React detect change
+      setMemberSubTasks(tasks ? [...tasks] : []);
+    } catch {
+      setMemberSubTasks([]);
     } finally {
-      setIsLoadingExisting(false);
+      setIsLoadingMemberSubTasks(false);
     }
   }, []);
 
-  // ── Client-side filter ───────────────────────────────────────────────
+  // ── Client-side filter (combined: memberSubTasks + parent-key subTasks) ───
+  const allSource = useMemo((): WorkEstSubTask[] => {
+    const seen = new Set<string>();
+    const combined: WorkEstSubTask[] = [];
+    for (const st of [...memberSubTasks, ...(subTasks ?? [])]) {
+      if (!seen.has(st.key)) { seen.add(st.key); combined.push(st); }
+    }
+    return combined;
+  }, [memberSubTasks, subTasks]);
+
   const filteredSubTasks = useMemo((): WorkEstSubTask[] => {
-    if (!subTasks) return [];
-    return subTasks.filter(st => {
+    if (!allSource) return [];
+    return allSource.filter(st => {
       if (filters.searchText) {
         const q = filters.searchText.toLowerCase();
         if (!st.key.toLowerCase().includes(q) && !st.summary.toLowerCase().includes(q)) return false;
@@ -213,6 +237,7 @@ export function useWorkEst(parentKeys: string[]) {
     setHasLoaded(false);
     setHasAllocated(false);
     setDistributionErrors(null);
+    setMemberSubTasks([]);
   }, []);
 
   // ── Selection ────────────────────────────────────────────────────────
@@ -251,6 +276,7 @@ export function useWorkEst(parentKeys: string[]) {
     selectedUser, setSelectedUser,
     distribution, runDistribution, resetDistribution,
     hasLoaded, loadExistingData, isLoadingExisting,
+    memberSubTasks, isLoadingMemberSubTasks,
     hasAllocated,
     distributionErrors,
   };
