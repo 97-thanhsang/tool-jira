@@ -173,6 +173,11 @@ export function useWorkEst(parentKeys: string[]) {
       } else if (st.loggedSeconds > 0) {
         existingAllocs[from] = (existingAllocs[from] ?? 0) + st.loggedSeconds;
       }
+
+      // B. Count existing estimates by duedate (member's scheduled tasks)
+      if (st.duedate && st.originalEstimateSeconds > 0) {
+        existingAllocs[st.duedate] = (existingAllocs[st.duedate] ?? 0) + st.originalEstimateSeconds;
+      }
     }
 
     // 3. Display: all tasks with worklogs + unchecked from list (dedup by key)

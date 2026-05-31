@@ -94,6 +94,8 @@ interface MergedTaskInfo {
   status: string;
   priority: string;
   assigneeDisplayName: string | null;
+  parentKey: string | null;
+  parentSummary: string | null;
   estHours: number;
   logHours: number;
 }
@@ -117,6 +119,11 @@ function TaskCard({ info }: { info: MergedTaskInfo }) {
         <TypeBadge typeName={info.issueTypeName} iconUrl={info.issueTypeIconUrl} />
         <span className={cn('font-semibold truncate text-xs leading-none', hasLog && !hasEst ? 'text-[#5E6C84] dark:text-gray-400' : 'text-[#172B4D] dark:text-gray-100')}>{info.issueKey}</span>
         <span className="text-[10px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0 leading-none">{info.projectKey}</span>
+        {info.parentKey && (
+          <span className="text-[9px] text-[#8993A4] dark:text-gray-500 truncate leading-tight shrink-0 max-w-[120px]" title={`${info.parentKey} — ${info.parentSummary ?? ''}`}>
+            {info.parentKey}
+          </span>
+        )}
         <div className="flex-1 min-w-0" />
         {info.status && (
           <span className="text-[9px] px-1.5 py-[1px] rounded font-medium shrink-0 leading-tight"
@@ -195,6 +202,8 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
           status: alloc.status,
           priority: alloc.priority,
           assigneeDisplayName: alloc.assigneeDisplayName,
+          parentKey: alloc.parentKey ?? null,
+          parentSummary: alloc.parentSummary ?? null,
           estHours: alloc.hours,
           logHours: 0,
         });
@@ -216,6 +225,8 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
           status: entry.status,
           priority: entry.priority,
           assigneeDisplayName: entry.assigneeDisplayName,
+          parentKey: entry.parentKey ?? null,
+          parentSummary: entry.parentSummary ?? null,
           estHours: 0,
           logHours: entry.hours,
         });

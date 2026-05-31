@@ -55,6 +55,8 @@ export interface WorkEstAllocation {
   assigneeDisplayName: string | null;
   issueTypeName: string;
   issueTypeIconUrl: string;
+  parentKey?: string | null;
+  parentSummary?: string | null;
 }
 
 export interface WorkEstDaySchedule {
@@ -79,6 +81,8 @@ export interface WorkEstLogEntry {
   status: string;
   priority: string;
   assigneeDisplayName: string | null;
+  parentKey?: string | null;
+  parentSummary?: string | null;
 }
 
 export interface WorkEstDistributeResult {
@@ -296,6 +300,8 @@ export async function fetchTasksByDateRange(
           status: f.status?.name ?? '',
           priority: f.priority?.name ?? 'Medium',
           assigneeDisplayName: f.assignee?.displayName ?? null,
+          parentKey: f.parent?.key ?? null,
+          parentSummary: f.parent?.fields?.summary ?? null,
         });
       }
     }
@@ -440,6 +446,33 @@ function sortSubTasks(tasks: TaskWithAssigned[]): TaskWithAssigned[] {
   });
 }
 
+/** Sort tasks grouped by parent (story), then by priority within each group.
+ *  Sub-tasks of the same parent stay together and are placed on the same days. */
+function groupSortTasks(tasks: TaskWithAssigned[]): TaskWithAssigned[] {
+  // 1. Group by parentKey
+  const groups = new Map<string, { tasks: TaskWithAssigned[]; maxPriority: number }>();
+  for (const t of tasks) {
+    const key = t.parentKey ?? `__ungrouped__${t.key}`;
+    if (!groups.has(key)) groups.set(key, { tasks: [], maxPriority: 0 });
+    const g = groups.get(key)!;
+    g.tasks.push(t);
+    const p = PRIORITY_ORDER[t.priority] ?? 3;
+    if (p > g.maxPriority) g.maxPriority = p;
+  }
+
+  // 2. Sort each group internally by priority
+  for (const [, g] of groups) {
+    g.tasks = sortSubTasks(g.tasks);
+  }
+
+  // 3. Sort groups by max priority DESC
+  const sortedGroups = Array.from(groups.values())
+    .sort((a, b) => b.maxPriority - a.maxPriority);
+
+  // 4. Flatten while preserving group adjacency
+  return sortedGroups.flatMap(g => g.tasks);
+}
+
 /** Build a schedule from existing task data (worklogs + estimates) — for the "Load" phase.
  *  For each task:
  *    - If it has worklogs → show logged hours in `existingLogEntries`
@@ -513,6 +546,8 @@ export function buildExistingSchedule(
             assigneeDisplayName: task.assigneeDisplayName,
             issueTypeName: task.issueTypeName,
             issueTypeIconUrl: task.issueTypeIconUrl,
+            parentKey: task.parentKey,
+            parentSummary: task.parentSummary,
           });
         }
       } else {
@@ -534,6 +569,8 @@ export function buildExistingSchedule(
           assigneeDisplayName: task.assigneeDisplayName,
           issueTypeName: task.issueTypeName,
           issueTypeIconUrl: task.issueTypeIconUrl,
+          parentKey: task.parentKey,
+          parentSummary: task.parentSummary,
         });
       }
     }
@@ -615,17 +652,13 @@ export function distributeEstimates(
     secsPerTask = Math.floor(totalEstimateSeconds / activeTasks.length / SLOT) * SLOT;
   }
 
-  // 4. Validate
+  // 4. Validate — must have at least 1 active task
   if (activeTasks.length === 0) {
     errors.push('Tất cả sub-task đã chọn đều đã log >= 8h. Không có task nào để phân rã.');
   }
-  if (secsPerTask > MAX_PER_TASK) {
-    const N = Math.ceil(totalEstimateSeconds / MAX_PER_TASK);
-    errors.push(`Không đủ sub-task. Cần ít nhất ${N} sub-task để lấp đủ ${workingDays.length} ngày (${totalEstimateSeconds / 3600}h).`);
-  }
 
   // 5. Assign sizes
-  const tasks: TaskWithAssigned[] = sortSubTasks(subTasks.map(t => {
+  const tasks: TaskWithAssigned[] = groupSortTasks(subTasks.map(t => {
     const isActive = t.loggedSeconds < MAX_PER_TASK;
     let assigned: number;
     if (isActive && activeTasks.length > 0) {
@@ -635,6 +668,27 @@ export function distributeEstimates(
     }
     return { ...t, _assigned: assigned };
   }));
+
+  // 5b. Redistribute remainder to fill all days
+  const totalAssigned = tasks.reduce((s, t) => s + t._assigned, 0);
+  let remainder = totalEstimateSeconds - totalAssigned;
+  if (remainder > 0) {
+    // Give remainder to active tasks (capped at 8h each)
+    for (const t of tasks) {
+      if (t._assigned > 0 && remainder > 0) {
+        const add = Math.min(remainder, MAX_PER_TASK - t._assigned);
+        t._assigned += add;
+        remainder -= add;
+        if (remainder <= 0) break;
+      }
+    }
+  }
+  // Still not enough capacity → warn (even after giving every task up to 8h)
+  if (remainder > 0) {
+    const remainingHours = Math.round(remainder / 3600 * 10) / 10;
+    const filledPct = Math.round((totalEstimateSeconds - remainder) / totalEstimateSeconds * 100);
+    errors.push(`Không đủ sub-task. Chỉ phân rã được ${filledPct}% dung lượng (còn ${remainingHours}h bỏ trống). Cần thêm ${Math.ceil(remainder / MAX_PER_TASK)} sub-task nữa.`);
+  }
 
   // 6. Greedy fill — place tasks into days, max 8h per day
   //    dayRemaining starts at MAX_PER_DAY (existing logs displayed separately)
@@ -702,6 +756,8 @@ export function distributeEstimates(
           assigneeDisplayName: task.assigneeDisplayName,
           issueTypeName: task.issueTypeName,
           issueTypeIconUrl: task.issueTypeIconUrl,
+          parentKey: task.parentKey,
+          parentSummary: task.parentSummary,
         });
         dayRemaining.set(day, avail - alloc);
         remainingSecs -= alloc;

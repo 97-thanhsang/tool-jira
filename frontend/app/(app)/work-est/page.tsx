@@ -53,7 +53,7 @@ export default function WorkEstPage() {
   })();
 
   return (
-    <div className="flex flex-col gap-4 p-6 max-w-[1600px] mx-auto">
+    <div className="flex flex-col gap-4 p-6 w-full">
       {/* Header */}
       <div className="flex items-center gap-3">
         <CalendarDays size={24} className="text-[#0052CC]" />
