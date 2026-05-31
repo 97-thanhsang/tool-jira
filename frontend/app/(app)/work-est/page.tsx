@@ -40,6 +40,7 @@ export default function WorkEstPage() {
   const handleRemoveParent = useCallback((key: string) => setParentKeys(prev => prev.filter(k => k !== key)), []);
 
   const canDistribute = selectedIds.size > 0 && !!dateRange.from && !!dateRange.to;
+  const timelineVisible = hasLoaded || hasAllocated;
 
   // Tính số ngày làm việc
   const workingDays = (() => {
@@ -84,18 +85,18 @@ export default function WorkEstPage() {
 
           <div className="w-px h-7 bg-[#DFE1E6] dark:border-gray-700" />
 
-          {/* Chọn ngày */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide shrink-0">Từ</label>
+          {/* Daterange gộp */}
+          <div className="flex items-center border border-[#DFE1E6] dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 overflow-hidden">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#FAFBFC] dark:bg-gray-800/60 border-r border-[#DFE1E6] dark:border-gray-700">
+              <CalendarDays size={14} className="text-[#5E6C84] dark:text-gray-400 shrink-0" />
+            </div>
             <input type="date" value={dateRange.from}
               onChange={e => setDateRange({ ...dateRange, from: e.target.value })}
-              className="px-3 py-1.5 text-sm border border-[#DFE1E6] dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0052CC] w-[140px]" />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-[#5E6C84] dark:text-gray-400 uppercase tracking-wide shrink-0">Đến</label>
+              className="px-2 py-1.5 text-sm bg-transparent text-[#172B4D] dark:text-gray-200 focus:outline-none w-[130px] border-0" />
+            <span className="text-xs text-[#8993A4] dark:text-gray-500 px-1 select-none">→</span>
             <input type="date" value={dateRange.to}
               onChange={e => setDateRange({ ...dateRange, to: e.target.value })}
-              className="px-3 py-1.5 text-sm border border-[#DFE1E6] dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-[#172B4D] dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#0052CC] w-[140px]" />
+              className="px-2 py-1.5 text-sm bg-transparent text-[#172B4D] dark:text-gray-200 focus:outline-none w-[130px] border-0" />
           </div>
 
           {/* Thông tin ngày */}
@@ -122,26 +123,6 @@ export default function WorkEstPage() {
           </button>
         </div>
       </div>
-
-      {/* Timeline: workload hiện tại của member (sau khi load) */}
-      {hasLoaded && distribution && (
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 mb-1">
-            <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-200 uppercase tracking-wide">
-              Workload hiện tại của {selectedUser ? (MEMBER_DISPLAY_NAMES[selectedUser] || selectedUser) : 'bạn'}
-            </span>
-            {!hasAllocated && (
-              <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 bg-[#F4F5F7] dark:bg-gray-800 px-2 py-0.5 rounded">
-                Log: hiện thị (cũ) · Est: hiện thị card màu
-              </span>
-            )}
-          </div>
-          <EstTimeline
-            schedule={distribution.schedule}
-            workingDays={distribution.workingDays}
-          />
-        </div>
-      )}
 
       {/* ═══ Section B: Phân rã task (tùy chọn) ═══ */}
       <div className="space-y-1">
@@ -208,17 +189,22 @@ export default function WorkEstPage() {
         </div>
       </div>
 
-      {/* Timeline: sau khi phân rã */}
-      {hasAllocated && distribution && (
+      {/* ═══ Section C: Timeline (duy nhất — tự động cập nhật) ═══ */}
+      {timelineVisible && distribution && (
         <div className="space-y-1">
           <div className="flex items-center gap-3 mb-1">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[11px] font-bold leading-none">C</span>
-            <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-200 uppercase tracking-wide">Timeline sau khi phân rã</span>
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0052CC] text-white text-[11px] font-bold leading-none shrink-0">C</span>
+            <span className="text-xs font-semibold text-[#172B4D] dark:text-gray-200 uppercase tracking-wide">
+              Timeline — {hasAllocated ? 'Workload + phân bổ mới' : 'Workload hiện tại'} của {selectedUser ? (MEMBER_DISPLAY_NAMES[selectedUser] || selectedUser) : 'bạn'}
+            </span>
+            <span className="text-[10px] text-[#5E6C84] dark:text-gray-400 bg-[#F4F5F7] dark:bg-gray-800 px-2 py-0.5 rounded">
+              {hasAllocated ? 'Card dashed = (cũ) · Card màu = (mới)' : 'Log = (cũ) · Est = card màu'}
+            </span>
           </div>
-        <EstTimeline
-          schedule={distribution.schedule}
-          workingDays={distribution.workingDays}
-        />
+          <EstTimeline
+            schedule={distribution.schedule}
+            workingDays={distribution.workingDays}
+          />
         </div>
       )}
     </div>

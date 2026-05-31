@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { startOfWeek, addDays, format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { WorkEstDaySchedule, WorkEstAllocation, WorkEstLogEntry } from '@/lib/work-est-api';
+import type { WorkEstDaySchedule, WorkEstAllocation } from '@/lib/work-est-api';
 
 interface Props {
   schedule: WorkEstDaySchedule[];
@@ -83,82 +83,84 @@ function getEntryBorderColor(issueKey: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-// ── Allocation Card (giống WorklogEntryCard, chỉ khác hours badge) ─────
+// ── Consolidated Card: shows est and/or log for ONE issueKey ──────────
 
-function AllocationCard({ alloc }: { alloc: WorkEstAllocation }) {
+interface MergedTaskInfo {
+  issueKey: string;
+  summary: string;
+  projectKey: string;
+  issueTypeName: string;
+  issueTypeIconUrl: string;
+  status: string;
+  priority: string;
+  assigneeDisplayName: string | null;
+  estHours: number;
+  logHours: number;
+}
+
+function TaskCard({ info }: { info: MergedTaskInfo }) {
+  const hasEst = info.estHours > 0;
+  const hasLog = info.logHours > 0;
+
   return (
     <div
-      className="px-3 py-2 text-[12px] bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 rounded-sm hover:shadow-sm transition-all group"
-      style={{ borderLeftColor: getEntryBorderColor(alloc.issueKey), borderLeftWidth: '3px' }}
+      className={cn(
+        'px-3 py-2 text-[12px] border rounded-sm transition-all group h-[100px] flex flex-col overflow-hidden',
+        hasLog && !hasEst && 'bg-[#F8F9FA] dark:bg-gray-800/40 border-dashed border-[#DFE1E6] dark:border-gray-700 opacity-70',
+        !hasLog && 'bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 hover:shadow-sm',
+        hasLog && hasEst && 'bg-white dark:bg-gray-800 border border-[#DFE1E6] dark:border-gray-700 hover:shadow-sm',
+      )}
+      style={{ borderLeftColor: getEntryBorderColor(info.issueKey), borderLeftWidth: '3px' }}
     >
-      {/* Row 1: type badge + issue key + project + status */}
-      <div className="flex items-center gap-2 mb-[5px]">
-        <TypeBadge typeName={alloc.issueTypeName} iconUrl={alloc.issueTypeIconUrl} />
-        <span className="font-semibold text-[#172B4D] dark:text-gray-100 truncate text-xs">{alloc.issueKey}</span>
-        <span className="text-[11px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0">{alloc.projectKey}</span>
-        <div className="flex-1" />
-        {alloc.status && (
-          <span className="text-[10px] px-2 py-[1px] rounded font-medium shrink-0"
-            style={{ backgroundColor: getStatusBgColor(alloc.status), color: getStatusColor(alloc.status) }}>
-            {alloc.status}
+      {/* Row 1: type badge + issue key + project + status (fixed) */}
+      <div className="flex items-center gap-1.5 min-w-0 h-[18px] shrink-0">
+        <TypeBadge typeName={info.issueTypeName} iconUrl={info.issueTypeIconUrl} />
+        <span className={cn('font-semibold truncate text-xs leading-none', hasLog && !hasEst ? 'text-[#5E6C84] dark:text-gray-400' : 'text-[#172B4D] dark:text-gray-100')}>{info.issueKey}</span>
+        <span className="text-[10px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0 leading-none">{info.projectKey}</span>
+        <div className="flex-1 min-w-0" />
+        {info.status && (
+          <span className="text-[9px] px-1.5 py-[1px] rounded font-medium shrink-0 leading-tight"
+            style={{ backgroundColor: getStatusBgColor(info.status), color: getStatusColor(info.status) }}>
+            {info.status}
           </span>
+        )}
+        {hasLog && !hasEst && (
+          <span className="text-[8px] text-[#8993A4] dark:text-gray-500 italic shrink-0 leading-none">(cũ)</span>
         )}
       </div>
 
-      {/* Row 2: summary */}
-      <p className="text-[11px] text-[#5E6C84] dark:text-gray-400 leading-relaxed mb-[5px]" title={alloc.summary}>{alloc.summary}</p>
+      {/* Row 2: summary (flex-1, truncate) */}
+      <p className={cn('text-[10px] leading-snug mt-1 line-clamp-2', hasLog && !hasEst ? 'text-[#8993A4] dark:text-gray-500' : 'text-[#5E6C84] dark:text-gray-400')} title={info.summary}>
+        {info.summary}
+      </p>
 
-      {/* Row 3: hours badge (giống log badge) */}
-      <div className="flex items-center justify-between text-[10px] mb-[3px]">
-        <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500" />
-        <div className="flex items-center gap-2.5">
-          <span className="font-bold px-1.5 py-[1px] rounded text-[11px]"
-            style={{ backgroundColor: alloc.hours > 0 ? '#DEEBFF' : '#F4F5F7', color: alloc.hours > 0 ? '#0052CC' : '#8993A4' }}>
-            {alloc.hours}h
-          </span>
-        </div>
-      </div>
-
-      {/* Row 4: priority + assignee */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          {alloc.priority && (
-            <span className="text-[10px] px-2 py-[2px] rounded font-medium"
-              style={{ backgroundColor: getPriorityBgColor(alloc.priority), color: getPriorityColor(alloc.priority) }}>
-              {alloc.priority}
+      {/* Row 3: priority left, est+log badges right (fixed, bottom-aligned) */}
+      <div className="flex items-center justify-between min-w-0 h-[20px] shrink-0 mt-auto gap-1">
+        <div className="flex items-center gap-1 min-w-0">
+          {info.priority && (
+            <span className="text-[9px] px-1.5 py-[1px] rounded font-medium leading-tight shrink-0"
+              style={{ backgroundColor: getPriorityBgColor(info.priority), color: getPriorityColor(info.priority) }}>
+              {info.priority}
             </span>
           )}
-          {alloc.assigneeDisplayName && (
-            <span className="text-[10px] text-[#8993A4] dark:text-gray-500 ml-1">{alloc.assigneeDisplayName}</span>
+          {info.assigneeDisplayName && (
+            <span className="text-[9px] text-[#8993A4] dark:text-gray-500 truncate leading-tight">{info.assigneeDisplayName}</span>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Individual Log Entry Card (1 card per worklog) ─────────────────────
-
-function LogEntryCard({ entry }: { entry: WorkEstLogEntry }) {
-  return (
-    <div
-      className="px-3 py-2 text-[12px] bg-[#F8F9FA] dark:bg-gray-800/40 border border-dashed border-[#DFE1E6] dark:border-gray-700 rounded-sm opacity-70"
-      style={{ borderLeftColor: getEntryBorderColor(entry.issueKey), borderLeftWidth: '3px' }}
-    >
-      <div className="flex items-center gap-2 mb-[5px]">
-        <TypeBadge typeName={entry.issueTypeName} iconUrl={entry.issueTypeIconUrl} />
-        <span className="font-semibold text-[#5E6C84] dark:text-gray-400 text-xs truncate">{entry.issueKey}</span>
-        <span className="text-[10px] text-[#8993A4] dark:text-gray-500 truncate flex-shrink-0">{entry.projectKey}</span>
-        <div className="flex-1" />
-        <span className="text-[9px] text-[#8993A4] dark:text-gray-500 italic shrink-0">(cũ)</span>
-      </div>
-      <p className="text-[11px] text-[#8993A4] dark:text-gray-500 leading-relaxed truncate mb-[5px]" title={entry.summary}>{entry.summary}</p>
-      <div className="flex items-center justify-between text-[10px]">
-        <div className="flex items-center gap-2.5 text-[#8993A4] dark:text-gray-500" />
-        <span className="font-bold px-1.5 py-[1px] rounded text-[11px]"
-          style={{ backgroundColor: '#DEEBFF', color: '#0052CC' }}>
-          {entry.hours}h
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {hasEst && (
+            <span className="inline-flex items-center justify-center gap-0.5 font-semibold px-1.5 py-[1px] rounded text-[10px] leading-tight min-w-[48px] text-center"
+              style={{ backgroundColor: '#DEEBFF', color: '#0052CC' }}>
+              <span className="text-[9px]">⏱</span> {info.estHours}h
+            </span>
+          )}
+          {hasLog && (
+            <span className="inline-flex items-center justify-center gap-0.5 font-semibold px-1.5 py-[1px] rounded text-[10px] leading-tight min-w-[48px] text-center"
+              style={{ backgroundColor: '#E3FCEF', color: '#006644' }}>
+              <span className="text-[9px]">✓</span> {info.logHours}h
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -171,9 +173,57 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
   const dayLabel = format(date, 'EEE');
   const dateLabel = format(date, 'dd/MM');
   const todayFlag = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-  const totalWithExisting = day.totalHours + day.existingHours;
-  const isOver = totalWithExisting > 8;
-  const progressPct = Math.min(100, Math.round((day.totalHours / 8) * 100));
+  const isOver = day.allocations.length > 0 && day.totalHours / day.allocations.length > 8;
+  const progressPct = Math.min(100, Math.round(((day.totalHours + day.existingHours) / 8) * 100));
+
+  // Merge allocations + log entries by issueKey
+  const mergedCards = useMemo((): MergedTaskInfo[] => {
+    const map = new Map<string, MergedTaskInfo>();
+
+    // Collect from new allocations (est)
+    for (const alloc of day.allocations) {
+      const existing = map.get(alloc.issueKey);
+      if (existing) {
+        existing.estHours += alloc.hours;
+      } else {
+        map.set(alloc.issueKey, {
+          issueKey: alloc.issueKey,
+          summary: alloc.summary,
+          projectKey: alloc.projectKey,
+          issueTypeName: alloc.issueTypeName,
+          issueTypeIconUrl: alloc.issueTypeIconUrl,
+          status: alloc.status,
+          priority: alloc.priority,
+          assigneeDisplayName: alloc.assigneeDisplayName,
+          estHours: alloc.hours,
+          logHours: 0,
+        });
+      }
+    }
+
+    // Collect from existing log entries
+    for (const entry of day.existingLogEntries) {
+      const existing = map.get(entry.issueKey);
+      if (existing) {
+        existing.logHours += entry.hours;
+      } else {
+        map.set(entry.issueKey, {
+          issueKey: entry.issueKey,
+          summary: entry.summary,
+          projectKey: entry.projectKey,
+          issueTypeName: entry.issueTypeName,
+          issueTypeIconUrl: entry.issueTypeIconUrl,
+          status: entry.status,
+          priority: entry.priority,
+          assigneeDisplayName: entry.assigneeDisplayName,
+          estHours: 0,
+          logHours: entry.hours,
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.issueKey.localeCompare(b.issueKey));
+  }, [day.allocations, day.existingLogEntries]);
 
   return (
     <div className={cn(
@@ -189,40 +239,35 @@ function DayColumn({ day }: { day: WorkEstDaySchedule }) {
           <span className={cn('text-[10px] font-semibold', todayFlag ? 'text-[#0052CC]' : 'text-[#172B4D] dark:text-gray-200')}>{dayLabel}</span>
           <span className="text-[10px] text-[#5E6C84] dark:text-gray-400">{dateLabel}</span>
         </div>
-        <span className={cn('text-[10px] font-semibold', isOver ? 'text-red-500' : day.totalHours >= 8 ? 'text-green-600' : day.totalHours > 0 ? 'text-[#0052CC]' : 'text-[#C1C7D0]')}>
-          {day.totalHours}h{day.existingHours > 0 && <span className="text-[9px] text-[#8993A4] ml-0.5">+{day.existingHours}h</span>}
-        </span>
+        <div className="flex items-center gap-2">
+          {day.totalHours > 0 && (
+            <span className="text-[10px] font-semibold text-[#0052CC] dark:text-blue-300">⏱ {day.totalHours}h</span>
+          )}
+          {day.totalHours > 0 && day.existingHours > 0 && (
+            <span className="text-[9px] text-[#C1C7D0]">|</span>
+          )}
+          {day.existingHours > 0 && (
+            <span className="text-[10px] font-medium text-[#006644] dark:text-green-400">✓ {day.existingHours}h</span>
+          )}
+          {day.totalHours === 0 && day.existingHours === 0 && (
+            <span className="text-[10px] text-[#C1C7D0]">0h</span>
+          )}
+        </div>
       </div>
 
-      {/* Progress bar */}
-      {day.totalHours > 0 && (
-        <div className="h-1 bg-[#F4F5F7] dark:bg-gray-700 flex-shrink-0">
-          <div className="h-full rounded-r-sm transition-all" style={{ width: `${progressPct}%`, backgroundColor: isOver ? '#DE350B' : '#0052CC' }} />
-        </div>
-      )}
+      {/* Progress bar (based on total est+log) */}
+      <div className="h-1.5 bg-[#F4F5F7] dark:bg-gray-700 flex-shrink-0">
+        <div className={cn('h-full rounded-r-sm transition-all', isOver ? 'bg-red-400' : 'bg-[#0052CC]')}
+          style={{ width: `${Math.min(100, progressPct)}%` }} />
+      </div>
 
-      {/* Existing (old) log entries + new allocation cards */}
+      {/* Merged task cards */}
       <div className="flex-1 space-y-1.5 p-2 overflow-y-auto">
-        {/* Individual log entries (one per worklog) */}
-        {day.existingLogEntries.length > 0 && (
-          <div className="space-y-1 mb-2">
-            {day.existingLogEntries.map((entry, ei) => (
-              <LogEntryCard key={`log-${entry.issueKey}-${ei}`} entry={entry} />
-            ))}
-          </div>
-        )}
-
-        {/* Separator if both old logs and new allocations */}
-        {day.existingLogEntries.length > 0 && day.allocations.length > 0 && (
-          <div className="border-t border-dashed border-[#DFE1E6] dark:border-gray-700 my-1" />
-        )}
-
-        {/* Newly distributed allocations */}
-        {day.allocations.length === 0 && day.existingLogEntries.length === 0 ? (
+        {mergedCards.length === 0 ? (
           <div className="text-[10px] text-[#C1C7D0] dark:text-gray-500 text-center italic pt-8">Trống</div>
         ) : (
-          day.allocations.map(alloc => (
-            <AllocationCard key={`${day.date}-${alloc.issueKey}`} alloc={alloc} />
+          mergedCards.map(card => (
+            <TaskCard key={card.issueKey} info={card} />
           ))
         )}
       </div>

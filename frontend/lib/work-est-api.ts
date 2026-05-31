@@ -486,30 +486,56 @@ export function buildExistingSchedule(
       }
     }
 
-    // B. No worklogs but HAS estimate → show as "planned" allocation on duedate
-    const hasWorklogData = worklogDays && Object.keys(worklogDays).length > 0;
-    if (!hasWorklogData && task.originalEstimateSeconds > 0) {
+    // B. Show estimate as "planned" allocation on duedate (when available)
+    if (task.originalEstimateSeconds > 0) {
       let dayKey: string;
-      if (task.duedate && workingDays.includes(task.duedate)) {
-        dayKey = task.duedate;
+      // If task has worklogs, add estimate on each log day so cards show both est + log
+      const logDays = logEntries
+        ? Object.keys(logEntries).filter(d => workingDays.includes(d))
+        : [];
+      if (logDays.length > 0) {
+        // Spread estimate proportionally across log days
+        const totalSecs = task.originalEstimateSeconds;
+        const perDaySecs = Math.floor(totalSecs / logDays.length / 1800) * 1800;
+        const remainder = totalSecs - perDaySecs * logDays.length;
+        for (let i = 0; i < logDays.length; i++) {
+          const extra = i === logDays.length - 1 ? remainder : 0;
+          const allocSecs = perDaySecs + extra;
+          if (!planAllocsPerDay.has(logDays[i])) planAllocsPerDay.set(logDays[i], []);
+          planAllocsPerDay.get(logDays[i])!.push({
+            issueKey: task.key,
+            summary: task.summary,
+            projectKey: task.projectKey,
+            seconds: allocSecs,
+            hours: Math.round((allocSecs / 3600) * 10) / 10,
+            status: task.status,
+            priority: task.priority,
+            assigneeDisplayName: task.assigneeDisplayName,
+            issueTypeName: task.issueTypeName,
+            issueTypeIconUrl: task.issueTypeIconUrl,
+          });
+        }
       } else {
-        // Find the first working day where capacity allows
-        dayKey = workingDays[0];
+        // No worklogs → use duedate or first working day
+        if (task.duedate && workingDays.includes(task.duedate)) {
+          dayKey = task.duedate;
+        } else {
+          dayKey = workingDays[0];
+        }
+        if (!planAllocsPerDay.has(dayKey)) planAllocsPerDay.set(dayKey, []);
+        planAllocsPerDay.get(dayKey)!.push({
+          issueKey: task.key,
+          summary: task.summary,
+          projectKey: task.projectKey,
+          seconds: task.originalEstimateSeconds,
+          hours: Math.round((task.originalEstimateSeconds / 3600) * 10) / 10,
+          status: task.status,
+          priority: task.priority,
+          assigneeDisplayName: task.assigneeDisplayName,
+          issueTypeName: task.issueTypeName,
+          issueTypeIconUrl: task.issueTypeIconUrl,
+        });
       }
-
-      if (!planAllocsPerDay.has(dayKey)) planAllocsPerDay.set(dayKey, []);
-      planAllocsPerDay.get(dayKey)!.push({
-        issueKey: task.key,
-        summary: task.summary,
-        projectKey: task.projectKey,
-        seconds: task.originalEstimateSeconds,
-        hours: Math.round((task.originalEstimateSeconds / 3600) * 10) / 10,
-        status: task.status,
-        priority: task.priority,
-        assigneeDisplayName: task.assigneeDisplayName,
-        issueTypeName: task.issueTypeName,
-        issueTypeIconUrl: task.issueTypeIconUrl,
-      });
     }
   }
 

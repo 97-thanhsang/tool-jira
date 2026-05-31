@@ -66,7 +66,7 @@ export function EstSubTaskTable({
               <th className="w-24 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Key</th>
               <th className="min-w-[200px] px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Summary</th>
               <th className="w-28 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Type</th>
-              <th className="w-28 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Status</th>
+              <th className="w-36 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Status</th>
               <th className="w-14 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Pri</th>
               <th className="w-28 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Assignee</th>
               <th className="w-36 px-2 py-2.5 text-left text-[11px] font-semibold text-[#5E6C84] dark:text-gray-400 uppercase">Reporter</th>
