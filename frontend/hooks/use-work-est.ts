@@ -87,9 +87,10 @@ export function useWorkEst(parentKeys: string[]) {
     setIsLoadingMemberSubTasks(true);
     try {
       const tasks = await fetchSubTasksByAssignee(username);
-      // Spread để tạo new reference, đảm bảo React detect change
+      console.log('[work-est] load member tasks count:', tasks?.length);
       setMemberSubTasks(tasks ? [...tasks] : []);
-    } catch {
+    } catch (e) {
+      console.error('[work-est] load member tasks error:', e);
       setMemberSubTasks([]);
     } finally {
       setIsLoadingMemberSubTasks(false);

@@ -256,11 +256,11 @@ export async function fetchSubTasksByAssignee(
   username?: string,
 ): Promise<WorkEstSubTask[]> {
   const userFilter = username ? `"${username}"` : 'currentUser()';
-  const jql = `assignee = ${userFilter} AND issuetype = Sub-task ORDER BY priority DESC, duedate ASC`;
+  const jql = `assignee = ${userFilter} AND issuetype = Sub-task ORDER BY updated DESC`;
   const r = await api.get<{ issues: SubTaskRaw[] }>('/search', {
     params: {
       jql,
-      maxResults: 500,
+      maxResults: 1000,
       fields: 'summary,issuetype,project,timetracking,status,priority,duedate,assignee,parent,created,updated,reporter,worklog',
     },
   });
