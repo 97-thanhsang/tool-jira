@@ -1,211 +1,11 @@
-# Known Issues & Gotchas — Tool-Jira
+# Known Issues & Gotchas — Jira Power
 
 > Bugs đã fix và lessons learned. Đọc trước khi debug hoặc thêm tính năng mới.
-> Cập nhật lần cuối: 2026-05-10
+> Cập nhật lần cuối: 2026-05-29
 
 ---
 
-## [FIXED] Hydration Warning — Browser Extension injects className vào `<html>`
-
-**ID:** `BUG-003`
-**Ngày fix:** 2026-05-10
-**Severity:** Low — chỉ là warning, không ảnh hưởng chức năng
-
-### Triệu chứng
-```
-A tree hydrated but some attributes of the server rendered HTML didn't match the client.
-<html className="mdl-js"  ← extension inject trước React hydrate
-```
-
-### Root Cause
-Browser extension (Material Design Lite hoặc tương tự) inject `class="mdl-js"` vào `<html>` tag trước khi React hydrate. Code hoàn toàn sạch — đây là false positive.
-
-### Fix Applied
-File: `app/layout.tsx`
-```tsx
-<html lang="en" suppressHydrationWarning>
-```
-`suppressHydrationWarning` chỉ suppress warning ở chính node đó (không affect children) — an toàn để dùng ở `<html>` root vì đây là nơi duy nhất extension có thể inject.
-
----
-
-## [FIXED] Express v5 `/*path` captures ARRAY not string for nested paths
-
-**ID:** `BUG-004`
-**Ngày fix:** 2026-05-10
-**Severity:** Critical — mọi nested route như `/issue/KEY/transitions`, `/issue/KEY/worklog` đều trả 404
-
-### Triệu chứng
-```
-GET /api/jira/issue/PROJ-123/transitions → 404
-GET /api/jira/issue/PROJ-123/worklog → 404
-```
-
-### Root Cause
-Express v5 với `path-to-regexp` v8: wildcard `/*path` capture path thành **array** không phải string:
-```javascript
-// Input: /issue/HPMUON2-313/transitions
-req.params['path'] === ['issue', 'HPMUON2-313', 'transitions']  // ARRAY!
-
-// Code cũ dùng như string → chỉ lấy phần đầu 'issue'
-const jiraPath = req.params['path'] ?? '';  // ❌ wrong
-```
-
-### Fix Applied
-File: `backend/src/routes/jira.ts`
-```typescript
-const rawPath = req.params['path'];
-const jiraPath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '');
-```
-
----
-
-## [FIXED] Express v5 Wildcard Breaking Change
-
-**ID:** `BUG-001`
-**Ngày fix:** 2026-05-09
-**Severity:** Critical — backend không khởi động được
-
-### Triệu chứng
-```
-TypeError: Missing parameter name at 1
-path-to-regexp error khi start backend
-```
-
-### Root Cause
-Express v5 dùng `path-to-regexp` v8 — wildcards phải có tên:
-
-```typescript
-// ❌ Express v4 (KHÔNG DÙNG)
-router.all('/*', handler)
-req.params[0]  // undefined
-
-// ✅ Express v5 (ĐÚNG)
-router.all('/*path', handler)
-req.params['path']  // works
-```
-
-### Fix Applied
-File: `backend/src/routes/jira.ts`
-```typescript
-router.all('/*path', async (req: Request, res: Response) => {
-  const jiraPath = req.params['path'] ?? '';
-  ...
-});
-```
-
----
-
-## [FIXED] Hydration Mismatch — Sidebar localStorage
-
-**ID:** `BUG-002`
-**Ngày fix:** 2026-05-10
-**Severity:** High — console error + UI flicker sau login
-
-### Triệu chứng
-```
-Hydration failed because the server rendered text didn't match the client.
-```
-
-### Root Cause
-`Sidebar` component đọc `getStoredUser()` trực tiếp trong render body.
-- SSR: `localStorage` không tồn tại → trả `null` → render "User"
-- Client: `localStorage` có data → render tên thật → MISMATCH
-
-### Fix Applied
-File: `components/sidebar.tsx`
-```typescript
-// ❌ Before
-const user = getStoredUser();  // đọc trong render
-
-// ✅ After
-const [user, setUser] = useState(null);
-useEffect(() => { setUser(getStoredUser()); }, []);  // đọc sau mount
-```
-
-### Nguyên tắc tổng quát
-**Bất kỳ component nào đọc `localStorage`/`sessionStorage`/`window.*` đều phải dùng `useEffect`.** Không được đọc trong render body.
-
----
-
-## [GOTCHA] shadcn/ui dùng @base-ui/react (không phải Radix)
-
-**ID:** `GOTCHA-001`
-
-Dự án này dùng `@base-ui/react` thay vì Radix UI (default của shadcn docs).
-
-```typescript
-// ❌ Radix syntax (copy từ shadcn docs → KHÔNG dùng)
-<TooltipProvider delayDuration={300}>
-<DropdownMenuTrigger asChild>
-<DialogTrigger asChild>
-
-// ✅ base-ui syntax
-<TooltipProvider delay={300}>
-<DropdownMenuTrigger>   // không có asChild
-<DialogTrigger>          // không có asChild
-```
-
-Khi thêm shadcn component mới: check API của `@base-ui/react`, không dùng Radix docs.
-
----
-
-## [GOTCHA] Jira API v2 response structure
-
-**ID:** `GOTCHA-002`
-
-Một số field Jira trả về có thể null dù TypeScript type không mark optional:
-
-```typescript
-// Fields có thể null trong thực tế:
-issue.fields.description    // null nếu không có mô tả
-issue.fields.assignee       // null nếu unassigned
-issue.fields.parent         // undefined nếu không có parent
-issue.fields.comment        // undefined nếu không request field này
-
-// Luôn guard trước khi dùng:
-issue.fields.description ?? ''
-issue.fields.assignee?.displayName ?? 'Unassigned'
-```
-
----
-
-## [GOTCHA] Next.js params trong App Router
-
-**ID:** `GOTCHA-003`
-
-Trong Next.js 14 App Router, `params` từ dynamic routes là Promise (async):
-
-```typescript
-// ✅ Page component cần await params
-export default async function IssuePage({
-  params,
-}: {
-  params: Promise<{ key: string }>;
-}) {
-  const { key } = await params;
-  ...
-}
-
-// Hoặc nếu là Client Component:
-const params = use(paramsPromise);
-```
-
----
-
-## [GOTCHA] SWR và auth header timing
-
-**ID:** `GOTCHA-004`
-
-SWR cache key là URL string. Nếu user logout rồi login lại với account khác, SWR có thể trả stale data của user cũ.
-
-**Workaround hiện tại:** Dùng `router.replace('/board')` sau login, Next.js unmount + remount components → SWR reset.
-
-**Fix đúng (future):** Thêm username vào SWR key: `/search?user=${username}`.
-
----
-
-## Template — Thêm bug mới
+## Template thêm entry mới
 
 ```markdown
 ## [FIXED/KNOWN/GOTCHA] Tên vấn đề
@@ -215,82 +15,254 @@ SWR cache key là URL string. Nếu user logout rồi login lại với account 
 **Severity:** Critical / High / Medium / Low
 
 ### Triệu chứng
-(mô tả lỗi thấy được)
-
 ### Root Cause
-(nguyên nhân gốc)
-
-### Fix Applied / Workaround
-(code fix hoặc workaround)
+### Fix / Workaround
 ```
 
 ---
 
-## [GOTCHA] SWR key collision khi nhiều hooks dùng cùng endpoint
+## [FIXED] Express v5 Wildcard Breaking Change
 
-**ID:** `GOTCHA-005`
-**Ngày phát hiện:** 2026-05-10
+**ID:** `BUG-001` | **Ngày fix:** 2026-05-09 | **Severity:** Critical
 
-`useMyIssues` và `useIssuesList` đều gọi `/search` nhưng với params khác nhau. Nếu dùng cùng SWR key `/search`, cache bị share → data sai.
+### Triệu chứng
+```
+TypeError: Missing parameter name at 1
+path-to-regexp error khi start backend
+```
 
-**Fix:** Mỗi hook dùng SWR key riêng:
-- `use-my-issues.ts` → key `/search`
-- `use-issues-list.ts` → key `/search-issues-list`
-- `use-search.ts` → key tuple `['search-palette', query]`
+### Root Cause
+Express v5 dùng `path-to-regexp` v8 — wildcards phải có tên.
+
+### Fix
+File: `backend/src/routes/jira.ts`
+```typescript
+// ❌ Express v4
+router.all('/*', handler)
+
+// ✅ Express v5
+router.all('/*path', handler)
+req.params['path']
+```
 
 ---
 
-## [GOTCHA] TransitionButton — API thay đổi từ string sang JiraStatus object
+## [FIXED] Hydration Mismatch — Sidebar đọc localStorage trong render
+
+**ID:** `BUG-002` | **Ngày fix:** 2026-05-10 | **Severity:** High
+
+### Triệu chứng
+```
+Hydration failed because the server rendered text didn't match the client.
+```
+
+### Root Cause
+Component đọc `getStoredUser()` trực tiếp trong render body — SSR trả `null`, client trả tên thật → mismatch.
+
+### Fix
+```typescript
+// ❌ Before
+const user = getStoredUser();
+
+// ✅ After
+const [user, setUser] = useState(null);
+useEffect(() => { setUser(getStoredUser()); }, []);
+```
+
+**Nguyên tắc:** Bất kỳ component nào đọc `localStorage` đều phải dùng `useEffect`.
+
+---
+
+## [FIXED] Browser Extension inject className vào `<html>`
+
+**ID:** `BUG-003` | **Ngày fix:** 2026-05-10 | **Severity:** Low (chỉ là warning)
+
+### Triệu chứng
+```
+A tree hydrated but some attributes of the server rendered HTML didn't match the client.
+<html className="mdl-js"
+```
+
+### Root Cause
+Browser extension inject `class="mdl-js"` vào `<html>` trước khi React hydrate.
+
+### Fix
+File: `app/layout.tsx`
+```tsx
+<html lang="en" suppressHydrationWarning>
+```
+
+---
+
+## [FIXED] Express v5 `/*path` captures ARRAY cho nested paths
+
+**ID:** `BUG-004` | **Ngày fix:** 2026-05-10 | **Severity:** Critical
+
+### Triệu chứng
+```
+GET /api/jira/issue/PROJ-123/transitions → 404
+GET /api/jira/issue/PROJ-123/worklog → 404
+```
+
+### Root Cause
+Express v5: `/*path` capture nested path thành **array**, không phải string.
+```javascript
+// Input: /issue/KEY/transitions
+req.params['path'] === ['issue', 'KEY', 'transitions']  // ARRAY!
+```
+
+### Fix
+```typescript
+const rawPath = req.params['path'];
+const jiraPath = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath ?? '');
+```
+
+---
+
+## [GOTCHA] @base-ui/react KHÔNG phải Radix UI
+
+**ID:** `GOTCHA-001`
+
+Dự án này dùng `@base-ui/react` thay vì Radix UI. API khác nhau:
+
+```typescript
+// ❌ Radix syntax (copy từ shadcn docs — KHÔNG dùng)
+<TooltipProvider delayDuration={300}>
+<DropdownMenuTrigger asChild>
+<DialogTrigger asChild>
+
+// ✅ base-ui syntax (ĐÚNG cho project này)
+<TooltipProvider delay={300}>
+<DropdownMenuTrigger>    // không có asChild prop
+<DialogTrigger>           // không có asChild prop
+```
+
+Khi thêm component mới: import từ `@/components/ui/*`, check API của `@base-ui/react`, không dùng Radix docs.
+
+---
+
+## [GOTCHA] Jira API v2 — các field có thể null
+
+**ID:** `GOTCHA-002`
+
+Một số field Jira có thể null dù TypeScript type không mark optional:
+
+```typescript
+issue.fields.description    // null nếu không có mô tả
+issue.fields.assignee       // null nếu unassigned
+issue.fields.parent         // undefined nếu không có parent issue
+issue.fields.comment        // undefined nếu không request field này
+issue.fields.sprint         // null nếu issue chưa assign sprint
+
+// Luôn guard:
+issue.fields.description ?? ''
+issue.fields.assignee?.displayName ?? 'Unassigned'
+```
+
+---
+
+## [GOTCHA] Next.js App Router — params là Promise
+
+**ID:** `GOTCHA-003`
+
+Trong Next.js 16 App Router, `params` từ dynamic routes là `Promise`:
+
+```typescript
+// ✅ Page component (async)
+export default async function IssuePage({
+  params,
+}: { params: Promise<{ key: string }> }) {
+  const { key } = await params;
+}
+
+// ✅ Hoặc Client Component
+const { key } = use(paramsPromise);  // React.use()
+```
+
+---
+
+## [GOTCHA] SWR stale data sau logout/login
+
+**ID:** `GOTCHA-004`
+
+SWR cache key là URL string. Nếu user logout rồi login với account khác, SWR có thể trả data của user cũ.
+
+**Workaround hiện tại:** `router.replace('/board')` sau login → Next.js unmount/remount → SWR reset.  
+**Fix đúng (future):** Thêm username vào SWR key: `['search', username]`.
+
+---
+
+## [GOTCHA] SWR key collision
+
+**ID:** `GOTCHA-005`
+
+Nhiều hooks gọi cùng endpoint `/search` với params khác nhau. Nếu dùng cùng SWR key → cache bị share → data sai.
+
+```typescript
+// Mỗi hook dùng key riêng:
+use-my-issues    → key: '/search'
+use-issues-list  → key: '/search-issues-list'   ← khác nhau!
+use-search       → key: ['search-palette', query]
+use-jql-search   → key: ['jql-search', jql]
+```
+
+---
+
+## [GOTCHA] Dark mode — Tailwind v4 không dùng config
 
 **ID:** `GOTCHA-006`
-**Ngày:** 2026-05-10
 
-Phase 2.4 đổi prop `currentStatus` từ `string` sang `JiraStatus` để có thể color-code badge:
+Tailwind v4 dùng `@custom-variant dark (&:is(.dark *))` trong `globals.css` — không cần `tailwind.config.ts`. Inline script trong `app/layout.tsx` apply class `dark` lên `<html>` TRƯỚC khi React hydrate (tránh flash).
+
+---
+
+## [GOTCHA] Create Issue modal state — sống ở app layout
+
+**ID:** `GOTCHA-007`
+
+`createOpen` state nằm ở `app/(app)/layout.tsx`, không phải Sidebar. Sidebar nhận prop `onCreateClick: () => void`. Phím tắt `C` và nút sidebar đều trigger cùng một state ở layout.
+
+Nếu cần trigger Create Issue từ nơi khác → dispatch `CustomEvent` hoặc thêm prop tương tự.
+
+---
+
+## [GOTCHA] TransitionButton — nhận JiraStatus object, không phải string
+
+**ID:** `GOTCHA-008`
 
 ```typescript
 // ❌ Phase 1 (cũ)
 <TransitionButton currentStatus={f.status.name} ... />
 
-// ✅ Phase 2 (mới)
-<TransitionButton currentStatus={f.status} ... />
+// ✅ Hiện tại
+<TransitionButton currentStatus={f.status} ... />  // truyền object đầy đủ
 ```
 
-Call site phải truyền object đầy đủ, không chỉ `.name`.
-
 ---
 
-## [GOTCHA] localStorage trong CommandPalette — recent issues
-
-**ID:** `GOTCHA-007`
-**Ngày:** 2026-05-10
-
-`CommandPalette` đọc `recent_issues` từ localStorage chỉ trong `useEffect(() => { setRecent(getRecent()); }, [open])`. Không được đọc trong render body (SSR sẽ crash).
-
-Khi user chọn một issue: gọi `saveRecent(issue)` → ghi vào localStorage TRƯỚC khi navigate.
-
----
-
-## [GOTCHA] Keyboard shortcut C — state sống ở layout, không phải Sidebar
-
-**ID:** `GOTCHA-008`
-**Ngày:** 2026-05-10
-
-Phase 3.3 chuyển `createOpen` state lên `app/(app)/layout.tsx`. Sidebar nhận `onCreateClick` prop thay vì tự quản lý state. Nếu cần trigger Create Issue từ nơi khác → dispatch `CustomEvent` hoặc thêm prop tương tự.
-
----
-
-## [GOTCHA] Dark mode — Tailwind v4 không dùng darkMode: 'class' trong config
+## [GOTCHA] CommandPalette — đọc recent_issues trong useEffect
 
 **ID:** `GOTCHA-009`
-**Ngày:** 2026-05-10
 
-Tailwind v4 dùng `@custom-variant dark (&:is(.dark *))` trong `globals.css` — đây là cách cấu hình dark mode, không cần `tailwind.config.ts`. Inline script trong `app/layout.tsx` apply class `dark` lên `<html>` trước khi React hydrate để tránh flash.
+```typescript
+// ✅ Đọc trong useEffect khi palette mở
+useEffect(() => { setRecent(getRecent()); }, [open]);
+
+// Khi user chọn issue: gọi saveRecent(issue) TRƯỚC khi navigate
+```
 
 ---
 
-## [GOTCHA] Sidebar onCreateClick prop (breaking change từ Phase 3.3)
+## [GOTCHA] Avatar URL — phải proxy qua backend
 
 **ID:** `GOTCHA-010`
-**Ngày:** 2026-05-10
 
-Sidebar trước đây tự quản lý state + modal. Từ Phase 3.3, Sidebar yêu cầu prop `onCreateClick: () => void`. Nếu render Sidebar trực tiếp (không qua app layout), phải truyền prop này.
+Jira avatar URLs có Authentication header requirement — browser không thể load trực tiếp. Dùng endpoint proxy:
+
+```typescript
+// ❌ Trực tiếp (403)
+<img src={user.avatarUrls['48x48']} />
+
+// ✅ Qua proxy
+<img src={`${API_URL}/api/jira/avatar?url=${encodeURIComponent(avatarUrl)}`} />
+```
